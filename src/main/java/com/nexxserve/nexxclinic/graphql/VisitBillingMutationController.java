@@ -1,0 +1,42 @@
+package com.nexxserve.nexxclinic.graphql;
+
+import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
+import com.nexxserve.nexxclinic.graphql.input.BillVisitInput;
+import com.nexxserve.nexxclinic.graphql.input.RecordVisitBillingPaymentInput;
+import com.nexxserve.nexxclinic.model.ApiResponse;
+import com.nexxserve.nexxclinic.model.RoleName;
+import com.nexxserve.nexxclinic.security.HasRole;
+import com.nexxserve.nexxclinic.service.VisitBillingService;
+import jakarta.validation.Valid;
+import org.springframework.graphql.data.method.annotation.Argument;
+import org.springframework.graphql.data.method.annotation.ContextValue;
+import org.springframework.graphql.data.method.annotation.MutationMapping;
+import org.springframework.stereotype.Controller;
+
+@Controller
+public class VisitBillingMutationController {
+
+    private final VisitBillingService visitBillingService;
+
+    public VisitBillingMutationController(VisitBillingService visitBillingService) {
+        this.visitBillingService = visitBillingService;
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
+    @MutationMapping
+    public ApiResponse billVisit(
+            @Argument @Valid BillVisitInput input,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitBillingService.billVisit(input, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.CLINICIAN, RoleName.FINANCE})
+    @MutationMapping
+    public ApiResponse recordVisitBillingPayment(
+            @Argument @Valid RecordVisitBillingPaymentInput input,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitBillingService.recordVisitBillingPayment(input, authUser);
+    }
+}

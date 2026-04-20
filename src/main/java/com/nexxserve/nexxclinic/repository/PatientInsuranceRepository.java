@@ -1,0 +1,15 @@
+package com.nexxserve.nexxclinic.repository;
+
+import com.nexxserve.nexxclinic.entity.PatientInsurance;
+import java.util.List;
+import java.util.UUID;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface PatientInsuranceRepository extends JpaRepository<PatientInsurance, UUID> {
+
+    List<PatientInsurance> findByPatientId(UUID patientId);
+
+    List<PatientInsurance> findByInsuranceProviderId(UUID insuranceProviderId);
+
+    boolean existsByInsuranceProviderId(UUID insuranceProviderId);
+}

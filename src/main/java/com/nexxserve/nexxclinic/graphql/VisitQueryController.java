@@ -1,0 +1,42 @@
+package com.nexxserve.nexxclinic.graphql;
+
+import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
+import com.nexxserve.nexxclinic.graphql.input.SearchVisitsInput;
+import com.nexxserve.nexxclinic.model.ApiResponse;
+import com.nexxserve.nexxclinic.model.RoleName;
+import com.nexxserve.nexxclinic.security.HasRole;
+import com.nexxserve.nexxclinic.service.VisitService;
+import jakarta.validation.Valid;
+import java.util.UUID;
+import org.springframework.graphql.data.method.annotation.Argument;
+import org.springframework.graphql.data.method.annotation.ContextValue;
+import org.springframework.graphql.data.method.annotation.QueryMapping;
+import org.springframework.stereotype.Controller;
+
+@Controller
+public class VisitQueryController {
+
+    private final VisitService visitService;
+
+    public VisitQueryController(VisitService visitService) {
+        this.visitService = visitService;
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
+    @QueryMapping
+    public ApiResponse visit(
+            @Argument UUID visitId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.visit(visitId);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
+    @QueryMapping
+    public ApiResponse visits(
+            @Argument @Valid SearchVisitsInput input,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.visits(input);
+    }
+}

@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: nexxclinic
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/nexxclinic}
+    username: ${DB_USER:nexxclinic_user}
+    password: ${DB_PASSWORD:nexxclinic_pass}
+    driver-class-name: ${DB_DRIVER:org.postgresql.Driver}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  graphql:
+    graphiql:
+      enabled: true
+
+logging:
+  level:
+    root: INFO
+    com.nexxserve.nexxclinic: DEBUG
+    com.nexxserve.nexxclinic.auth: DEBUG
+    com.nexxserve.nexxclinic.security: DEBUG
+    com.nexxserve.nexxclinic.config: DEBUG
+    org.springframework.security: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/nexxclinic.log
+    max-size: 10MB
+    max-history: 10
+    total-size-cap: 100MB
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:change-this-secret-to-a-long-random-value-at-least-32-bytes}
+    expiration-minutes: ${JWT_EXPIRATION_MINUTES:120}
+    refresh-expiration-days: ${JWT_REFRESH_EXPIRATION_DAYS:14}
+  password:
+    history-count: ${PASSWORD_HISTORY_COUNT:5}

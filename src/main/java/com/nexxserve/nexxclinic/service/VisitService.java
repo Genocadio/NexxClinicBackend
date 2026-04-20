@@ -1,0 +1,665 @@
+package com.nexxserve.nexxclinic.service;
+
+import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
+import com.nexxserve.nexxclinic.entity.Department;
+import com.nexxserve.nexxclinic.entity.InsuranceProvider;
+import com.nexxserve.nexxclinic.entity.Patient;
+import com.nexxserve.nexxclinic.entity.PatientInsurance;
+import com.nexxserve.nexxclinic.entity.Product;
+import com.nexxserve.nexxclinic.entity.Visit;
+import com.nexxserve.nexxclinic.entity.VisitDepartment;
+import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
+import com.nexxserve.nexxclinic.entity.VisitInsurance;
+import com.nexxserve.nexxclinic.entity.Worker;
+import com.nexxserve.nexxclinic.graphql.input.CreateVisitDepartmentInput;
+import com.nexxserve.nexxclinic.graphql.input.CreateVisitDepartmentProductInput;
+import com.nexxserve.nexxclinic.graphql.input.ChangeVisitDateInput;
+import com.nexxserve.nexxclinic.graphql.input.CreateVisitInput;
+import com.nexxserve.nexxclinic.graphql.input.SearchVisitsInput;
+import com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentProductStatusInput;
+import com.nexxserve.nexxclinic.model.ApiResponse;
+import com.nexxserve.nexxclinic.model.VisitProductStatus;
+import com.nexxserve.nexxclinic.model.VisitStatus;
+import com.nexxserve.nexxclinic.repository.DepartmentRepository;
+import com.nexxserve.nexxclinic.repository.PatientInsuranceRepository;
+import com.nexxserve.nexxclinic.repository.PatientRepository;
+import com.nexxserve.nexxclinic.repository.ProductRepository;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
+import com.nexxserve.nexxclinic.repository.VisitBillingRepository;
+import com.nexxserve.nexxclinic.repository.VisitInsuranceRepository;
+import com.nexxserve.nexxclinic.repository.VisitRepository;
+import com.nexxserve.nexxclinic.repository.WorkerRepository;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.Period;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class VisitService {
+
+    private final VisitRepository visitRepository;
+    private final VisitInsuranceRepository visitInsuranceRepository;
+    private final VisitDepartmentRepository visitDepartmentRepository;
+    private final VisitDepartmentProductRepository visitDepartmentProductRepository;
+    private final VisitBillingRepository visitBillingRepository;
+    private final PatientRepository patientRepository;
+    private final PatientInsuranceRepository patientInsuranceRepository;
+    private final DepartmentRepository departmentRepository;
+    private final ProductRepository productRepository;
+    private final WorkerRepository workerRepository;
+
+    public VisitService(
+            VisitRepository visitRepository,
+            VisitInsuranceRepository visitInsuranceRepository,
+            VisitDepartmentRepository visitDepartmentRepository,
+            VisitDepartmentProductRepository visitDepartmentProductRepository,
+            VisitBillingRepository visitBillingRepository,
+            PatientRepository patientRepository,
+            PatientInsuranceRepository patientInsuranceRepository,
+            DepartmentRepository departmentRepository,
+            ProductRepository productRepository,
+            WorkerRepository workerRepository
+    ) {
+        this.visitRepository = visitRepository;
+        this.visitInsuranceRepository = visitInsuranceRepository;
+        this.visitDepartmentRepository = visitDepartmentRepository;
+        this.visitDepartmentProductRepository = visitDepartmentProductRepository;
+        this.visitBillingRepository = visitBillingRepository;
+        this.patientRepository = patientRepository;
+        this.patientInsuranceRepository = patientInsuranceRepository;
+        this.departmentRepository = departmentRepository;
+        this.productRepository = productRepository;
+        this.workerRepository = workerRepository;
+    }
+
+    @Transactional
+    public ApiResponse createVisit(CreateVisitInput input, AuthenticatedUser authUser) {
+        if (input == null || input.patientId() == null) {
+            return ApiResponse.error("patientId is required.", "VALIDATION_ERROR");
+        }
+
+        Optional<Patient> patientOptional = patientRepository.findById(input.patientId());
+        if (patientOptional.isEmpty()) {
+            return ApiResponse.error("Patient not found.", "NOT_FOUND");
+        }
+
+        List<PatientInsurance> linkedInsurances = resolveLinkedInsurances(input.patientId(), input.linkedPatientInsuranceIds());
+        if (linkedInsurances == null) {
+            return ApiResponse.error("Each linked insurance must exist and belong to the selected patient.", "INVALID_VISIT_INSURANCE_LINKS");
+        }
+
+        Worker actingUser = resolveWorker(authUser);
+
+        Visit visit = new Visit();
+        visit.setPatient(patientOptional.get());
+        visit.setVisitDate(input.visitDate());
+        visit.setStatus(VisitStatus.CREATED);
+
+        Visit saved = visitRepository.save(visit);
+
+        if (!linkedInsurances.isEmpty()) {
+            List<VisitInsurance> links = new ArrayList<>();
+            for (PatientInsurance patientInsurance : linkedInsurances) {
+                VisitInsurance link = new VisitInsurance();
+                link.setVisit(saved);
+                link.setPatientInsurance(patientInsurance);
+                links.add(link);
+            }
+            visitInsuranceRepository.saveAll(links);
+        }
+
+        ApiResponse departmentError = addDepartmentsToVisit(saved, input.departments(), actingUser);
+        if (departmentError != null) {
+            return departmentError;
+        }
+
+        Visit latest = visitRepository.findById(saved.getId()).orElse(saved);
+        return ApiResponse.success("Visit created.", visitToMap(latest));
+    }
+
+    @Transactional
+    public ApiResponse changeVisitDate(ChangeVisitDateInput input) {
+        if (input == null || input.visitId() == null || input.visitDate() == null) {
+            return ApiResponse.error("visitId and visitDate are required.", "VALIDATION_ERROR");
+        }
+
+        Optional<Visit> visitOptional = visitRepository.findById(input.visitId());
+        if (visitOptional.isEmpty()) {
+            return ApiResponse.error("Visit not found.", "NOT_FOUND");
+        }
+
+        int updatedRows = visitRepository.updateVisitDate(input.visitId(), input.visitDate());
+        if (updatedRows == 0) {
+            return ApiResponse.error("Visit date could not be updated.", "UPDATE_FAILED");
+        }
+
+        visitBillingRepository.updateBillingDateByVisitId(input.visitId(), input.visitDate());
+
+        Visit updatedVisit = visitRepository.findById(input.visitId()).orElse(visitOptional.get());
+        return ApiResponse.success("Visit date changed.", visitToMap(updatedVisit));
+    }
+
+    @Transactional(readOnly = true)
+    public ApiResponse visit(UUID visitId) {
+        if (visitId == null) {
+            return ApiResponse.error("visitId is required.", "VALIDATION_ERROR");
+        }
+
+        Optional<Visit> visitOptional = visitRepository.findById(visitId);
+        return visitOptional.map(visit -> ApiResponse.success("Visit fetched.", visitToMap(visit))).orElseGet(() -> ApiResponse.error("Visit not found.", "NOT_FOUND"));
+
+    }
+
+    @Transactional(readOnly = true)
+    public ApiResponse visits(SearchVisitsInput input) {
+        int page = normalizePage(input == null ? null : input.page());
+        int size = normalizeSize(input == null ? null : input.size());
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "visitDate").and(Sort.by(Sort.Direction.DESC, "createdAt")));
+
+        Specification<Visit> spec = (root, queryDef, builder) -> builder.conjunction();
+
+        if (input != null && input.visitDate() != null) {
+            spec = spec.and((root, queryDef, builder) -> builder.equal(root.get("visitDate"), input.visitDate()));
+        }
+
+        if (input != null && input.status() != null) {
+            spec = spec.and((root, queryDef, builder) -> builder.equal(root.get("status"), input.status()));
+        }
+
+        String patientName = input == null ? null : blankToNull(input.patientName());
+        if (patientName != null) {
+            String normalized = patientName.toLowerCase();
+            spec = spec.and((root, queryDef, builder) ->
+                    builder.like(builder.lower(root.join("patient").get("fullName")), "%" + normalized + "%")
+            );
+        }
+
+        Page<Visit> visitPage = visitRepository.findAll(spec, pageable);
+        List<Map<String, Object>> visits = visitPage.getContent().stream().map(this::visitToMap).toList();
+
+        return ApiResponse.success("Visits fetched.", visits, paginationToMap(visitPage));
+    }
+
+    @Transactional
+    public ApiResponse completeVisit(UUID visitId) {
+        if (visitId == null) {
+            return ApiResponse.error("visitId is required.", "VALIDATION_ERROR");
+        }
+
+        Optional<Visit> visitOptional = visitRepository.findById(visitId);
+        if (visitOptional.isEmpty()) {
+            return ApiResponse.error("Visit not found.", "NOT_FOUND");
+        }
+
+        Visit visit = visitOptional.get();
+        if (visit.getStatus() == VisitStatus.CANCELLED) {
+            return ApiResponse.error("Cancelled visit cannot be completed.", "INVALID_VISIT_STATUS_TRANSITION");
+        }
+
+        visit.setStatus(VisitStatus.COMPLETED);
+        Visit saved = visitRepository.save(visit);
+        return ApiResponse.success("Visit completed.", visitToMap(saved));
+    }
+
+    @Transactional
+    public ApiResponse cancelVisit(UUID visitId) {
+        if (visitId == null) {
+            return ApiResponse.error("visitId is required.", "VALIDATION_ERROR");
+        }
+
+        Optional<Visit> visitOptional = visitRepository.findById(visitId);
+        if (visitOptional.isEmpty()) {
+            return ApiResponse.error("Visit not found.", "NOT_FOUND");
+        }
+
+        Visit visit = visitOptional.get();
+        if (visit.getStatus() == VisitStatus.COMPLETED) {
+            return ApiResponse.error("Completed visit cannot be cancelled.", "INVALID_VISIT_STATUS_TRANSITION");
+        }
+
+        visit.setStatus(VisitStatus.CANCELLED);
+        Visit saved = visitRepository.save(visit);
+        return ApiResponse.success("Visit cancelled.", visitToMap(saved));
+    }
+
+    @Transactional
+    public ApiResponse addVisitDepartment(UUID visitId, UUID departmentId, AuthenticatedUser authUser) {
+        if (visitId == null || departmentId == null) {
+            return ApiResponse.error("visitId and departmentId are required.", "VALIDATION_ERROR");
+        }
+
+        Optional<Visit> visitOptional = visitRepository.findById(visitId);
+        if (visitOptional.isEmpty()) {
+            return ApiResponse.error("Visit not found.", "NOT_FOUND");
+        }
+
+        Optional<Department> departmentOptional = departmentRepository.findById(departmentId);
+        if (departmentOptional.isEmpty()) {
+            return ApiResponse.error("Department not found.", "NOT_FOUND");
+        }
+
+        if (visitDepartmentRepository.existsByVisitIdAndDepartmentId(visitId, departmentId)) {
+            return ApiResponse.error("Department is already added to this visit.", "DUPLICATE_VISIT_DEPARTMENT");
+        }
+
+        VisitDepartment visitDepartment = new VisitDepartment();
+        visitDepartment.setVisit(visitOptional.get());
+        visitDepartment.setDepartment(departmentOptional.get());
+        visitDepartmentRepository.save(visitDepartment);
+
+        return ApiResponse.success("Department added to visit.", visitToMap(visitOptional.get()));
+    }
+
+    @Transactional
+    public ApiResponse addVisitDepartmentProduct(CreateVisitDepartmentProductInput input, AuthenticatedUser authUser) {
+        if (input == null || input.visitId() == null || input.departmentId() == null || input.productId() == null) {
+            return ApiResponse.error("visitId, departmentId and productId are required.", "VALIDATION_ERROR");
+        }
+
+        Optional<Visit> visitOptional = visitRepository.findById(input.visitId());
+        if (visitOptional.isEmpty()) {
+            return ApiResponse.error("Visit not found.", "NOT_FOUND");
+        }
+
+        Optional<VisitDepartment> visitDepartmentOptional = visitDepartmentRepository.findByVisitIdAndDepartmentId(input.visitId(), input.departmentId());
+        if (visitDepartmentOptional.isEmpty()) {
+            return ApiResponse.error("Department is not linked to this visit.", "VISIT_DEPARTMENT_NOT_FOUND");
+        }
+
+        Optional<Product> productOptional = productRepository.findById(input.productId());
+        if (productOptional.isEmpty()) {
+            return ApiResponse.error("Product not found.", "NOT_FOUND");
+        }
+
+        Optional<VisitDepartmentProduct> existing = visitDepartmentProductRepository.findByVisitDepartmentIdAndProductId(
+                visitDepartmentOptional.get().getId(), input.productId()
+        );
+        if (existing.isPresent()) {
+            return ApiResponse.error("Product already exists for this visit department.", "DUPLICATE_VISIT_DEPARTMENT_PRODUCT");
+        }
+
+        VisitDepartmentProduct item = new VisitDepartmentProduct();
+        item.setVisitDepartment(visitDepartmentOptional.get());
+        item.setProduct(productOptional.get());
+        item.setQuantity(normalizeQuantity(input.quantity()));
+        item.setPrice(resolveUnitPriceSnapshot(productOptional.get(), input.price()));
+        item.setStatus(input.status() == null ? VisitProductStatus.PENDING : input.status());
+
+        Worker actingUser = resolveWorker(authUser);
+        item.setAddedBy(actingUser);
+        if (item.getStatus() != VisitProductStatus.PENDING) {
+            item.setBilledBy(actingUser);
+        }
+
+        visitDepartmentProductRepository.save(item);
+        reopenVisitIfCompleted(visitOptional.get());
+        return ApiResponse.success("Product added to visit department.", visitToMap(visitOptional.get()));
+    }
+
+    @Transactional
+    public ApiResponse updateVisitDepartmentProductStatus(UpdateVisitDepartmentProductStatusInput input, AuthenticatedUser authUser) {
+        if (input == null || input.visitDepartmentProductId() == null || input.status() == null) {
+            return ApiResponse.error("visitDepartmentProductId and status are required.", "VALIDATION_ERROR");
+        }
+
+        Optional<VisitDepartmentProduct> itemOptional = visitDepartmentProductRepository.findById(input.visitDepartmentProductId());
+        if (itemOptional.isEmpty()) {
+            return ApiResponse.error("Visit department product not found.", "NOT_FOUND");
+        }
+
+        VisitDepartmentProduct item = itemOptional.get();
+        VisitProductStatus previous = item.getStatus();
+        item.setStatus(input.status());
+
+        Worker actingUser = resolveWorker(authUser);
+        if (previous == VisitProductStatus.PENDING && input.status() != VisitProductStatus.PENDING) {
+            item.setBilledBy(actingUser);
+        }
+
+        VisitDepartmentProduct saved = visitDepartmentProductRepository.save(item);
+        return ApiResponse.success("Visit department product status updated.", visitToMap(saved.getVisitDepartment().getVisit()));
+    }
+
+    private ApiResponse addDepartmentsToVisit(
+            Visit visit,
+            List<CreateVisitDepartmentInput> departments,
+            Worker actingUser
+    ) {
+        if (departments == null || departments.isEmpty()) {
+            return null;
+        }
+
+        Set<UUID> seenDepartments = new LinkedHashSet<>();
+        for (CreateVisitDepartmentInput departmentInput : departments) {
+            if (departmentInput == null || departmentInput.departmentId() == null) {
+                return ApiResponse.error("departmentId is required for each visit department.", "VALIDATION_ERROR");
+            }
+
+            if (!seenDepartments.add(departmentInput.departmentId())) {
+                return ApiResponse.error("Duplicate departmentId found in visit departments.", "DUPLICATE_VISIT_DEPARTMENT");
+            }
+
+            Optional<Department> departmentOptional = departmentRepository.findById(departmentInput.departmentId());
+            if (departmentOptional.isEmpty()) {
+                return ApiResponse.error("Department not found.", "NOT_FOUND");
+            }
+
+            VisitDepartment visitDepartment = new VisitDepartment();
+            visitDepartment.setVisit(visit);
+            visitDepartment.setDepartment(departmentOptional.get());
+            VisitDepartment savedVisitDepartment = visitDepartmentRepository.save(visitDepartment);
+
+            ApiResponse productsError = addProductsToVisitDepartment(savedVisitDepartment, departmentInput.products(), actingUser);
+            if (productsError != null) {
+                return productsError;
+            }
+        }
+
+        return null;
+    }
+
+    private ApiResponse addProductsToVisitDepartment(
+            VisitDepartment visitDepartment,
+            List<CreateVisitDepartmentInput.CreateVisitDepartmentProductItemInput> products,
+            Worker actingUser
+    ) {
+        if (products == null || products.isEmpty()) {
+            return null;
+        }
+
+        Set<UUID> seenProducts = new LinkedHashSet<>();
+        for (CreateVisitDepartmentInput.CreateVisitDepartmentProductItemInput productInput : products) {
+            if (productInput == null || productInput.productId() == null) {
+                return ApiResponse.error("productId is required for each department product.", "VALIDATION_ERROR");
+            }
+
+            if (!seenProducts.add(productInput.productId())) {
+                return ApiResponse.error("Duplicate productId found in visit department products.", "DUPLICATE_VISIT_DEPARTMENT_PRODUCT");
+            }
+
+            Optional<Product> productOptional = productRepository.findById(productInput.productId());
+            if (productOptional.isEmpty()) {
+                return ApiResponse.error("Product not found.", "NOT_FOUND");
+            }
+
+            VisitDepartmentProduct item = new VisitDepartmentProduct();
+            item.setVisitDepartment(visitDepartment);
+            item.setProduct(productOptional.get());
+            item.setQuantity(normalizeQuantity(productInput.quantity()));
+            item.setPrice(resolveUnitPriceSnapshot(productOptional.get(), productInput.price()));
+            item.setStatus(productInput.status() == null ? VisitProductStatus.PENDING : productInput.status());
+            item.setAddedBy(actingUser);
+            if (item.getStatus() != VisitProductStatus.PENDING) {
+                item.setBilledBy(actingUser);
+            }
+            visitDepartmentProductRepository.save(item);
+        }
+
+        return null;
+    }
+
+    private List<PatientInsurance> resolveLinkedInsurances(UUID patientId, List<UUID> linkedInsuranceIds) {
+        if (linkedInsuranceIds == null || linkedInsuranceIds.isEmpty()) {
+            return List.of();
+        }
+
+        Set<UUID> uniqueIds = new LinkedHashSet<>();
+        for (UUID id : linkedInsuranceIds) {
+            if (id != null) {
+                uniqueIds.add(id);
+            }
+        }
+
+        List<PatientInsurance> linkedInsurances = new ArrayList<>();
+        for (UUID insuranceId : uniqueIds) {
+            Optional<PatientInsurance> insuranceOptional = patientInsuranceRepository.findById(insuranceId);
+            if (insuranceOptional.isEmpty()) {
+                return null;
+            }
+
+            PatientInsurance insurance = insuranceOptional.get();
+            if (!insurance.getPatient().getId().equals(patientId)) {
+                return null;
+            }
+
+            linkedInsurances.add(insurance);
+        }
+
+        return linkedInsurances;
+    }
+
+    private Map<String, Object> visitToMap(Visit visit) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", visit.getId());
+        data.put("patient", patientToMap(visit.getPatient()));
+        data.put("status", visit.getStatus());
+        data.put("visitDate", visit.getVisitDate());
+        data.put(
+                "linkedInsurances",
+                visitInsuranceRepository.findByVisitId(visit.getId())
+                        .stream()
+                        .map(link -> patientInsuranceToMap(link.getPatientInsurance()))
+                        .toList()
+        );
+        data.put(
+                "departments",
+                visitDepartmentRepository.findByVisitId(visit.getId())
+                        .stream()
+                        .map(this::visitDepartmentToMap)
+                        .toList()
+        );
+        return data;
+    }
+
+    private Map<String, Object> visitDepartmentToMap(VisitDepartment visitDepartment) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", visitDepartment.getId());
+        data.put("department", departmentToMap(visitDepartment.getDepartment()));
+        data.put(
+                "products",
+                visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartment.getId())
+                        .stream()
+                        .map(this::visitDepartmentProductToMap)
+                        .toList()
+        );
+        data.put("createdAt", visitDepartment.getCreatedAt());
+        data.put("updatedAt", visitDepartment.getUpdatedAt());
+        return data;
+    }
+
+    private Map<String, Object> visitDepartmentProductToMap(VisitDepartmentProduct item) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", item.getId());
+        data.put("product", productToMap(item.getProduct()));
+        data.put("quantity", item.getQuantity());
+        data.put("price", item.getPrice());
+        data.put("status", item.getStatus());
+        data.put("addedBy", workerToMap(item.getAddedBy()));
+        data.put("billedBy", workerToMap(item.getBilledBy()));
+        data.put("createdAt", item.getCreatedAt());
+        data.put("updatedAt", item.getUpdatedAt());
+        return data;
+    }
+
+    private Map<String, Object> departmentToMap(Department department) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", department.getId());
+        data.put("name", department.getName());
+        data.put("insurancePolicyMode", department.getInsurancePolicyMode());
+        data.put("createdAt", department.getCreatedAt());
+        data.put("updatedAt", department.getUpdatedAt());
+        return data;
+    }
+
+    private Map<String, Object> productToMap(Product product) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", product.getId());
+        data.put("name", product.getName());
+        data.put("genericName", product.getGenericName());
+        data.put("code", product.getCode());
+        data.put("description", product.getDescription());
+        data.put("type", product.getType());
+        data.put("unit", product.getUnit());
+        data.put("metadata", product.getMetadata());
+        data.put("privateRhicPrice", product.getPrivateRhicPrice());
+        data.put("clinicPrice", product.getClinicPrice());
+        data.put("createdAt", product.getCreatedAt());
+        data.put("updatedAt", product.getUpdatedAt());
+        return data;
+    }
+
+    private Map<String, Object> workerToMap(Worker worker) {
+        if (worker == null) {
+            return null;
+        }
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", worker.getId());
+        data.put("firstName", worker.getFirstName());
+        data.put("lastName", worker.getLastName());
+        data.put("username", worker.getUsername());
+        data.put("email", worker.getEmail());
+        return data;
+    }
+
+    private Map<String, Object> patientToMap(Patient patient) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", patient.getId());
+        data.put("firstName", patient.getFirstName());
+        data.put("middleName", patient.getMiddleName());
+        data.put("lastName", patient.getLastName());
+        data.put("fullName", patient.getFullName());
+        data.put("dateOfBirth", patient.getDateOfBirth());
+        data.put("age", patient.getDateOfBirth() == null ? null : Period.between(patient.getDateOfBirth(), LocalDate.now()).getYears());
+        data.put("gender", patient.getGender());
+        data.put("primaryPhoneNumber", patient.getPrimaryPhoneNumber());
+        data.put("alternativePhone", patient.getAlternativePhone());
+        data.put("village", patient.getVillage());
+        data.put("city", patient.getCity());
+        data.put("district", patient.getDistrict());
+        data.put("postalAddress", patient.getPostalAddress());
+        data.put("nationalIdNumber", patient.getNationalIdNumber());
+        data.put("passportNumber", patient.getPassportNumber());
+        data.put("emergencyContactName", patient.getEmergencyContactName());
+        data.put("emergencyContactRelationship", patient.getEmergencyContactRelationship());
+        data.put("emergencyContactPhoneNumber", patient.getEmergencyContactPhoneNumber());
+        data.put("createdAt", patient.getCreatedAt());
+        data.put("updatedAt", patient.getUpdatedAt());
+        return data;
+    }
+
+    private Map<String, Object> patientInsuranceToMap(PatientInsurance patientInsurance) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", patientInsurance.getId());
+        data.put("patient", patientToMap(patientInsurance.getPatient()));
+        data.put("insuranceProvider", insuranceProviderToMap(patientInsurance.getInsuranceProvider()));
+        data.put("insuranceCardNumber", patientInsurance.getInsuranceCardNumber());
+        data.put("providingCompanyOrEmployer", patientInsurance.getProvidingCompanyOrEmployer());
+        data.put("principalMember", patientInsurance.isPrincipalMember());
+        data.put("principalMemberName", patientInsurance.getPrincipalMemberName());
+        data.put("principalMemberPhoneNumber", patientInsurance.getPrincipalMemberPhoneNumber());
+        data.put("validFrom", patientInsurance.getValidFrom());
+        data.put("validUntil", patientInsurance.getValidUntil());
+        data.put("createdAt", patientInsurance.getCreatedAt());
+        data.put("updatedAt", patientInsurance.getUpdatedAt());
+        return data;
+    }
+
+    private Map<String, Object> insuranceProviderToMap(InsuranceProvider insuranceProvider) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", insuranceProvider.getId());
+        data.put("insuranceName", insuranceProvider.getInsuranceName());
+        data.put("acronym", insuranceProvider.getAcronym());
+        data.put("defaultCoveragePercentage", insuranceProvider.getDefaultCoveragePercentage());
+        data.put("supportedByClinic", insuranceProvider.isSupportedByClinic());
+        data.put("iconUrl", insuranceProvider.getIconUrl());
+        data.put("createdAt", insuranceProvider.getCreatedAt());
+        data.put("updatedAt", insuranceProvider.getUpdatedAt());
+        return data;
+    }
+
+    private int normalizePage(Integer page) {
+        if (page == null || page < 0) {
+            return 0;
+        }
+        return page;
+    }
+
+    private int normalizeSize(Integer size) {
+        if (size == null || size <= 0) {
+            return 20;
+        }
+        return Math.min(size, 100);
+    }
+
+    private Map<String, Object> paginationToMap(Page<?> page) {
+        Map<String, Object> pagination = new HashMap<>();
+        pagination.put("total", page.getTotalElements());
+        pagination.put("perPage", page.getSize());
+        pagination.put("currentPage", page.getNumber());
+        pagination.put("totalPages", page.getTotalPages());
+        return pagination;
+    }
+
+    private String blankToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    private void reopenVisitIfCompleted(Visit visit) {
+        if (visit.getStatus() == VisitStatus.COMPLETED) {
+            visit.setStatus(VisitStatus.IN_PROGRESS);
+            visitRepository.save(visit);
+        }
+    }
+
+    private Worker resolveWorker(AuthenticatedUser authUser) {
+        if (authUser == null || authUser.userId() == null) {
+            return null;
+        }
+        return workerRepository.findById(authUser.userId()).orElse(null);
+    }
+
+    private BigDecimal normalizeQuantity(BigDecimal value) {
+        if (value == null || value.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ONE;
+        }
+        return value;
+    }
+
+    private BigDecimal normalizePrice(BigDecimal value) {
+        if (value == null || value.compareTo(BigDecimal.ZERO) < 0) {
+            return BigDecimal.ZERO;
+        }
+        return value;
+    }
+
+    private BigDecimal resolveUnitPriceSnapshot(Product product, BigDecimal inputPrice) {
+        if (inputPrice != null && inputPrice.compareTo(BigDecimal.ZERO) >= 0) {
+            return normalizePrice(inputPrice);
+        }
+
+        if (product != null && product.getClinicPrice() != null && product.getClinicPrice().compareTo(BigDecimal.ZERO) >= 0) {
+            return normalizePrice(product.getClinicPrice());
+        }
+
+        return BigDecimal.ZERO;
+    }
+}

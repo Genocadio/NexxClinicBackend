@@ -1,0 +1,17 @@
+package com.nexxserve.nexxclinic.repository;
+
+import com.nexxserve.nexxclinic.entity.Visit;
+import java.time.LocalDate;
+import java.util.UUID;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+public interface VisitRepository extends JpaRepository<Visit, UUID>, JpaSpecificationExecutor<Visit> {
+
+	@Modifying(clearAutomatically = true, flushAutomatically = true)
+	@Query("update Visit v set v.visitDate = :visitDate where v.id = :visitId")
+	int updateVisitDate(@Param("visitId") UUID visitId, @Param("visitDate") LocalDate visitDate);
+}

@@ -1,0 +1,883 @@
+scalar JSON
+
+enum ResponseStatus {
+  SUCCESS
+  ERROR
+  UNAUTHENTICATED
+  UNAUTHORISED
+  PARTIAL_SUCCESS
+}
+
+enum RoleName {
+  MANAGER
+  CLINIC_ADMIN
+  FINANCE
+  STAFF
+  RECEPTION
+  NURSE
+  CLINICIAN
+  ADMIN
+}
+
+enum AccountStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum DocumentType {
+  LICENSE
+  DIPLOMA_CERTIFICATE
+  DEGREE_CERTIFICATE
+  TRAINING_CERTIFICATE
+  NATIONAL_ID
+  PASSPORT
+  BACKGROUND_CHECK
+  WORK_PERMIT
+  OTHER
+}
+
+enum ProductType {
+  DRUG
+  MEDICAL_ACT
+  BIOLOGICAL_ACT
+  CONSUMABLE_DEVICE
+}
+
+enum ProductUnit {
+  TABLET
+  CAPSULE
+  PESSARY
+  SUPPOSITORY
+  BOX_OF_6_TABLETS
+  BOX_OF_7_PESSARIES
+  BOX_OF_9_TABLETS
+  BOX_OF_12_TABLETS
+  BOX_OF_12_PESSARIES
+  BOX_OF_14_TABLETS
+  BOX_OF_18_TABLETS
+  BOX_OF_18_PESSARIES
+  BOX_OF_24_TABLETS
+  BOX_OF_1_PESSARY
+  BOX_OF_3_PESSARIES
+  BOX_OF_6_PESSARIES
+  BOTTLE
+  VIAL
+  AMPOULE
+  TUBE
+  TUBE_OF_15_TABLETS
+  TUBE_OF_20_TABLETS
+  TUBE_OF_50_STRIPS
+  BOX
+  SACHET
+  POT
+  ROLL
+  PIECE
+  DOSE
+  KIT_OF_ONE_DAY_DOSE
+  PCS
+  UNKNOWN
+}
+
+enum MustPrescribedBy {
+  ALL
+}
+
+enum DrugAdministrationFrequency {
+  CUSTOM_HOURS
+}
+
+enum DepartmentInsurancePolicyMode {
+  ALL
+  ONLY
+  EXCEPT
+}
+
+enum VisitStatus {
+  CREATED
+  IN_PROGRESS
+  CANCELLED
+  COMPLETED
+}
+
+enum VisitProductStatus {
+  BILLED
+  EXEMPTED
+  UNPAID
+  PENDING
+}
+
+enum VisitBillingStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+}
+
+type ErrorDetail {
+  field: String
+  message: String!
+  code: String
+}
+
+interface ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+}
+
+type PaginationInfo {
+  total: Int!
+  perPage: Int!
+  currentPage: Int!
+  totalPages: Int!
+}
+
+type AuthTokens {
+  accessToken: String!
+  refreshToken: String!
+}
+
+type AuthResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: AuthTokens
+}
+
+type BooleanResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: Boolean
+}
+
+type StringResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: String
+}
+
+type Worker {
+  id: ID!
+  firstName: String!
+  lastName: String
+  email: String
+  phoneNumber: String
+  username: String
+  accountStatus: AccountStatus!
+  roles: [RoleName!]!
+  department: Department
+  createdAt: String!
+  updatedAt: String!
+}
+
+type WorkerResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: Worker
+}
+
+type WorkerListResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: [Worker!]
+}
+
+type AuditLog {
+  id: ID!
+  action: String!
+  details: String
+  timestamp: String!
+}
+
+type AuditLogListResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: [AuditLog!]
+}
+
+type InsuranceProvider {
+  id: ID!
+  insuranceName: String!
+  acronym: String
+  defaultCoveragePercentage: Int!
+  supportedByClinic: Boolean!
+  iconUrl: String
+  createdAt: String!
+  updatedAt: String!
+}
+
+type InsuranceProviderResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: InsuranceProvider
+}
+
+type PaginatedInsuranceProviderResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: [InsuranceProvider!]
+  pagination: PaginationInfo
+}
+
+type Patient {
+  id: ID!
+  firstName: String!
+  middleName: String
+  lastName: String
+  dateOfBirth: String!
+  gender: Gender!
+  primaryPhoneNumber: String
+  alternativePhone: String
+  village: String
+  city: String
+  district: String
+  postalAddress: String
+  nationalIdNumber: String
+  passportNumber: String
+  emergencyContactName: String
+  emergencyContactRelationship: String
+  emergencyContactPhoneNumber: String
+  createdAt: String!
+  updatedAt: String!
+}
+
+type PatientResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: Patient
+}
+
+type PaginatedPatientResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: [Patient!]
+  pagination: PaginationInfo
+}
+
+type PatientInsurance {
+  id: ID!
+  patient: Patient!
+  insuranceProvider: InsuranceProvider!
+  insuranceCardNumber: String!
+  providingCompanyOrEmployer: String
+  principalMember: Boolean!
+  principalMemberName: String
+  principalMemberPhoneNumber: String
+  validFrom: String!
+  validUntil: String!
+  createdAt: String!
+  updatedAt: String!
+}
+
+type PatientInsuranceResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: PatientInsurance
+}
+
+type PaginatedPatientInsuranceResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: [PatientInsurance!]
+  pagination: PaginationInfo
+}
+
+type ProductInsuranceCoverage {
+  id: ID!
+  insuranceProvider: InsuranceProvider!
+  cost: Float!
+  covered: Boolean!
+  requireMedicalAdvisor: Boolean!
+  mustPrescribedBy: MustPrescribedBy!
+  drugAdministrationFrequency: DrugAdministrationFrequency!
+  authorizationRequestReasons: [String!]!
+  createdAt: String!
+  updatedAt: String!
+}
+
+type Product {
+  id: ID!
+  name: String!
+  genericName: String
+  code: String!
+  description: String!
+  type: ProductType!
+  unit: ProductUnit!
+  metadata: JSON
+  privateRhicPrice: Float
+  clinicPrice: Float
+  insuranceCoverages: [ProductInsuranceCoverage!]!
+  createdAt: String!
+  updatedAt: String!
+}
+
+type ProductResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: Product
+}
+
+type PaginatedProductResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: [Product!]
+  pagination: PaginationInfo
+}
+
+type ProductInsuranceCoverageResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: ProductInsuranceCoverage
+}
+
+type Department {
+  id: ID!
+  name: String!
+  insurancePolicyMode: DepartmentInsurancePolicyMode!
+  insurancePolicies: [InsuranceProvider!]!
+  defaultProducts: [Product!]!
+  createdAt: String!
+  updatedAt: String!
+}
+
+type DepartmentResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: Department
+}
+
+type PaginatedDepartmentResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: [Department!]
+  pagination: PaginationInfo
+}
+
+type Visit {
+  id: ID!
+  patient: Patient!
+  status: VisitStatus!
+  visitDate: String!
+  linkedInsurances: [PatientInsurance!]!
+  departments: [VisitDepartment!]!
+}
+
+type VisitDepartment {
+  id: ID!
+  department: Department!
+  products: [VisitDepartmentProduct!]!
+  createdAt: String!
+  updatedAt: String!
+}
+
+type VisitDepartmentProduct {
+  id: ID!
+  product: Product!
+  quantity: Float!
+  price: Float!
+  status: VisitProductStatus!
+  addedBy: Worker
+  billedBy: Worker
+  createdAt: String!
+  updatedAt: String!
+}
+
+type VisitResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: Visit
+}
+
+type VisitBillingItem {
+  id: ID!
+  visitDepartmentProductId: ID!
+  productId: ID!
+  productName: String!
+  unitPriceSnapshot: Float!
+  quantitySnapshot: Float!
+  lineTotal: Float!
+  insuranceCoveredAmount: Float!
+  patientPayableAmount: Float!
+  appliedPatientInsuranceId: ID
+  createdAt: String!
+  updatedAt: String!
+}
+
+type VisitBilling {
+  id: ID!
+  visitId: ID!
+  status: VisitBillingStatus!
+  billingDate: String!
+  totalAmount: Float!
+  insuranceCoveredAmount: Float!
+  patientPayableAmount: Float!
+  paidAmount: Float!
+  outstandingAmount: Float!
+  fullyBilledVisit: Boolean!
+  billedBy: Worker
+  items: [VisitBillingItem!]!
+}
+
+type VisitBillingResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: VisitBilling
+}
+
+type VisitBillingListResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: [VisitBilling!]
+}
+
+type PaginatedVisitResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: [Visit!]
+  pagination: PaginationInfo
+}
+
+input WorkerDocumentInput {
+  type: DocumentType
+  title: String
+  isRequired: Boolean
+  documentUrl: String
+  documentNumber: String
+  hasExpiration: Boolean
+  expirationDate: String
+  issuedBy: String
+  issuedDate: String
+  notes: String
+}
+
+input SelfRegisterInput {
+  firstName: String!
+  lastName: String
+  gender: Gender
+  dateOfBirth: String
+  profilePhotoUrl: String
+  email: String
+  phoneNumber: String
+  username: String
+  departmentId: ID
+  password: String!
+  workerDocProfile: WorkerDocumentInput
+}
+
+input AdminCreateUserInput {
+  firstName: String!
+  lastName: String
+  gender: Gender
+  dateOfBirth: String
+  profilePhotoUrl: String
+  email: String
+  phoneNumber: String
+  username: String
+  departmentId: ID
+  roles: [RoleName!]!
+  workerDocProfile: WorkerDocumentInput
+}
+
+input ActivateUserInput {
+  userId: ID!
+  roles: [RoleName!]!
+}
+
+input LoginInput {
+  identifier: String!
+  password: String!
+}
+
+input SetInitialPasswordInput {
+  identifier: String!
+  newPassword: String!
+}
+
+input RefreshSessionInput {
+  refreshToken: String!
+}
+
+input RefreshTokenInput {
+  refreshToken: String!
+}
+
+input LogoutInput {
+  refreshToken: String
+  revokeAllSessions: Boolean
+}
+
+input UpdateMyProfileInput {
+  firstName: String
+  lastName: String
+  gender: Gender
+  dateOfBirth: String
+  profilePhotoUrl: String
+  email: String
+  phoneNumber: String
+  username: String
+  departmentId: ID
+  workerDocProfile: WorkerDocumentInput
+}
+
+input ChangeMyPasswordInput {
+  currentPassword: String!
+  newPassword: String!
+}
+
+input AdminTriggerPasswordResetInput {
+  userId: ID!
+  revokeSessions: Boolean
+}
+
+input AdminSetUserSessionLimitInput {
+  userId: ID!
+  maxActiveSessions: Int!
+}
+
+input DeactivateUserInput {
+  userId: ID!
+  revokeSessions: Boolean
+}
+
+input CreateInsuranceProviderInput {
+  insuranceName: String!
+  acronym: String
+  defaultCoveragePercentage: Int!
+  supportedByClinic: Boolean
+  iconUrl: String
+}
+
+input UpdateInsuranceProviderInput {
+  insuranceName: String
+  acronym: String
+  defaultCoveragePercentage: Int
+  supportedByClinic: Boolean
+  iconUrl: String
+}
+
+input CreatePatientInput {
+  firstName: String!
+  middleName: String
+  lastName: String
+  dateOfBirth: String!
+  gender: Gender!
+  primaryPhoneNumber: String
+  alternativePhone: String
+  village: String
+  city: String
+  district: String
+  postalAddress: String
+  nationalIdNumber: String
+  passportNumber: String
+  emergencyContactName: String
+  emergencyContactRelationship: String
+  emergencyContactPhoneNumber: String
+}
+
+input UpdatePatientInput {
+  firstName: String
+  middleName: String
+  lastName: String
+  dateOfBirth: String
+  gender: Gender
+  primaryPhoneNumber: String
+  alternativePhone: String
+  village: String
+  city: String
+  district: String
+  postalAddress: String
+  nationalIdNumber: String
+  passportNumber: String
+  emergencyContactName: String
+  emergencyContactRelationship: String
+  emergencyContactPhoneNumber: String
+}
+
+input CreatePatientInsuranceInput {
+  patientId: ID!
+  insuranceProviderId: ID!
+  insuranceCardNumber: String!
+  providingCompanyOrEmployer: String
+  principalMember: Boolean!
+  principalMemberName: String
+  principalMemberPhoneNumber: String
+  validFrom: String!
+  validUntil: String!
+}
+
+input UpdatePatientInsuranceInput {
+  patientId: ID
+  insuranceProviderId: ID
+  insuranceCardNumber: String
+  providingCompanyOrEmployer: String
+  principalMember: Boolean
+  principalMemberName: String
+  principalMemberPhoneNumber: String
+  validFrom: String
+  validUntil: String
+}
+
+input SearchPatientsInput {
+  name: String
+  phoneNumber: String
+  insuranceProviderId: ID
+  age: Int
+  minAge: Int
+  maxAge: Int
+  page: Int
+  size: Int
+}
+
+input SearchInsuranceProvidersInput {
+  query: String
+  supportedByClinic: Boolean
+  page: Int
+  size: Int
+}
+
+input CreateProductInsuranceCoverageInput {
+  insuranceProviderId: ID!
+  cost: Float
+  covered: Boolean
+  requireMedicalAdvisor: Boolean
+  mustPrescribedBy: MustPrescribedBy
+  drugAdministrationFrequency: DrugAdministrationFrequency
+  authorizationRequestReasons: [String!]
+}
+
+input UpdateProductInsuranceCoverageInput {
+  insuranceProviderId: ID!
+  cost: Float
+  covered: Boolean
+  requireMedicalAdvisor: Boolean
+  mustPrescribedBy: MustPrescribedBy
+  drugAdministrationFrequency: DrugAdministrationFrequency
+  authorizationRequestReasons: [String!]
+}
+
+input CreateProductInput {
+  id: ID
+  name: String!
+  genericName: String
+  code: String!
+  description: String!
+  type: ProductType!
+  unit: ProductUnit!
+  metadata: JSON
+  privateRhicPrice: Float
+  clinicPrice: Float
+  insuranceCoverages: [CreateProductInsuranceCoverageInput!]
+}
+
+input UpdateProductInput {
+  name: String
+  genericName: String
+  code: String
+  description: String
+  type: ProductType
+  unit: ProductUnit
+  metadata: JSON
+  privateRhicPrice: Float
+  clinicPrice: Float
+  insuranceCoverages: [UpdateProductInsuranceCoverageInput!]
+}
+
+input SearchProductsInput {
+  name: String
+  type: ProductType
+  page: Int
+  size: Int
+}
+
+input CreateDepartmentInput {
+  name: String!
+  insurancePolicyMode: DepartmentInsurancePolicyMode
+  insuranceProviderIds: [ID!]
+  defaultProductIds: [ID!]
+}
+
+input UpdateDepartmentInput {
+  name: String
+  insurancePolicyMode: DepartmentInsurancePolicyMode
+  insuranceProviderIds: [ID!]
+  defaultProductIds: [ID!]
+}
+
+input SearchDepartmentsInput {
+  name: String
+  page: Int
+  size: Int
+}
+
+input CreateVisitInput {
+  patientId: ID!
+  visitDate: String
+  linkedPatientInsuranceIds: [ID!]
+  departments: [CreateVisitDepartmentInput!]
+}
+
+input ChangeVisitDateInput {
+  visitId: ID!
+  visitDate: String!
+}
+
+input CreateVisitDepartmentInput {
+  departmentId: ID!
+  products: [CreateVisitDepartmentProductItemInput!]
+}
+
+input CreateVisitDepartmentProductItemInput {
+  productId: ID!
+  quantity: Float
+  price: Float
+  status: VisitProductStatus
+}
+
+input CreateVisitDepartmentProductInput {
+  visitId: ID!
+  departmentId: ID!
+  productId: ID!
+  quantity: Float
+  price: Float
+  status: VisitProductStatus
+}
+
+input UpdateVisitDepartmentProductStatusInput {
+  visitDepartmentProductId: ID!
+  status: VisitProductStatus!
+}
+
+input BillVisitItemInput {
+  visitDepartmentProductId: ID!
+  patientInsuranceId: ID
+}
+
+input BillVisitInput {
+  visitId: ID!
+  billAllProducts: Boolean
+  items: [BillVisitItemInput!]
+  paidAmount: Float
+}
+
+input RecordVisitBillingPaymentInput {
+  visitBillingId: ID!
+  amount: Float!
+}
+
+input SearchVisitsInput {
+  visitDate: String
+  status: VisitStatus
+  patientName: String
+  page: Int
+  size: Int
+}
+
+type Query {
+  me: WorkerResponse!
+  listUsers: WorkerListResponse!
+  adminAuditLogs: AuditLogListResponse!
+  insuranceProvider(insuranceProviderId: ID!): InsuranceProviderResponse!
+  insuranceProviders(input: SearchInsuranceProvidersInput): PaginatedInsuranceProviderResponse!
+  patient(patientId: ID!): PatientResponse!
+  patients: PaginatedPatientResponse!
+  patientInsurances(patientId: ID!): PaginatedPatientInsuranceResponse!
+  searchPatients(input: SearchPatientsInput): PaginatedPatientResponse!
+  product(productId: ID!): ProductResponse!
+  products(input: SearchProductsInput): PaginatedProductResponse!
+  productInsuranceCoverage(productInsuranceCoverageId: ID!): ProductInsuranceCoverageResponse!
+  department(departmentId: ID!): DepartmentResponse!
+  departments(input: SearchDepartmentsInput): PaginatedDepartmentResponse!
+  visit(visitId: ID!): VisitResponse!
+  visits(input: SearchVisitsInput): PaginatedVisitResponse!
+  visitBilling(visitBillingId: ID!): VisitBillingResponse!
+  visitBillings(visitId: ID!): VisitBillingListResponse!
+}
+
+type Mutation {
+  selfRegister(input: SelfRegisterInput!): WorkerResponse!
+  adminCreateUser(input: AdminCreateUserInput!): WorkerResponse!
+  activateUser(input: ActivateUserInput!): WorkerResponse!
+  deactivateUser(input: DeactivateUserInput!): WorkerResponse!
+  login(input: LoginInput!): AuthResponse!
+  setInitialPassword(input: SetInitialPasswordInput!): BooleanResponse!
+  refreshSession(input: RefreshSessionInput!): AuthResponse!
+  refreshToken(input: RefreshTokenInput!): AuthResponse!
+  logout(input: LogoutInput): BooleanResponse!
+  updateMyProfile(input: UpdateMyProfileInput!): WorkerResponse!
+  changeMyPassword(input: ChangeMyPasswordInput!): BooleanResponse!
+  adminTriggerPasswordReset(input: AdminTriggerPasswordResetInput!): BooleanResponse!
+  adminSetUserSessionLimit(input: AdminSetUserSessionLimitInput!): BooleanResponse!
+  createInsuranceProvider(input: CreateInsuranceProviderInput!): InsuranceProviderResponse!
+  updateInsuranceProvider(insuranceProviderId: ID!, input: UpdateInsuranceProviderInput!): InsuranceProviderResponse!
+  deleteInsuranceProvider(insuranceProviderId: ID!): BooleanResponse!
+  createPatient(input: CreatePatientInput!): PatientResponse!
+  updatePatient(patientId: ID!, input: UpdatePatientInput!): PatientResponse!
+  deletePatient(patientId: ID!): BooleanResponse!
+  createPatientInsurance(input: CreatePatientInsuranceInput!): PatientInsuranceResponse!
+  updatePatientInsurance(patientInsuranceId: ID!, input: UpdatePatientInsuranceInput!): PatientInsuranceResponse!
+  deletePatientInsurance(patientInsuranceId: ID!): BooleanResponse!
+  createProduct(input: CreateProductInput!): ProductResponse!
+  updateProduct(productId: ID!, input: UpdateProductInput!): ProductResponse!
+  createProductInsuranceCoverage(productId: ID!, input: CreateProductInsuranceCoverageInput!): ProductInsuranceCoverageResponse!
+  updateProductInsuranceCoverage(productInsuranceCoverageId: ID!, input: UpdateProductInsuranceCoverageInput!): ProductInsuranceCoverageResponse!
+  deleteProductInsuranceCoverage(productInsuranceCoverageId: ID!): BooleanResponse!
+  createDepartment(input: CreateDepartmentInput!): DepartmentResponse!
+  updateDepartment(departmentId: ID!, input: UpdateDepartmentInput!): DepartmentResponse!
+  createVisit(input: CreateVisitInput!): VisitResponse!
+  changeVisitDate(input: ChangeVisitDateInput!): VisitResponse!
+  addVisitDepartment(visitId: ID!, departmentId: ID!): VisitResponse!
+  addVisitDepartmentProduct(input: CreateVisitDepartmentProductInput!): VisitResponse!
+  updateVisitDepartmentProductStatus(input: UpdateVisitDepartmentProductStatusInput!): VisitResponse!
+  billVisit(input: BillVisitInput!): VisitBillingResponse!
+  recordVisitBillingPayment(input: RecordVisitBillingPaymentInput!): VisitBillingResponse!
+  completeVisit(visitId: ID!): VisitResponse!
+  cancelVisit(visitId: ID!): VisitResponse!
+}
