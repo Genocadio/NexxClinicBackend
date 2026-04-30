@@ -25,7 +25,7 @@ enum AccountStatus {
   DISABLED
 }
 
-enum Gender {
+enum x§nder {
   MALE
   FEMALE
   OTHER
@@ -140,8 +140,9 @@ type PaginationInfo {
 }
 
 type AuthTokens {
-  accessToken: String!
-  refreshToken: String!
+  accessToken: String
+  refreshToken: String
+  user: Worker
 }
 
 type AuthResponse implements ApiResponse {

@@ -194,13 +194,10 @@ public class DepartmentService {
             }
             if (replaceExisting) {
                 departmentInsurancePolicyRepository.deleteByDepartmentId(department.getId());
+                departmentInsurancePolicyRepository.flush();
             }
             department.setInsurancePolicyMode(DepartmentInsurancePolicyMode.ALL);
             return null;
-        }
-
-        if (ids.isEmpty()) {
-            return ApiResponse.error("insuranceProviderIds are required when mode is ONLY or EXCEPT.", "VALIDATION_ERROR");
         }
 
         Set<UUID> uniqueIds = new HashSet<>(ids);
@@ -219,6 +216,7 @@ public class DepartmentService {
 
         if (replaceExisting) {
             departmentInsurancePolicyRepository.deleteByDepartmentId(department.getId());
+            departmentInsurancePolicyRepository.flush();
         }
 
         List<DepartmentInsurancePolicy> policies = new ArrayList<>();
@@ -229,7 +227,9 @@ public class DepartmentService {
             policies.add(policy);
         }
 
-        departmentInsurancePolicyRepository.saveAll(policies);
+        if (!policies.isEmpty()) {
+            departmentInsurancePolicyRepository.saveAll(policies);
+        }
         department.setInsurancePolicyMode(mode);
         return null;
     }
@@ -289,28 +289,29 @@ public class DepartmentService {
         data.put("id", department.getId());
         data.put("name", department.getName());
         data.put("insurancePolicyMode", department.getInsurancePolicyMode());
-        data.put("insurancePolicies", departmentInsurancePolicyRepository.findByDepartmentId(department.getId()).stream().map(this::departmentInsurancePolicyToMap).toList());
+        data.put(
+                "insurancePolicies",
+                departmentInsurancePolicyRepository.findByDepartmentId(department.getId())
+                        .stream()
+                        .map(policy -> insuranceProviderToMap(policy.getInsuranceProvider()))
+                        .toList()
+        );
         data.put("defaultProducts", departmentDefaultProductRepository.findByDepartmentId(department.getId()).stream().map(link -> productToMap(link.getProduct())).toList());
         data.put("createdAt", department.getCreatedAt());
         data.put("updatedAt", department.getUpdatedAt());
         return data;
     }
 
-    private Map<String, Object> departmentInsurancePolicyToMap(DepartmentInsurancePolicy policy) {
-        Map<String, Object> insuranceProvider = new HashMap<>();
-        insuranceProvider.put("id", policy.getInsuranceProvider().getId());
-        insuranceProvider.put("insuranceName", policy.getInsuranceProvider().getInsuranceName());
-        insuranceProvider.put("acronym", policy.getInsuranceProvider().getAcronym());
-        insuranceProvider.put("defaultCoveragePercentage", policy.getInsuranceProvider().getDefaultCoveragePercentage());
-        insuranceProvider.put("supportedByClinic", policy.getInsuranceProvider().isSupportedByClinic());
-        insuranceProvider.put("iconUrl", policy.getInsuranceProvider().getIconUrl());
-
+    private Map<String, Object> insuranceProviderToMap(InsuranceProvider insuranceProvider) {
         Map<String, Object> data = new HashMap<>();
-        data.put("id", policy.getId());
-        data.put("insuranceProvider", insuranceProvider);
-        data.put("insuranceProviderId", policy.getInsuranceProvider().getId());
-        data.put("createdAt", policy.getCreatedAt());
-        data.put("updatedAt", policy.getUpdatedAt());
+        data.put("id", insuranceProvider.getId());
+        data.put("insuranceName", insuranceProvider.getInsuranceName());
+        data.put("acronym", insuranceProvider.getAcronym());
+        data.put("defaultCoveragePercentage", insuranceProvider.getDefaultCoveragePercentage());
+        data.put("supportedByClinic", insuranceProvider.isSupportedByClinic());
+        data.put("iconUrl", insuranceProvider.getIconUrl());
+        data.put("createdAt", insuranceProvider.getCreatedAt());
+        data.put("updatedAt", insuranceProvider.getUpdatedAt());
         return data;
     }
 
@@ -333,17 +334,9 @@ public class DepartmentService {
     }
 
     private Map<String, Object> productCoverageToMap(ProductInsuranceCoverage coverage) {
-        Map<String, Object> insuranceProvider = new HashMap<>();
-        insuranceProvider.put("id", coverage.getInsuranceProvider().getId());
-        insuranceProvider.put("insuranceName", coverage.getInsuranceProvider().getInsuranceName());
-        insuranceProvider.put("acronym", coverage.getInsuranceProvider().getAcronym());
-        insuranceProvider.put("defaultCoveragePercentage", coverage.getInsuranceProvider().getDefaultCoveragePercentage());
-        insuranceProvider.put("supportedByClinic", coverage.getInsuranceProvider().isSupportedByClinic());
-        insuranceProvider.put("iconUrl", coverage.getInsuranceProvider().getIconUrl());
-
         Map<String, Object> data = new HashMap<>();
         data.put("id", coverage.getId());
-        data.put("insuranceProvider", insuranceProvider);
+        data.put("insuranceProvider", insuranceProviderToMap(coverage.getInsuranceProvider()));
         data.put("cost", coverage.getCost());
         data.put("covered", coverage.isCovered());
         data.put("requireMedicalAdvisor", coverage.isRequireMedicalAdvisor());

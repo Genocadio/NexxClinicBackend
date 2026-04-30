@@ -250,7 +250,8 @@ public class WorkerService {
             Map<String, Object> data = Map.of(
                     "passwordSetupRequired", true,
                     "identifier", input.identifier(),
-                    "userId", worker.getId()
+                "userId", worker.getId(),
+                "user", workerToMap(worker)
             );
             return new ApiResponse(
                     com.nexxserve.nexxclinic.model.ResponseStatus.PARTIAL_SUCCESS,
@@ -902,6 +903,7 @@ public class WorkerService {
         Map<String, Object> data = new HashMap<>();
         data.put("accessToken", bundle.accessToken());
         data.put("refreshToken", bundle.refreshToken());
+        data.put("user", workerToMap(worker));
         data.put("userId", worker.getId());
         data.put("roles", worker.getRoles());
         data.put("mustChangeOnNextLogin", worker.isMustChangeOnNextLogin());
