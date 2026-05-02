@@ -55,6 +55,15 @@ public class VisitMutationController {
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
     @MutationMapping
+    public ApiResponse completeVisitDepartment(
+            @Argument UUID visitDepartmentId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.completeVisitDepartment(visitDepartmentId);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
     public ApiResponse addVisitDepartmentProduct(
             @Argument @Valid CreateVisitDepartmentProductInput input,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser

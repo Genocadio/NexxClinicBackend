@@ -3,6 +3,7 @@ package com.nexxserve.nexxclinic.service;
 import com.nexxserve.nexxclinic.entity.InsuranceProvider;
 import com.nexxserve.nexxclinic.entity.Patient;
 import com.nexxserve.nexxclinic.entity.PatientInsurance;
+import com.nexxserve.nexxclinic.entity.Visit;
 import com.nexxserve.nexxclinic.graphql.input.CreatePatientInput;
 import com.nexxserve.nexxclinic.graphql.input.CreatePatientInsuranceInput;
 import com.nexxserve.nexxclinic.graphql.input.SearchPatientsInput;
@@ -12,6 +13,7 @@ import com.nexxserve.nexxclinic.model.ApiResponse;
 import com.nexxserve.nexxclinic.repository.InsuranceProviderRepository;
 import com.nexxserve.nexxclinic.repository.PatientInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.PatientRepository;
+import com.nexxserve.nexxclinic.repository.VisitRepository;
 import java.time.LocalDate;
 import java.time.Period;
 import java.util.ArrayList;
@@ -35,15 +37,18 @@ public class PatientService {
     private final PatientRepository patientRepository;
     private final PatientInsuranceRepository patientInsuranceRepository;
     private final InsuranceProviderRepository insuranceProviderRepository;
+    private final VisitRepository visitRepository;
 
     public PatientService(
             PatientRepository patientRepository,
             PatientInsuranceRepository patientInsuranceRepository,
-            InsuranceProviderRepository insuranceProviderRepository
+            InsuranceProviderRepository insuranceProviderRepository,
+            VisitRepository visitRepository
     ) {
         this.patientRepository = patientRepository;
         this.patientInsuranceRepository = patientInsuranceRepository;
         this.insuranceProviderRepository = insuranceProviderRepository;
+        this.visitRepository = visitRepository;
     }
 
     @Transactional(readOnly = true)
@@ -630,6 +635,19 @@ public class PatientService {
         data.put("emergencyContactRelationship", patient.getEmergencyContactRelationship());
         data.put("emergencyContactPhoneNumber", patient.getEmergencyContactPhoneNumber());
         data.put("insurances", patientInsuranceRepository.findByPatientId(patient.getId()).stream().map(this::patientInsuranceToMap).toList());
+        
+        // Fetch and include the last visit
+        Optional<Visit> lastVisit = visitRepository.findLatestVisitByPatientId(patient.getId());
+        lastVisit.ifPresent(visit -> {
+            Map<String, Object> visitData = new HashMap<>();
+            visitData.put("id", visit.getId());
+            visitData.put("status", visit.getStatus());
+            visitData.put("visitDate", visit.getVisitDate());
+            visitData.put("createdAt", visit.getCreatedAt());
+            visitData.put("updatedAt", visit.getUpdatedAt());
+            data.put("lastVisit", visitData);
+        });
+        
         data.put("createdAt", patient.getCreatedAt());
         data.put("updatedAt", patient.getUpdatedAt());
         return data;

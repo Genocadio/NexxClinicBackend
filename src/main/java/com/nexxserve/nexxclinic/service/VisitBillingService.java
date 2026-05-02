@@ -254,7 +254,7 @@ public class VisitBillingService {
     }
 
     private List<VisitDepartmentProduct> loadVisitDepartmentProducts(UUID visitId) {
-        return visitDepartmentRepository.findByVisitId(visitId)
+        return visitDepartmentRepository.findByVisitIdOrderByCreatedAtAsc(visitId)
                 .stream()
                 .flatMap(vd -> visitDepartmentProductRepository.findByVisitDepartmentId(vd.getId()).stream())
                 .toList();

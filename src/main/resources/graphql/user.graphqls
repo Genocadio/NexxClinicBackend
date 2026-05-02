@@ -25,7 +25,7 @@ enum AccountStatus {
   DISABLED
 }
 
-enum x§nder {
+enum Gender {
   MALE
   FEMALE
   OTHER
@@ -113,10 +113,58 @@ enum VisitProductStatus {
   PENDING
 }
 
+enum VisitDepartmentStatus {
+  ACTIVE
+  PENDING
+  COMPLETED
+}
+
 enum VisitBillingStatus {
   UNPAID
   PARTIALLY_PAID
   PAID
+}
+
+enum FormStatus {
+  DRAFT
+  FINAL
+}
+
+enum AnswerStatus {
+  DRAFT
+  FINAL
+}
+
+enum FieldType {
+  text
+  email
+  number
+  date
+  textarea
+  select
+  radio
+  checkbox
+  table
+  signature
+  file
+  heading
+  paragraph
+}
+
+enum TableMode {
+  static
+  dynamic
+}
+
+enum ConditionalCondition {
+  equals
+  not_equals
+  contains
+  not_contains
+  greater_than
+  less_than
+  is_empty
+  is_not_empty
 }
 
 type ErrorDetail {
@@ -260,6 +308,7 @@ type Patient {
   emergencyContactName: String
   emergencyContactRelationship: String
   emergencyContactPhoneNumber: String
+  lastVisit: Visit
   createdAt: String!
   updatedAt: String!
 }
@@ -406,6 +455,8 @@ type Visit {
 type VisitDepartment {
   id: ID!
   department: Department!
+  status: VisitDepartmentStatus!
+  completedAt: String
   products: [VisitDepartmentProduct!]!
   createdAt: String!
   updatedAt: String!
@@ -484,6 +535,138 @@ type PaginatedVisitResponse implements ApiResponse {
   errorMessages: [String!]!
   data: [Visit!]
   pagination: PaginationInfo
+}
+
+type DepartmentFormConditionalRendering {
+  dependsOn: String
+  condition: ConditionalCondition
+  value: String
+  itemType: String
+}
+
+type DepartmentFormTableConfig {
+  mode: TableMode
+  rows: Int
+  columns: Int
+  headerPlacement: String
+  columnHeaders: [String]
+  rowHeaders: [String]
+}
+
+type DepartmentFormField {
+  id: String!
+  label: String!
+  type: FieldType!
+  placeholder: String
+  required: Boolean!
+  order: Int!
+  hideLabel: Boolean
+  boldLabel: Boolean
+  italicLabel: Boolean
+  underlineLabel: Boolean
+  centerLabel: Boolean
+  options: [String]
+  tableConfig: DepartmentFormTableConfig
+  conditionalRendering: DepartmentFormConditionalRendering
+}
+
+type DepartmentFormSection {
+  id: String!
+  title: String!
+  boldTitle: Boolean
+  italicTitle: Boolean
+  underlineTitle: Boolean
+  centerTitle: Boolean
+  columns: Int
+  order: Int!
+  fields: [DepartmentFormField]
+}
+
+type DepartmentFormAction {
+  id: String!
+  name: String!
+  type: String!
+  quantity: Int!
+  price: Float!
+  isQuantifiable: Boolean!
+  backendId: String
+}
+
+type DepartmentForm {
+  id: ID!
+  departmentId: ID!
+  title: String!
+  description: String
+  status: FormStatus!
+  currentVersionNumber: String!
+  currentSchemaVersion: Int!
+  formData: String!
+  createdAt: String!
+  updatedAt: String!
+}
+
+type DepartmentFormVersion {
+  id: ID!
+  formId: ID!
+  versionNumber: String!
+  status: FormStatus!
+  formData: String!
+  createdAt: String!
+}
+
+type DepartmentFormAnswer {
+  id: ID!
+  consultationId: String!
+  visitId: String!
+  patientId: String!
+  departmentId: ID!
+  formId: ID!
+  formSchemaVersion: String!
+  status: AnswerStatus!
+  answers: String!
+  submittedAt: String
+  updatedAt: String!
+  createdAt: String!
+}
+
+type DepartmentFormResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: DepartmentForm
+}
+
+type DepartmentFormVersionResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: DepartmentFormVersion
+}
+
+type DepartmentFormVersionListResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: [DepartmentFormVersion!]
+}
+
+type DepartmentFormListResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: [DepartmentForm!]
+}
+
+type DepartmentFormAnswerResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  errors: [ErrorDetail!]
+  errorMessages: [String!]!
+  data: DepartmentFormAnswer
 }
 
 input WorkerDocumentInput {
@@ -821,6 +1004,88 @@ input SearchVisitsInput {
   size: Int
 }
 
+input DepartmentFormTableConfigInput {
+  mode: TableMode
+  rows: Int
+  columns: Int
+  headerPlacement: String
+  columnHeaders: [String]
+  rowHeaders: [String]
+}
+
+input DepartmentFormConditionalRenderingInput {
+  dependsOn: String!
+  condition: ConditionalCondition!
+  value: String
+  itemType: String
+}
+
+input DepartmentFormFieldInput {
+  id: String!
+  label: String!
+  type: FieldType!
+  placeholder: String
+  required: Boolean!
+  order: Int!
+  hideLabel: Boolean
+  boldLabel: Boolean
+  italicLabel: Boolean
+  underlineLabel: Boolean
+  centerLabel: Boolean
+  options: [String]
+  tableConfig: DepartmentFormTableConfigInput
+  conditionalRendering: DepartmentFormConditionalRenderingInput
+}
+
+input DepartmentFormSectionInput {
+  id: String!
+  title: String!
+  boldTitle: Boolean
+  italicTitle: Boolean
+  underlineTitle: Boolean
+  centerTitle: Boolean
+  columns: Int
+  order: Int!
+  fields: [DepartmentFormFieldInput]
+}
+
+input DepartmentFormActionInput {
+  id: String!
+  name: String!
+  type: String!
+  quantity: Int!
+  price: Float!
+  isQuantifiable: Boolean!
+  backendId: String
+}
+
+input CreateDepartmentFormInput {
+  title: String!
+  description: String
+  schemaVersion: Int
+  fields: [DepartmentFormFieldInput]
+  sections: [DepartmentFormSectionInput]
+  actions: [DepartmentFormActionInput]
+}
+
+input UpdateDepartmentFormInput {
+  title: String
+  description: String
+  fields: [DepartmentFormFieldInput]
+  sections: [DepartmentFormSectionInput]
+  actions: [DepartmentFormActionInput]
+}
+
+input UpsertDepartmentFormAnswersInput {
+  consultationId: String!
+  visitId: String!
+  patientId: String!
+  departmentId: ID!
+  formId: ID!
+  status: AnswerStatus
+  answers: String!
+}
+
 type Query {
   me: WorkerResponse!
   listUsers: WorkerListResponse!
@@ -840,6 +1105,12 @@ type Query {
   visits(input: SearchVisitsInput): PaginatedVisitResponse!
   visitBilling(visitBillingId: ID!): VisitBillingResponse!
   visitBillings(visitId: ID!): VisitBillingListResponse!
+  getDepartmentForms(departmentId: ID!): DepartmentFormListResponse!
+  getDepartmentForm(formId: ID!, departmentId: ID!): DepartmentFormResponse!
+  getDepartmentFormVersions(formId: ID!): DepartmentFormVersionListResponse!
+  getDepartmentFormVersion(versionId: ID!): DepartmentFormVersionResponse!
+  getLatestDepartmentFormVersion(formId: ID!): DepartmentFormVersionResponse!
+  getConsultationAnswers(consultationId: String!, departmentId: ID!, formId: ID!): DepartmentFormAnswerResponse!
 }
 
 type Mutation {
@@ -875,10 +1146,15 @@ type Mutation {
   createVisit(input: CreateVisitInput!): VisitResponse!
   changeVisitDate(input: ChangeVisitDateInput!): VisitResponse!
   addVisitDepartment(visitId: ID!, departmentId: ID!): VisitResponse!
+  completeVisitDepartment(visitDepartmentId: ID!): VisitResponse!
   addVisitDepartmentProduct(input: CreateVisitDepartmentProductInput!): VisitResponse!
   updateVisitDepartmentProductStatus(input: UpdateVisitDepartmentProductStatusInput!): VisitResponse!
   billVisit(input: BillVisitInput!): VisitBillingResponse!
   recordVisitBillingPayment(input: RecordVisitBillingPaymentInput!): VisitBillingResponse!
   completeVisit(visitId: ID!): VisitResponse!
   cancelVisit(visitId: ID!): VisitResponse!
+  createDepartmentForm(departmentId: ID!, input: CreateDepartmentFormInput!): DepartmentFormResponse!
+  updateDepartmentForm(formId: ID!, input: UpdateDepartmentFormInput!): DepartmentFormResponse!
+  finalizeDepartmentForm(formId: ID!): DepartmentFormResponse!
+  upsertDepartmentFormAnswers(input: UpsertDepartmentFormAnswersInput!): DepartmentFormAnswerResponse!
 }

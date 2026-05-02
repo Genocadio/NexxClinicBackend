@@ -18,6 +18,7 @@ import com.nexxserve.nexxclinic.graphql.input.CreateVisitInput;
 import com.nexxserve.nexxclinic.graphql.input.SearchVisitsInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentProductStatusInput;
 import com.nexxserve.nexxclinic.model.ApiResponse;
+import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
 import com.nexxserve.nexxclinic.model.VisitStatus;
 import com.nexxserve.nexxclinic.repository.DepartmentRepository;
@@ -32,6 +33,7 @@ import com.nexxserve.nexxclinic.repository.VisitRepository;
 import com.nexxserve.nexxclinic.repository.WorkerRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.Period;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -260,9 +262,47 @@ public class VisitService {
         VisitDepartment visitDepartment = new VisitDepartment();
         visitDepartment.setVisit(visitOptional.get());
         visitDepartment.setDepartment(departmentOptional.get());
+        visitDepartment.setStatus(resolveNewVisitDepartmentStatus(visitId, false));
         visitDepartmentRepository.save(visitDepartment);
 
         return ApiResponse.success("Department added to visit.", visitToMap(visitOptional.get()));
+    }
+
+    @Transactional
+    public ApiResponse completeVisitDepartment(UUID visitDepartmentId) {
+        if (visitDepartmentId == null) {
+            return ApiResponse.error("visitDepartmentId is required.", "VALIDATION_ERROR");
+        }
+
+        Optional<VisitDepartment> visitDepartmentOptional = visitDepartmentRepository.findById(visitDepartmentId);
+        if (visitDepartmentOptional.isEmpty()) {
+            return ApiResponse.error("Visit department not found.", "NOT_FOUND");
+        }
+
+        VisitDepartment visitDepartment = visitDepartmentOptional.get();
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.COMPLETED) {
+            return ApiResponse.error("Visit department is already completed.", "INVALID_VISIT_DEPARTMENT_STATUS_TRANSITION");
+        }
+
+        if (visitDepartment.getStatus() != VisitDepartmentStatus.ACTIVE) {
+            return ApiResponse.error("Only the active visit department can be completed.", "INVALID_VISIT_DEPARTMENT_STATUS_TRANSITION");
+        }
+
+        visitDepartment.setStatus(VisitDepartmentStatus.COMPLETED);
+        visitDepartment.setCompletedAt(LocalDateTime.now());
+        VisitDepartment savedVisitDepartment = visitDepartmentRepository.save(visitDepartment);
+
+        Optional<VisitDepartment> nextPendingDepartment = visitDepartmentRepository.findFirstByVisitIdAndStatusOrderByCreatedAtAsc(
+                savedVisitDepartment.getVisit().getId(),
+                VisitDepartmentStatus.PENDING
+        );
+        if (nextPendingDepartment.isPresent()) {
+            VisitDepartment next = nextPendingDepartment.get();
+            next.setStatus(VisitDepartmentStatus.ACTIVE);
+            visitDepartmentRepository.save(next);
+        }
+
+        return ApiResponse.success("Visit department completed.", visitToMap(savedVisitDepartment.getVisit()));
     }
 
     @Transactional
@@ -344,6 +384,7 @@ public class VisitService {
             return null;
         }
 
+        boolean activeAssigned = false;
         Set<UUID> seenDepartments = new LinkedHashSet<>();
         for (CreateVisitDepartmentInput departmentInput : departments) {
             if (departmentInput == null || departmentInput.departmentId() == null) {
@@ -362,7 +403,12 @@ public class VisitService {
             VisitDepartment visitDepartment = new VisitDepartment();
             visitDepartment.setVisit(visit);
             visitDepartment.setDepartment(departmentOptional.get());
+            VisitDepartmentStatus status = resolveNewVisitDepartmentStatus(visit.getId(), activeAssigned);
+            visitDepartment.setStatus(status);
             VisitDepartment savedVisitDepartment = visitDepartmentRepository.save(visitDepartment);
+            if (status == VisitDepartmentStatus.ACTIVE) {
+                activeAssigned = true;
+            }
 
             ApiResponse productsError = addProductsToVisitDepartment(savedVisitDepartment, departmentInput.products(), actingUser);
             if (productsError != null) {
@@ -458,7 +504,7 @@ public class VisitService {
         );
         data.put(
                 "departments",
-                visitDepartmentRepository.findByVisitId(visit.getId())
+            visitDepartmentRepository.findByVisitIdOrderByCreatedAtAsc(visit.getId())
                         .stream()
                         .map(this::visitDepartmentToMap)
                         .toList()
@@ -470,6 +516,8 @@ public class VisitService {
         Map<String, Object> data = new HashMap<>();
         data.put("id", visitDepartment.getId());
         data.put("department", departmentToMap(visitDepartment.getDepartment()));
+        data.put("status", normalizeVisitDepartmentStatus(visitDepartment.getStatus()));
+        data.put("completedAt", visitDepartment.getCompletedAt());
         data.put(
                 "products",
                 visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartment.getId())
@@ -661,5 +709,19 @@ public class VisitService {
         }
 
         return BigDecimal.ZERO;
+    }
+
+    private VisitDepartmentStatus resolveNewVisitDepartmentStatus(UUID visitId, boolean activeAlreadyAssignedInBatch) {
+        if (!activeAlreadyAssignedInBatch
+                && !visitDepartmentRepository.existsByVisitIdAndStatus(visitId, VisitDepartmentStatus.ACTIVE)
+                && !visitDepartmentRepository.existsByVisitIdAndStatus(visitId, VisitDepartmentStatus.PENDING)) {
+            return VisitDepartmentStatus.ACTIVE;
+        }
+
+        return VisitDepartmentStatus.PENDING;
+    }
+
+    private VisitDepartmentStatus normalizeVisitDepartmentStatus(VisitDepartmentStatus status) {
+        return status == null ? VisitDepartmentStatus.PENDING : status;
     }
 }
