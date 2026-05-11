@@ -1,63 +1,37 @@
 package com.nexxserve.nexxclinic.model;
 
-import java.util.List;
-
 public record ApiResponse(
         ResponseStatus status,
         String message,
-        List<ErrorDetail> errors,
-        List<String> errorMessages,
         Object data,
         Object pagination
 ) {
 
-    public ApiResponse(ResponseStatus status, String message, List<ErrorDetail> errors, Object data) {
-        this(status, message, errors, extractErrorMessages(errors), data, null);
-    }
-
-    public ApiResponse(ResponseStatus status, String message, List<ErrorDetail> errors, Object data, Object pagination) {
-        this(status, message, errors, extractErrorMessages(errors), data, pagination);
-    }
-
-    private static List<String> extractErrorMessages(List<ErrorDetail> errors) {
-        if (errors == null || errors.isEmpty()) {
-            return List.of();
-        }
-        return errors.stream().map(ErrorDetail::message).toList();
+    public ApiResponse(ResponseStatus status, String message, Object data) {
+        this(status, message, data, null);
     }
 
     public static ApiResponse success(String message, Object data) {
-        return new ApiResponse(ResponseStatus.SUCCESS, message, List.of(), data);
+        return new ApiResponse(ResponseStatus.SUCCESS, message, data);
     }
 
     public static ApiResponse success(String message, Object data, Object pagination) {
-        return new ApiResponse(ResponseStatus.SUCCESS, message, List.of(), data, pagination);
+        return new ApiResponse(ResponseStatus.SUCCESS, message, data, pagination);
     }
 
     public static ApiResponse error(String message, String code) {
-        return new ApiResponse(
-                ResponseStatus.ERROR,
-                message,
-                List.of(new ErrorDetail(null, message, code)),
-                null
-        );
+        return new ApiResponse(ResponseStatus.ERROR, message, null);
     }
 
     public static ApiResponse unauthenticated(String message) {
-        return new ApiResponse(
-                ResponseStatus.UNAUTHENTICATED,
-                message,
-                List.of(new ErrorDetail(null, message, "UNAUTHENTICATED")),
-                null
-        );
+        return new ApiResponse(ResponseStatus.UNAUTHENTICATED, message, null);
     }
 
     public static ApiResponse unauthorised(String message) {
-        return new ApiResponse(
-                ResponseStatus.UNAUTHORISED,
-                message,
-                List.of(new ErrorDetail(null, message, "UNAUTHORISED")),
-                null
-        );
+        return new ApiResponse(ResponseStatus.UNAUTHORISED, message, null);
+    }
+
+    public static ApiResponse partialSuccess(String message, Object data) {
+        return new ApiResponse(ResponseStatus.PARTIAL_SUCCESS, message, data);
     }
 }

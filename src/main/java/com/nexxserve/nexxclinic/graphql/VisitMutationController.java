@@ -5,6 +5,8 @@ import com.nexxserve.nexxclinic.graphql.input.ChangeVisitDateInput;
 import com.nexxserve.nexxclinic.graphql.input.CreateVisitDepartmentProductInput;
 import com.nexxserve.nexxclinic.graphql.input.CreateVisitInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentProductStatusInput;
+import com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentStatusInput;
+import com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentProductQuantityInput;
 import com.nexxserve.nexxclinic.model.ApiResponse;
 import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.security.HasRole;
@@ -55,6 +57,15 @@ public class VisitMutationController {
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
     @MutationMapping
+    public ApiResponse updateVisitDepartmentStatus(
+            @Argument @Valid UpdateVisitDepartmentStatusInput input,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.updateVisitDepartmentStatus(input, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
     public ApiResponse addVisitDepartmentProduct(
             @Argument @Valid CreateVisitDepartmentProductInput input,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
@@ -69,6 +80,15 @@ public class VisitMutationController {
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         return visitService.updateVisitDepartmentProductStatus(input, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
+    public ApiResponse updateVisitDepartmentProductQuantity(
+            @Argument @Valid UpdateVisitDepartmentProductQuantityInput input,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.updateVisitDepartmentProductQuantity(input);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})

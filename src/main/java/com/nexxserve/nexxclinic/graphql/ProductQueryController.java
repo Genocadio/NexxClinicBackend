@@ -12,6 +12,8 @@ import org.springframework.graphql.data.method.annotation.ContextValue;
 import org.springframework.graphql.data.method.annotation.QueryMapping;
 import org.springframework.stereotype.Controller;
 
+import javax.management.relation.Role;
+
 @Controller
 public class ProductQueryController {
 
@@ -21,7 +23,7 @@ public class ProductQueryController {
         this.productService = productService;
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE})
+    @HasRole({RoleName.ADMIN, RoleName.CLINICIAN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE})
     @QueryMapping
     public ApiResponse product(
             @Argument UUID productId,
@@ -30,7 +32,7 @@ public class ProductQueryController {
         return productService.product(productId);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE})
+    @HasRole({RoleName.ADMIN, RoleName.CLINICIAN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE})
     @QueryMapping
     public ApiResponse products(
             @Argument(name = "input") SearchProductsInput input,

@@ -1,7 +1,10 @@
 package com.nexxserve.nexxclinic.entity;
 
+import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
@@ -34,6 +37,13 @@ public class VisitDepartment {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "department_id", nullable = false)
     private Department department;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private VisitDepartmentStatus status;
+
+    @Column
+    private LocalDateTime completedAt;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -75,6 +85,22 @@ public class VisitDepartment {
 
     public void setDepartment(Department department) {
         this.department = department;
+    }
+
+    public VisitDepartmentStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(VisitDepartmentStatus status) {
+        this.status = status;
+    }
+
+    public LocalDateTime getCompletedAt() {
+        return completedAt;
+    }
+
+    public void setCompletedAt(LocalDateTime completedAt) {
+        this.completedAt = completedAt;
     }
 
     public LocalDateTime getCreatedAt() {

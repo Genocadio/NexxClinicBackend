@@ -25,7 +25,7 @@ enum AccountStatus {
   DISABLED
 }
 
-enum x§nder {
+enum Gender {
   MALE
   FEMALE
   OTHER
@@ -113,23 +113,64 @@ enum VisitProductStatus {
   PENDING
 }
 
+enum VisitDepartmentStatus {
+  ACTIVE
+  PENDING
+  COMPLETED
+}
+
 enum VisitBillingStatus {
   UNPAID
   PARTIALLY_PAID
   PAID
 }
 
-type ErrorDetail {
-  field: String
-  message: String!
-  code: String
+enum FormStatus {
+  DRAFT
+  FINAL
+}
+
+enum FieldType {
+  text
+  email
+  number
+  date
+  textarea
+  actionListener
+  select
+  radio
+  checkbox
+  table
+  signature
+  file
+  heading
+  paragraph
+}
+
+enum TableMode {
+  STATIC
+  DYNAMIC
+}
+
+enum ConditionalCondition {
+  equals
+  not_equals
+  contains
+  not_contains
+  greater_than
+  less_than
+  is_empty
+  is_not_empty
+}
+
+enum AnswerStatus {
+  DRAFT
+  FINAL
 }
 
 interface ApiResponse {
   status: ResponseStatus!
   message: String
-  errors: [ErrorDetail!]
-  errorMessages: [String!]!
 }
 
 type PaginationInfo {
@@ -148,24 +189,18 @@ type AuthTokens {
 type AuthResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  errors: [ErrorDetail!]
-  errorMessages: [String!]!
   data: AuthTokens
 }
 
 type BooleanResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  errors: [ErrorDetail!]
-  errorMessages: [String!]!
   data: Boolean
 }
 
 type StringResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  errors: [ErrorDetail!]
-  errorMessages: [String!]!
   data: String
 }
 
@@ -186,16 +221,12 @@ type Worker {
 type WorkerResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  errors: [ErrorDetail!]
-  errorMessages: [String!]!
   data: Worker
 }
 
 type WorkerListResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  errors: [ErrorDetail!]
-  errorMessages: [String!]!
   data: [Worker!]
 }
 
@@ -209,8 +240,6 @@ type AuditLog {
 type AuditLogListResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  errors: [ErrorDetail!]
-  errorMessages: [String!]!
   data: [AuditLog!]
 }
 
@@ -228,16 +257,12 @@ type InsuranceProvider {
 type InsuranceProviderResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  errors: [ErrorDetail!]
-  errorMessages: [String!]!
   data: InsuranceProvider
 }
 
 type PaginatedInsuranceProviderResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  errors: [ErrorDetail!]
-  errorMessages: [String!]!
   data: [InsuranceProvider!]
   pagination: PaginationInfo
 }
@@ -260,6 +285,7 @@ type Patient {
   emergencyContactName: String
   emergencyContactRelationship: String
   emergencyContactPhoneNumber: String
+  lastVisit: Visit
   createdAt: String!
   updatedAt: String!
 }
@@ -267,16 +293,12 @@ type Patient {
 type PatientResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  errors: [ErrorDetail!]
-  errorMessages: [String!]!
   data: Patient
 }
 
 type PaginatedPatientResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  errors: [ErrorDetail!]
-  errorMessages: [String!]!
   data: [Patient!]
   pagination: PaginationInfo
 }
@@ -299,16 +321,12 @@ type PatientInsurance {
 type PatientInsuranceResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  errors: [ErrorDetail!]
-  errorMessages: [String!]!
   data: PatientInsurance
 }
 
 type PaginatedPatientInsuranceResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  errors: [ErrorDetail!]
-  errorMessages: [String!]!
   data: [PatientInsurance!]
   pagination: PaginationInfo
 }
@@ -345,16 +363,12 @@ type Product {
 type ProductResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  errors: [ErrorDetail!]
-  errorMessages: [String!]!
   data: Product
 }
 
 type PaginatedProductResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  errors: [ErrorDetail!]
-  errorMessages: [String!]!
   data: [Product!]
   pagination: PaginationInfo
 }
@@ -362,8 +376,6 @@ type PaginatedProductResponse implements ApiResponse {
 type ProductInsuranceCoverageResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  errors: [ErrorDetail!]
-  errorMessages: [String!]!
   data: ProductInsuranceCoverage
 }
 
@@ -380,16 +392,12 @@ type Department {
 type DepartmentResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  errors: [ErrorDetail!]
-  errorMessages: [String!]!
   data: Department
 }
 
 type PaginatedDepartmentResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  errors: [ErrorDetail!]
-  errorMessages: [String!]!
   data: [Department!]
   pagination: PaginationInfo
 }
@@ -406,6 +414,8 @@ type Visit {
 type VisitDepartment {
   id: ID!
   department: Department!
+  status: VisitDepartmentStatus!
+  completedAt: String
   products: [VisitDepartmentProduct!]!
   createdAt: String!
   updatedAt: String!
@@ -426,8 +436,6 @@ type VisitDepartmentProduct {
 type VisitResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  errors: [ErrorDetail!]
-  errorMessages: [String!]!
   data: Visit
 }
 
@@ -464,26 +472,148 @@ type VisitBilling {
 type VisitBillingResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  errors: [ErrorDetail!]
-  errorMessages: [String!]!
   data: VisitBilling
 }
 
 type VisitBillingListResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  errors: [ErrorDetail!]
-  errorMessages: [String!]!
   data: [VisitBilling!]
 }
 
 type PaginatedVisitResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  errors: [ErrorDetail!]
-  errorMessages: [String!]!
   data: [Visit!]
   pagination: PaginationInfo
+}
+
+type ConditionalRendering {
+  dependsOn: String!
+  condition: ConditionalCondition!
+  value: String
+  itemType: String
+}
+
+type TableConfig {
+  mode: TableMode!
+  rows: Int
+  columns: Int
+  headerPlacement: String
+  columnHeaders: [String!]
+  rowHeaders: [String!]
+}
+
+type FormField {
+  id: String!
+  label: String!
+  type: FieldType!
+  placeholder: String
+  required: Boolean!
+  order: Int!
+  hideLabel: Boolean!
+  boldLabel: Boolean!
+  italicLabel: Boolean!
+  underlineLabel: Boolean!
+  centerLabel: Boolean!
+  options: [String!]
+  tableConfig: TableConfig
+  conditionalRendering: ConditionalRendering
+}
+
+type FormSection {
+  id: String!
+  title: String!
+  boldTitle: Boolean!
+  italicTitle: Boolean!
+  underlineTitle: Boolean!
+  centerTitle: Boolean!
+  columns: Int!
+  order: Int!
+  fields: [FormField!]
+}
+
+type FormAction {
+  id: String!
+  name: String!
+  type: String!
+  quantity: Int!
+  price: Float!
+  isQuantifiable: Boolean!
+  backendId: String
+}
+
+type Form {
+  id: ID!
+  departmentId: ID!
+  title: String!
+  description: String
+  status: FormStatus!
+  version: String!
+  createdAt: String!
+  updatedAt: String!
+  sections: [FormSection!]
+  fields: [FormField!]
+  actions: [FormAction!]
+}
+
+type FormVersion {
+  id: ID!
+  formId: ID!
+  departmentId: ID!
+  title: String!
+  description: String
+  status: FormStatus!
+  version: String!
+  createdAt: String!
+  updatedAt: String!
+  sections: [FormSection!]
+  fields: [FormField!]
+  actions: [FormAction!]
+}
+
+type FormResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: Form
+}
+
+type FormListResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: [Form!]
+}
+
+type FormVersionResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: FormVersion
+}
+
+type FormVersionListResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: [FormVersion!]
+}
+
+type ConsultationAnswers {
+  id: ID!
+  consultationId: ID!
+  visitId: ID!
+  patientId: ID!
+  departmentId: ID!
+  formId: ID!
+  formVersion: String!
+  status: AnswerStatus!
+  answers: String!
+  submittedAt: String
+  updatedAt: String!
+}
+
+type ConsultationAnswersResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: ConsultationAnswers
 }
 
 input WorkerDocumentInput {
@@ -796,6 +926,16 @@ input UpdateVisitDepartmentProductStatusInput {
   status: VisitProductStatus!
 }
 
+input UpdateVisitDepartmentStatusInput {
+  visitDepartmentId: ID!
+  status: VisitDepartmentStatus!
+}
+
+input UpdateVisitDepartmentProductQuantityInput {
+  visitDepartmentProductId: ID!
+  quantity: Float!
+}
+
 input BillVisitItemInput {
   visitDepartmentProductId: ID!
   patientInsuranceId: ID
@@ -821,6 +961,80 @@ input SearchVisitsInput {
   size: Int
 }
 
+input ConditionalRenderingInput {
+  dependsOn: String!
+  condition: ConditionalCondition!
+  value: String
+  itemType: String
+}
+
+input TableConfigInput {
+  mode: TableMode!
+  rows: Int
+  columns: Int
+  headerPlacement: String
+  columnHeaders: [String!]
+  rowHeaders: [String!]
+}
+
+input FormFieldInput {
+  id: String!
+  label: String!
+  type: FieldType!
+  placeholder: String
+  required: Boolean!
+  order: Int!
+  hideLabel: Boolean!
+  boldLabel: Boolean!
+  italicLabel: Boolean!
+  underlineLabel: Boolean!
+  centerLabel: Boolean!
+  options: [String!]
+  tableConfig: TableConfigInput
+  conditionalRendering: ConditionalRenderingInput
+}
+
+input FormSectionInput {
+  id: String!
+  title: String!
+  boldTitle: Boolean!
+  italicTitle: Boolean!
+  underlineTitle: Boolean!
+  centerTitle: Boolean!
+  columns: Int!
+  order: Int!
+  fields: [FormFieldInput!]
+}
+
+input FormActionInput {
+  id: String!
+  name: String!
+  type: String!
+  quantity: Int!
+  price: Float!
+  isQuantifiable: Boolean!
+  backendId: String
+}
+
+input FormInput {
+  title: String!
+  description: String
+  fields: [FormFieldInput!]
+  sections: [FormSectionInput!]
+  actions: [FormActionInput!]
+}
+
+input ConsultationAnswersInput {
+  consultationId: ID!
+  visitId: ID!
+  patientId: ID!
+  departmentId: ID!
+  formId: ID!
+  formVersion: String
+  status: AnswerStatus!
+  answers: String!
+}
+
 type Query {
   me: WorkerResponse!
   listUsers: WorkerListResponse!
@@ -840,6 +1054,12 @@ type Query {
   visits(input: SearchVisitsInput): PaginatedVisitResponse!
   visitBilling(visitBillingId: ID!): VisitBillingResponse!
   visitBillings(visitId: ID!): VisitBillingListResponse!
+  getForms(departmentId: ID!): FormListResponse!
+  getForm(departmentId: ID!, formId: ID!): FormResponse!
+  getLatestForm(departmentId: ID!): FormResponse!
+  getFormVersionHistory(departmentId: ID!, formId: ID!): FormVersionListResponse!
+  getFormVersion(departmentId: ID!, formId: ID!, version: String!): FormVersionResponse!
+  getConsultationAnswers(consultationId: ID!, departmentId: ID!, formId: ID!): ConsultationAnswersResponse!
 }
 
 type Mutation {
@@ -875,10 +1095,17 @@ type Mutation {
   createVisit(input: CreateVisitInput!): VisitResponse!
   changeVisitDate(input: ChangeVisitDateInput!): VisitResponse!
   addVisitDepartment(visitId: ID!, departmentId: ID!): VisitResponse!
+  completeVisitDepartment(visitDepartmentId: ID!): VisitResponse!
   addVisitDepartmentProduct(input: CreateVisitDepartmentProductInput!): VisitResponse!
   updateVisitDepartmentProductStatus(input: UpdateVisitDepartmentProductStatusInput!): VisitResponse!
+  updateVisitDepartmentStatus(input: UpdateVisitDepartmentStatusInput!): VisitResponse!
+  updateVisitDepartmentProductQuantity(input: UpdateVisitDepartmentProductQuantityInput!): VisitResponse!
   billVisit(input: BillVisitInput!): VisitBillingResponse!
   recordVisitBillingPayment(input: RecordVisitBillingPaymentInput!): VisitBillingResponse!
   completeVisit(visitId: ID!): VisitResponse!
   cancelVisit(visitId: ID!): VisitResponse!
+  createForm(departmentId: ID!, input: FormInput!): FormResponse!
+  updateForm(departmentId: ID!, formId: ID!, input: FormInput!): FormResponse!
+  finalizeForm(departmentId: ID!, formId: ID!): FormResponse!
+  upsertConsultationAnswers(input: ConsultationAnswersInput!): ConsultationAnswersResponse!
 }

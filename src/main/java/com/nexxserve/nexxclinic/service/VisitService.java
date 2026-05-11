@@ -18,6 +18,7 @@ import com.nexxserve.nexxclinic.graphql.input.CreateVisitInput;
 import com.nexxserve.nexxclinic.graphql.input.SearchVisitsInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentProductStatusInput;
 import com.nexxserve.nexxclinic.model.ApiResponse;
+import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
 import com.nexxserve.nexxclinic.model.VisitStatus;
 import com.nexxserve.nexxclinic.repository.DepartmentRepository;
@@ -260,6 +261,7 @@ public class VisitService {
         VisitDepartment visitDepartment = new VisitDepartment();
         visitDepartment.setVisit(visitOptional.get());
         visitDepartment.setDepartment(departmentOptional.get());
+        visitDepartment.setStatus(VisitDepartmentStatus.PENDING);
         visitDepartmentRepository.save(visitDepartment);
 
         return ApiResponse.success("Department added to visit.", visitToMap(visitOptional.get()));
@@ -335,6 +337,54 @@ public class VisitService {
         return ApiResponse.success("Visit department product status updated.", visitToMap(saved.getVisitDepartment().getVisit()));
     }
 
+    @Transactional
+    public ApiResponse updateVisitDepartmentStatus(com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentStatusInput input, AuthenticatedUser authUser) {
+        if (input == null || input.visitDepartmentId() == null || input.status() == null) {
+            return ApiResponse.error("visitDepartmentId and status are required.", "VALIDATION_ERROR");
+        }
+
+        Optional<VisitDepartment> departmentOptional = visitDepartmentRepository.findById(input.visitDepartmentId());
+        if (departmentOptional.isEmpty()) {
+            return ApiResponse.error("Visit department not found.", "NOT_FOUND");
+        }
+
+        VisitDepartment department = departmentOptional.get();
+        department.setStatus(input.status());
+        if (input.status() == VisitDepartmentStatus.COMPLETED) {
+            department.setCompletedAt(java.time.LocalDateTime.now());
+        }
+
+        VisitDepartment saved = visitDepartmentRepository.save(department);
+        return ApiResponse.success("Visit department status updated.", visitToMap(saved.getVisit()));
+    }
+
+    @Transactional
+    public ApiResponse updateVisitDepartmentProductQuantity(com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentProductQuantityInput input) {
+        if (input == null || input.visitDepartmentProductId() == null || input.quantity() == null) {
+            return ApiResponse.error("visitDepartmentProductId and quantity are required.", "VALIDATION_ERROR");
+        }
+
+        Optional<VisitDepartmentProduct> itemOptional = visitDepartmentProductRepository.findById(input.visitDepartmentProductId());
+        if (itemOptional.isEmpty()) {
+            return ApiResponse.error("Visit department product not found.", "NOT_FOUND");
+        }
+
+        VisitDepartmentProduct item = itemOptional.get();
+        Visit visit = item.getVisitDepartment().getVisit();
+
+        if (input.quantity().compareTo(java.math.BigDecimal.ZERO) <= 0) {
+            // Delete product from visit department when quantity is 0 or less
+            visitDepartmentProductRepository.delete(item);
+            reopenVisitIfCompleted(visit);
+            return ApiResponse.success("Visit department product removed.", visitToMap(visit));
+        }
+
+        item.setQuantity(input.quantity());
+
+        VisitDepartmentProduct saved = visitDepartmentProductRepository.save(item);
+        return ApiResponse.success("Visit department product quantity updated.", visitToMap(saved.getVisitDepartment().getVisit()));
+    }
+
     private ApiResponse addDepartmentsToVisit(
             Visit visit,
             List<CreateVisitDepartmentInput> departments,
@@ -362,6 +412,7 @@ public class VisitService {
             VisitDepartment visitDepartment = new VisitDepartment();
             visitDepartment.setVisit(visit);
             visitDepartment.setDepartment(departmentOptional.get());
+            visitDepartment.setStatus(VisitDepartmentStatus.PENDING);
             VisitDepartment savedVisitDepartment = visitDepartmentRepository.save(visitDepartment);
 
             ApiResponse productsError = addProductsToVisitDepartment(savedVisitDepartment, departmentInput.products(), actingUser);
@@ -470,6 +521,8 @@ public class VisitService {
         Map<String, Object> data = new HashMap<>();
         data.put("id", visitDepartment.getId());
         data.put("department", departmentToMap(visitDepartment.getDepartment()));
+        data.put("status", visitDepartment.getStatus());
+        data.put("completedAt", visitDepartment.getCompletedAt());
         data.put(
                 "products",
                 visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartment.getId())
