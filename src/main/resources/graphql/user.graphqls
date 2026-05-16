@@ -1100,6 +1100,7 @@ type Mutation {
   updateVisitDepartmentProductStatus(input: UpdateVisitDepartmentProductStatusInput!): VisitResponse!
   updateVisitDepartmentStatus(input: UpdateVisitDepartmentStatusInput!): VisitResponse!
   updateVisitDepartmentProductQuantity(input: UpdateVisitDepartmentProductQuantityInput!): VisitResponse!
+  removeVisitDepartmentProduct(visitDepartmentProductId: ID!): VisitResponse!
   billVisit(input: BillVisitInput!): VisitBillingResponse!
   recordVisitBillingPayment(input: RecordVisitBillingPaymentInput!): VisitBillingResponse!
   completeVisit(visitId: ID!): VisitResponse!

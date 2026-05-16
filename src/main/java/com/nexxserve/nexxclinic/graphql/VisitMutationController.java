@@ -108,4 +108,13 @@ public class VisitMutationController {
     ) {
         return visitService.cancelVisit(visitId);
     }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
+    public ApiResponse removeVisitDepartmentProduct(
+            @Argument UUID visitDepartmentProductId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.removeVisitDepartmentProduct(visitDepartmentProductId);
+    }
 }

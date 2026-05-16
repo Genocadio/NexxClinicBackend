@@ -385,6 +385,27 @@ public class VisitService {
         return ApiResponse.success("Visit department product quantity updated.", visitToMap(saved.getVisitDepartment().getVisit()));
     }
 
+    @Transactional
+    public ApiResponse removeVisitDepartmentProduct(UUID visitDepartmentProductId) {
+        if (visitDepartmentProductId == null) {
+            return ApiResponse.error("visitDepartmentProductId is required.", "VALIDATION_ERROR");
+        }
+
+        Optional<VisitDepartmentProduct> itemOptional = visitDepartmentProductRepository.findById(visitDepartmentProductId);
+        if (itemOptional.isEmpty()) {
+            return ApiResponse.error("Visit department product not found.", "NOT_FOUND");
+        }
+
+        VisitDepartmentProduct item = itemOptional.get();
+        Visit visit = item.getVisitDepartment().getVisit();
+
+        // Delete the product from visit department
+        visitDepartmentProductRepository.delete(item);
+        reopenVisitIfCompleted(visit);
+
+        return ApiResponse.success("Visit department product removed.", visitToMap(visit));
+    }
+
     private ApiResponse addDepartmentsToVisit(
             Visit visit,
             List<CreateVisitDepartmentInput> departments,
