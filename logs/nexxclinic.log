@@ -14565,3 +14565,502 @@ This generated password is for development use only. Your security configuration
 2026-05-17 12:14:32 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
 2026-05-17 12:14:32 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Started NexxclinicApplication in 1.189 seconds (process running for 2281.299)
 2026-05-17 12:14:32 [restartedMain] INFO  o.s.b.d.a.ConditionEvaluationDeltaLoggingListener - Condition evaluation unchanged
+2026-05-17 20:06:25 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Starting NexxclinicApplication using Java 21.0.11 with PID 3820 (/Users/nex/workspace/nexxserve/nexxclinic/build/classes/java/main started by nex in /Users/nex/workspace/nexxserve/nexxclinic)
+2026-05-17 20:06:25 [restartedMain] DEBUG c.n.nexxclinic.NexxclinicApplication - Running with Spring Boot v4.0.5, Spring v7.0.6
+2026-05-17 20:06:25 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - No active profile set, falling back to 1 default profile: "default"
+2026-05-17 20:06:25 [restartedMain] INFO  o.s.b.d.e.DevToolsPropertyDefaultsPostProcessor - Devtools property defaults active! Set 'spring.devtools.add-properties' to 'false' to disable
+2026-05-17 20:06:25 [restartedMain] INFO  o.s.b.d.e.DevToolsPropertyDefaultsPostProcessor - For additional web related logging consider setting the 'logging.level.web' property to 'DEBUG'
+2026-05-17 20:06:26 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-05-17 20:06:26 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 79 ms. Found 24 JPA repository interfaces.
+2026-05-17 20:06:26 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-05-17 20:06:26 [restartedMain] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-05-17 20:06:26 [restartedMain] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.20]
+2026-05-17 20:06:26 [restartedMain] INFO  o.s.b.w.c.s.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 857 ms
+2026-05-17 20:06:26 [restartedMain] INFO  org.hibernate.orm.jpa - HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-05-17 20:06:26 [restartedMain] INFO  org.hibernate.orm.core - HHH000001: Hibernate ORM core version 7.2.7.Final
+2026-05-17 20:06:26 [restartedMain] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-05-17 20:06:27 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-05-17 20:06:28 [restartedMain] WARN  org.hibernate.orm.jdbc.error - HHH000247: ErrorCode: 0, SQLState: 08001
+2026-05-17 20:06:28 [restartedMain] WARN  org.hibernate.orm.jdbc.error - Connection to localhost:5432 refused. Check that the hostname and port are correct and that the postmaster is accepting TCP/IP connections.
+2026-05-17 20:06:28 [restartedMain] WARN  org.hibernate.orm.jdbc - HHH100046: Could not obtain connection to query JDBC database metadata
+org.hibernate.exception.JDBCConnectionException: Unable to obtain isolated JDBC connection [Connection to localhost:5432 refused. Check that the hostname and port are correct and that the postmaster is accepting TCP/IP connections.] [n/a]
+	at org.hibernate.exception.internal.SQLStateConversionDelegate.convert(SQLStateConversionDelegate.java:80)
+	at org.hibernate.exception.internal.StandardSQLExceptionConverter.convert(StandardSQLExceptionConverter.java:34)
+	at org.hibernate.engine.jdbc.spi.SqlExceptionHelper.convert(SqlExceptionHelper.java:115)
+	at org.hibernate.engine.jdbc.spi.SqlExceptionHelper.convert(SqlExceptionHelper.java:101)
+	at org.hibernate.resource.transaction.backend.jdbc.internal.JdbcIsolationDelegate.delegateWork(JdbcIsolationDelegate.java:51)
+	at org.hibernate.engine.jdbc.env.internal.JdbcEnvironmentInitiator.getJdbcEnvironmentUsingJdbcMetadata(JdbcEnvironmentInitiator.java:366)
+	at org.hibernate.engine.jdbc.env.internal.JdbcEnvironmentInitiator.getJdbcEnvironment(JdbcEnvironmentInitiator.java:143)
+	at org.hibernate.engine.jdbc.env.internal.JdbcEnvironmentInitiator.initiateService(JdbcEnvironmentInitiator.java:120)
+	at org.hibernate.engine.jdbc.env.internal.JdbcEnvironmentInitiator.initiateService(JdbcEnvironmentInitiator.java:80)
+	at org.hibernate.boot.registry.internal.StandardServiceRegistryImpl.initiateService(StandardServiceRegistryImpl.java:133)
+	at org.hibernate.service.internal.AbstractServiceRegistryImpl.createService(AbstractServiceRegistryImpl.java:260)
+	at org.hibernate.service.internal.AbstractServiceRegistryImpl.initializeService(AbstractServiceRegistryImpl.java:235)
+	at org.hibernate.service.internal.AbstractServiceRegistryImpl.getService(AbstractServiceRegistryImpl.java:212)
+	at org.hibernate.boot.model.relational.Database.<init>(Database.java:44)
+	at org.hibernate.boot.internal.InFlightMetadataCollectorImpl.getDatabase(InFlightMetadataCollectorImpl.java:251)
+	at org.hibernate.boot.internal.InFlightMetadataCollectorImpl.<init>(InFlightMetadataCollectorImpl.java:203)
+	at org.hibernate.boot.model.process.spi.MetadataBuildingProcess.complete(MetadataBuildingProcess.java:172)
+	at org.hibernate.jpa.boot.internal.EntityManagerFactoryBuilderImpl.metadata(EntityManagerFactoryBuilderImpl.java:1392)
+	at org.hibernate.jpa.boot.internal.EntityManagerFactoryBuilderImpl.populateSessionFactoryBuilder(EntityManagerFactoryBuilderImpl.java:1472)
+	at org.hibernate.jpa.boot.internal.EntityManagerFactoryBuilderImpl.build(EntityManagerFactoryBuilderImpl.java:1454)
+	at org.springframework.orm.jpa.vendor.SpringHibernateJpaPersistenceProvider.createContainerEntityManagerFactory(SpringHibernateJpaPersistenceProvider.java:93)
+	at org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean.createNativeEntityManagerFactory(LocalContainerEntityManagerFactoryBean.java:443)
+	at org.springframework.orm.jpa.AbstractEntityManagerFactoryBean.buildNativeEntityManagerFactory(AbstractEntityManagerFactoryBean.java:436)
+	at org.springframework.orm.jpa.AbstractEntityManagerFactoryBean.afterPropertiesSet(AbstractEntityManagerFactoryBean.java:411)
+	at org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean.afterPropertiesSet(LocalContainerEntityManagerFactoryBean.java:419)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.invokeInitMethods(AbstractAutowireCapableBeanFactory.java:1864)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.initializeBean(AbstractAutowireCapableBeanFactory.java:1813)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:603)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:525)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:333)
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:371)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:331)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:201)
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:977)
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:621)
+	at org.springframework.boot.web.server.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:143)
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:756)
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:445)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:321)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1365)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1354)
+	at com.nexxserve.nexxclinic.NexxclinicApplication.main(NexxclinicApplication.java:10)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.boot.devtools.restart.RestartLauncher.run(RestartLauncher.java:52)
+Caused by: org.postgresql.util.PSQLException: Connection to localhost:5432 refused. Check that the hostname and port are correct and that the postmaster is accepting TCP/IP connections.
+	at org.postgresql.core.v3.ConnectionFactoryImpl.openConnectionImpl(ConnectionFactoryImpl.java:373)
+	at org.postgresql.core.ConnectionFactory.openConnection(ConnectionFactory.java:57)
+	at org.postgresql.jdbc.PgConnection.<init>(PgConnection.java:290)
+	at org.postgresql.Driver.makeConnection(Driver.java:448)
+	at org.postgresql.Driver.connect(Driver.java:298)
+	at com.zaxxer.hikari.util.DriverDataSource.getConnection(DriverDataSource.java:144)
+	at com.zaxxer.hikari.pool.PoolBase.newConnection(PoolBase.java:373)
+	at com.zaxxer.hikari.pool.PoolBase.newPoolEntry(PoolBase.java:210)
+	at com.zaxxer.hikari.pool.HikariPool.createPoolEntry(HikariPool.java:488)
+	at com.zaxxer.hikari.pool.HikariPool.checkFailFast(HikariPool.java:576)
+	at com.zaxxer.hikari.pool.HikariPool.<init>(HikariPool.java:97)
+	at com.zaxxer.hikari.HikariDataSource.getConnection(HikariDataSource.java:111)
+	at org.hibernate.engine.jdbc.connections.internal.DataSourceConnectionProvider.getConnection(DataSourceConnectionProvider.java:137)
+	at org.hibernate.engine.jdbc.env.internal.JdbcEnvironmentInitiator$ConnectionProviderJdbcConnectionAccess.obtainConnection(JdbcEnvironmentInitiator.java:508)
+	at org.hibernate.resource.transaction.backend.jdbc.internal.JdbcIsolationDelegate.delegateWork(JdbcIsolationDelegate.java:48)
+	... 40 common frames omitted
+Caused by: java.net.ConnectException: Connection refused
+	at java.base/sun.nio.ch.Net.pollConnect(Native Method)
+	at java.base/sun.nio.ch.Net.pollConnectNow(Net.java:694)
+	at java.base/sun.nio.ch.NioSocketImpl.timedFinishConnect(NioSocketImpl.java:542)
+	at java.base/sun.nio.ch.NioSocketImpl.connect(NioSocketImpl.java:592)
+	at java.base/java.net.SocksSocketImpl.connect(SocksSocketImpl.java:327)
+	at java.base/java.net.Socket.connect(Socket.java:751)
+	at org.postgresql.core.PGStream.createSocket(PGStream.java:261)
+	at org.postgresql.core.PGStream.<init>(PGStream.java:122)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.tryConnect(ConnectionFactoryImpl.java:146)
+	at org.postgresql.core.v3.ConnectionFactoryImpl.openConnectionImpl(ConnectionFactoryImpl.java:289)
+	... 54 common frames omitted
+2026-05-17 20:06:28 [restartedMain] ERROR o.s.o.j.LocalContainerEntityManagerFactoryBean - Failed to initialize JPA EntityManagerFactory: Unable to create requested service [org.hibernate.engine.jdbc.env.spi.JdbcEnvironment] due to: Unable to determine Dialect without JDBC metadata (please set 'jakarta.persistence.jdbc.url' for common cases or 'hibernate.dialect' when a custom Dialect implementation must be provided)
+2026-05-17 20:06:28 [restartedMain] WARN  o.s.b.w.s.s.c.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'entityManagerFactory' defined in class path resource [org/springframework/boot/hibernate/autoconfigure/HibernateJpaConfiguration.class]: Unable to create requested service [org.hibernate.engine.jdbc.env.spi.JdbcEnvironment] due to: Unable to determine Dialect without JDBC metadata (please set 'jakarta.persistence.jdbc.url' for common cases or 'hibernate.dialect' when a custom Dialect implementation must be provided)
+2026-05-17 20:06:28 [restartedMain] INFO  o.a.catalina.core.StandardService - Stopping service [Tomcat]
+2026-05-17 20:06:28 [restartedMain] INFO  o.s.b.a.l.ConditionEvaluationReportLogger - 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-05-17 20:06:28 [restartedMain] ERROR o.s.boot.SpringApplication - Application run failed
+org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'entityManagerFactory' defined in class path resource [org/springframework/boot/hibernate/autoconfigure/HibernateJpaConfiguration.class]: Unable to create requested service [org.hibernate.engine.jdbc.env.spi.JdbcEnvironment] due to: Unable to determine Dialect without JDBC metadata (please set 'jakarta.persistence.jdbc.url' for common cases or 'hibernate.dialect' when a custom Dialect implementation must be provided)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.initializeBean(AbstractAutowireCapableBeanFactory.java:1817)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:603)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:525)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:333)
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:371)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:331)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:201)
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:977)
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:621)
+	at org.springframework.boot.web.server.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:143)
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:756)
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:445)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:321)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1365)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1354)
+	at com.nexxserve.nexxclinic.NexxclinicApplication.main(NexxclinicApplication.java:10)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.boot.devtools.restart.RestartLauncher.run(RestartLauncher.java:52)
+Caused by: org.hibernate.service.spi.ServiceException: Unable to create requested service [org.hibernate.engine.jdbc.env.spi.JdbcEnvironment] due to: Unable to determine Dialect without JDBC metadata (please set 'jakarta.persistence.jdbc.url' for common cases or 'hibernate.dialect' when a custom Dialect implementation must be provided)
+	at org.hibernate.service.internal.AbstractServiceRegistryImpl.createService(AbstractServiceRegistryImpl.java:273)
+	at org.hibernate.service.internal.AbstractServiceRegistryImpl.initializeService(AbstractServiceRegistryImpl.java:235)
+	at org.hibernate.service.internal.AbstractServiceRegistryImpl.getService(AbstractServiceRegistryImpl.java:212)
+	at org.hibernate.boot.model.relational.Database.<init>(Database.java:44)
+	at org.hibernate.boot.internal.InFlightMetadataCollectorImpl.getDatabase(InFlightMetadataCollectorImpl.java:251)
+	at org.hibernate.boot.internal.InFlightMetadataCollectorImpl.<init>(InFlightMetadataCollectorImpl.java:203)
+	at org.hibernate.boot.model.process.spi.MetadataBuildingProcess.complete(MetadataBuildingProcess.java:172)
+	at org.hibernate.jpa.boot.internal.EntityManagerFactoryBuilderImpl.metadata(EntityManagerFactoryBuilderImpl.java:1392)
+	at org.hibernate.jpa.boot.internal.EntityManagerFactoryBuilderImpl.populateSessionFactoryBuilder(EntityManagerFactoryBuilderImpl.java:1472)
+	at org.hibernate.jpa.boot.internal.EntityManagerFactoryBuilderImpl.build(EntityManagerFactoryBuilderImpl.java:1454)
+	at org.springframework.orm.jpa.vendor.SpringHibernateJpaPersistenceProvider.createContainerEntityManagerFactory(SpringHibernateJpaPersistenceProvider.java:93)
+	at org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean.createNativeEntityManagerFactory(LocalContainerEntityManagerFactoryBean.java:443)
+	at org.springframework.orm.jpa.AbstractEntityManagerFactoryBean.buildNativeEntityManagerFactory(AbstractEntityManagerFactoryBean.java:436)
+	at org.springframework.orm.jpa.AbstractEntityManagerFactoryBean.afterPropertiesSet(AbstractEntityManagerFactoryBean.java:411)
+	at org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean.afterPropertiesSet(LocalContainerEntityManagerFactoryBean.java:419)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.invokeInitMethods(AbstractAutowireCapableBeanFactory.java:1864)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.initializeBean(AbstractAutowireCapableBeanFactory.java:1813)
+	... 18 common frames omitted
+Caused by: org.hibernate.HibernateException: Unable to determine Dialect without JDBC metadata (please set 'jakarta.persistence.jdbc.url' for common cases or 'hibernate.dialect' when a custom Dialect implementation must be provided)
+	at org.hibernate.engine.jdbc.dialect.internal.DialectFactoryImpl.determineDialect(DialectFactoryImpl.java:190)
+	at org.hibernate.engine.jdbc.dialect.internal.DialectFactoryImpl.buildDialect(DialectFactoryImpl.java:86)
+	at org.hibernate.engine.jdbc.env.internal.JdbcEnvironmentInitiator.getJdbcEnvironmentWithDefaults(JdbcEnvironmentInitiator.java:200)
+	at org.hibernate.engine.jdbc.env.internal.JdbcEnvironmentInitiator.getJdbcEnvironmentUsingJdbcMetadata(JdbcEnvironmentInitiator.java:452)
+	at org.hibernate.engine.jdbc.env.internal.JdbcEnvironmentInitiator.getJdbcEnvironment(JdbcEnvironmentInitiator.java:143)
+	at org.hibernate.engine.jdbc.env.internal.JdbcEnvironmentInitiator.initiateService(JdbcEnvironmentInitiator.java:120)
+	at org.hibernate.engine.jdbc.env.internal.JdbcEnvironmentInitiator.initiateService(JdbcEnvironmentInitiator.java:80)
+	at org.hibernate.boot.registry.internal.StandardServiceRegistryImpl.initiateService(StandardServiceRegistryImpl.java:133)
+	at org.hibernate.service.internal.AbstractServiceRegistryImpl.createService(AbstractServiceRegistryImpl.java:260)
+	... 34 common frames omitted
+2026-05-17 20:06:41 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Starting NexxclinicApplication using Java 21.0.11 with PID 3906 (/Users/nex/workspace/nexxserve/nexxclinic/build/classes/java/main started by nex in /Users/nex/workspace/nexxserve/nexxclinic)
+2026-05-17 20:06:41 [restartedMain] DEBUG c.n.nexxclinic.NexxclinicApplication - Running with Spring Boot v4.0.5, Spring v7.0.6
+2026-05-17 20:06:41 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - No active profile set, falling back to 1 default profile: "default"
+2026-05-17 20:06:41 [restartedMain] INFO  o.s.b.d.e.DevToolsPropertyDefaultsPostProcessor - Devtools property defaults active! Set 'spring.devtools.add-properties' to 'false' to disable
+2026-05-17 20:06:41 [restartedMain] INFO  o.s.b.d.e.DevToolsPropertyDefaultsPostProcessor - For additional web related logging consider setting the 'logging.level.web' property to 'DEBUG'
+2026-05-17 20:06:42 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-05-17 20:06:42 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 80 ms. Found 24 JPA repository interfaces.
+2026-05-17 20:06:42 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-05-17 20:06:42 [restartedMain] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-05-17 20:06:42 [restartedMain] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.20]
+2026-05-17 20:06:42 [restartedMain] INFO  o.s.b.w.c.s.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 849 ms
+2026-05-17 20:06:42 [restartedMain] INFO  org.hibernate.orm.jpa - HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-05-17 20:06:43 [restartedMain] INFO  org.hibernate.orm.core - HHH000001: Hibernate ORM core version 7.2.7.Final
+2026-05-17 20:06:43 [restartedMain] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-05-17 20:06:43 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-05-17 20:06:43 [restartedMain] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1d60c402
+2026-05-17 20:06:43 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-05-17 20:06:43 [restartedMain] INFO  o.hibernate.orm.connections.pooling - HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/nexxclinic]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 17.9
+	Default catalog/schema: nexxclinic/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-05-17 20:06:44 [restartedMain] INFO  org.hibernate.orm.core - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-05-17 20:06:44 [restartedMain] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-05-17 20:06:44 [restartedMain] INFO  c.n.nexxclinic.auth.JwtService - JwtService initialized with expiration: 120 minutes
+2026-05-17 20:06:44 [restartedMain] INFO  o.s.d.j.r.q.QueryEnhancerFactories - Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-05-17 20:06:44 [restartedMain] WARN  o.s.b.s.a.UserDetailsServiceAutoConfiguration - 
+
+Using generated security password: f65ce7bd-f026-4536-847c-17149e6e6567
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+2026-05-17 20:06:44 [restartedMain] INFO  o.s.s.c.a.a.c.InitializeUserDetailsBeanManagerConfigurer$InitializeUserDetailsManagerConfigurer - Global AuthenticationManager configured with UserDetailsService bean with name inMemoryUserDetailsManager
+2026-05-17 20:06:44 [restartedMain] INFO  c.n.n.config.WebSecurityConfig - Configuring security filter chain
+2026-05-17 20:06:45 [restartedMain] INFO  o.s.g.e.DefaultSchemaResourceGraphQlSourceBuilder - Loaded 3 resource(s) in the GraphQL schema.
+2026-05-17 20:06:45 [restartedMain] INFO  o.s.b.g.a.GraphQlAutoConfiguration - GraphQL schema inspection:
+	Unmapped fields: {Mutation=[completeVisitDepartment, generateConsultationPdf, addDiagnosis, addMedication]}
+	Unmapped registrations: {}
+	Unmapped arguments: {}
+	Field nullness errors: {}
+	Argument nullness errors: {}
+	Skipped types: [Worker, Worker, AuditLog, InsuranceProvider, InsuranceProvider, PaginationInfo, Patient, Patient, PaginationInfo, PatientInsurance, PaginationInfo, Product, Product, PaginationInfo, ProductInsuranceCoverage, Department, Department, PaginationInfo, Visit, Visit, PaginationInfo, VisitBilling, VisitBilling, Invoice, Form, Form, FormVersion, FormVersion, ConsultationAnswers, AuthTokens, PatientInsurance]
+2026-05-17 20:06:45 [restartedMain] INFO  o.s.b.g.a.s.GraphQlWebMvcAutoConfiguration - GraphQL endpoint HTTP POST /graphql
+2026-05-17 20:06:45 [restartedMain] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 1 endpoint beneath base path '/actuator'
+2026-05-17 20:06:45 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
+2026-05-17 20:06:45 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Started NexxclinicApplication in 3.736 seconds (process running for 3.938)
+2026-05-17 20:07:23 [http-nio-8080-exec-2] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-05-17 20:07:23 [http-nio-8080-exec-2] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2026-05-17 20:07:23 [http-nio-8080-exec-2] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 2 ms
+2026-05-17 20:07:23 [http-nio-8080-exec-4] ERROR c.n.nexxclinic.auth.JwtService - Failed to parse access token: JWT expired 7682738 milliseconds ago at 2026-05-17T15:59:21.000Z. Current time: 2026-05-17T18:07:23.738Z. Allowed clock skew: 0 milliseconds.
+2026-05-17 20:07:23 [http-nio-8080-exec-3] ERROR c.n.nexxclinic.auth.JwtService - Failed to parse access token: JWT expired 7682738 milliseconds ago at 2026-05-17T15:59:21.000Z. Current time: 2026-05-17T18:07:23.738Z. Allowed clock skew: 0 milliseconds.
+2026-05-17 20:07:23 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - Failed to parse access token: Invalid token
+2026-05-17 20:07:23 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - Failed to parse access token: Invalid token
+2026-05-17 20:07:23 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - No authentication token found in request
+2026-05-17 20:07:23 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - No authentication token found in request
+2026-05-17 20:07:23 [http-nio-8080-exec-3] WARN  c.n.n.security.HasRoleAspect - Access denied: Authentication is required for method: visits
+2026-05-17 20:07:39 [http-nio-8080-exec-6] DEBUG c.n.n.config.GraphQlAuthInterceptor - No authentication token found in request
+2026-05-17 20:07:39 [http-nio-8080-exec-6] INFO  c.n.nexxclinic.service.WorkerService - Login attempt for identifier: admin@email.com
+2026-05-17 20:07:39 [http-nio-8080-exec-6] INFO  c.n.nexxclinic.auth.JwtService - Generated access token for user: admin@email.com (ID: 7b1dbb67-4710-43e3-be68-bb61f2acca73) with roles: [ADMIN]
+2026-05-17 20:07:40 [http-nio-8080-exec-6] INFO  c.n.nexxclinic.service.WorkerService - User successfully logged in: null (ID: 7b1dbb67-4710-43e3-be68-bb61f2acca73) with roles: [ADMIN]
+2026-05-17 20:07:40 [http-nio-8080-exec-7] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:07:40 [http-nio-8080-exec-8] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:07:40 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:07:40 [http-nio-8080-exec-7] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:07:40 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:07:40 [http-nio-8080-exec-8] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:07:40 [http-nio-8080-exec-8] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:07:40 [http-nio-8080-exec-8] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:07:40 [http-nio-8080-exec-8] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method visits with roles: [ADMIN]
+2026-05-17 20:07:44 [http-nio-8080-exec-10] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:07:44 [http-nio-8080-exec-10] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:07:44 [http-nio-8080-exec-10] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:07:44 [http-nio-8080-exec-10] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:08:02 [http-nio-8080-exec-5] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:08:02 [http-nio-8080-exec-3] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:08:02 [http-nio-8080-exec-6] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:08:02 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:08:02 [http-nio-8080-exec-5] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:08:02 [http-nio-8080-exec-3] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:08:02 [http-nio-8080-exec-5] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:08:02 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:08:02 [http-nio-8080-exec-5] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:08:02 [http-nio-8080-exec-6] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:08:02 [http-nio-8080-exec-6] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:08:02 [http-nio-8080-exec-6] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:08:02 [http-nio-8080-exec-3] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method products with roles: [ADMIN]
+2026-05-17 20:08:02 [http-nio-8080-exec-5] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method departments with roles: [ADMIN]
+2026-05-17 20:08:02 [http-nio-8080-exec-6] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method insuranceProviders with roles: [ADMIN]
+2026-05-17 20:08:06 [http-nio-8080-exec-8] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:08:06 [http-nio-8080-exec-7] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:08:07 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:08:07 [http-nio-8080-exec-8] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:08:07 [http-nio-8080-exec-7] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:08:07 [http-nio-8080-exec-8] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:08:07 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:08:07 [http-nio-8080-exec-8] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:08:07 [http-nio-8080-exec-7] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method departments with roles: [ADMIN]
+2026-05-17 20:08:49 [http-nio-8080-exec-10] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:08:49 [http-nio-8080-exec-10] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:08:49 [http-nio-8080-exec-10] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:08:49 [http-nio-8080-exec-10] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:08:55 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:08:55 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:08:55 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:08:55 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:08:55 [http-nio-8080-exec-4] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method getForms with roles: [ADMIN]
+2026-05-17 20:10:12 [File Watcher] INFO  o.s.b.d.a.LocalDevToolsAutoConfiguration$RestartingClassPathChangeChangedEventListener - Restarting due to 5 class path changes (0 additions, 0 deletions, 5 modifications)
+2026-05-17 20:10:12 [Thread-1] INFO  o.s.boot.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2026-05-17 20:10:12 [tomcat-shutdown] INFO  o.s.boot.tomcat.GracefulShutdown - Graceful shutdown complete
+2026-05-17 20:10:12 [http-nio-8080-Acceptor] ERROR org.apache.tomcat.util.net.Acceptor - Socket accept failed
+java.nio.channels.AsynchronousCloseException
+	at java.base/java.nio.channels.spi.AbstractInterruptibleChannel.end(AbstractInterruptibleChannel.java:203)
+	at java.base/sun.nio.ch.ServerSocketChannelImpl.end(ServerSocketChannelImpl.java:383)
+	at java.base/sun.nio.ch.ServerSocketChannelImpl.accept(ServerSocketChannelImpl.java:407)
+	at org.apache.tomcat.util.net.NioEndpoint.serverSocketAccept(NioEndpoint.java:532)
+	at org.apache.tomcat.util.net.NioEndpoint.serverSocketAccept(NioEndpoint.java:71)
+	at org.apache.tomcat.util.net.Acceptor.run(Acceptor.java:127)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+2026-05-17 20:10:12 [Thread-1] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-05-17 20:10:12 [Thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2026-05-17 20:10:12 [Thread-1] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2026-05-17 20:10:13 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Starting NexxclinicApplication using Java 21.0.11 with PID 3906 (/Users/nex/workspace/nexxserve/nexxclinic/build/classes/java/main started by nex in /Users/nex/workspace/nexxserve/nexxclinic)
+2026-05-17 20:10:13 [restartedMain] DEBUG c.n.nexxclinic.NexxclinicApplication - Running with Spring Boot v4.0.5, Spring v7.0.6
+2026-05-17 20:10:13 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - No active profile set, falling back to 1 default profile: "default"
+2026-05-17 20:10:13 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-05-17 20:10:13 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 19 ms. Found 24 JPA repository interfaces.
+2026-05-17 20:10:13 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-05-17 20:10:13 [restartedMain] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-05-17 20:10:13 [restartedMain] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.20]
+2026-05-17 20:10:13 [restartedMain] INFO  o.s.b.w.c.s.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 245 ms
+2026-05-17 20:10:13 [restartedMain] INFO  org.hibernate.orm.jpa - HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-05-17 20:10:13 [restartedMain] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-05-17 20:10:13 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Starting...
+2026-05-17 20:10:13 [restartedMain] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-2 - Added connection org.postgresql.jdbc.PgConnection@66ce8995
+2026-05-17 20:10:13 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Start completed.
+2026-05-17 20:10:13 [restartedMain] INFO  o.hibernate.orm.connections.pooling - HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/nexxclinic]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 17.9
+	Default catalog/schema: nexxclinic/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-05-17 20:10:13 [restartedMain] INFO  org.hibernate.orm.core - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-05-17 20:10:13 [restartedMain] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-05-17 20:10:13 [restartedMain] INFO  c.n.nexxclinic.auth.JwtService - JwtService initialized with expiration: 120 minutes
+2026-05-17 20:10:13 [restartedMain] WARN  o.s.b.s.a.UserDetailsServiceAutoConfiguration - 
+
+Using generated security password: 4b14033b-3974-4f9d-a168-61f14fecf356
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+2026-05-17 20:10:13 [restartedMain] INFO  o.s.s.c.a.a.c.InitializeUserDetailsBeanManagerConfigurer$InitializeUserDetailsManagerConfigurer - Global AuthenticationManager configured with UserDetailsService bean with name inMemoryUserDetailsManager
+2026-05-17 20:10:14 [restartedMain] INFO  c.n.n.config.WebSecurityConfig - Configuring security filter chain
+2026-05-17 20:10:14 [restartedMain] INFO  o.s.g.e.DefaultSchemaResourceGraphQlSourceBuilder - Loaded 3 resource(s) in the GraphQL schema.
+2026-05-17 20:10:14 [restartedMain] INFO  o.s.b.g.a.GraphQlAutoConfiguration - GraphQL schema inspection:
+	Unmapped fields: {Mutation=[completeVisitDepartment, generateConsultationPdf, addDiagnosis, addMedication]}
+	Unmapped registrations: {}
+	Unmapped arguments: {}
+	Field nullness errors: {}
+	Argument nullness errors: {}
+	Skipped types: [Worker, Worker, AuditLog, InsuranceProvider, InsuranceProvider, PaginationInfo, Patient, Patient, PaginationInfo, PatientInsurance, PaginationInfo, Product, Product, PaginationInfo, ProductInsuranceCoverage, Department, Department, PaginationInfo, Visit, Visit, PaginationInfo, VisitBilling, VisitBilling, Invoice, Form, Form, FormVersion, FormVersion, ConsultationAnswers, AuthTokens, PatientInsurance]
+2026-05-17 20:10:14 [restartedMain] INFO  o.s.b.g.a.s.GraphQlWebMvcAutoConfiguration - GraphQL endpoint HTTP POST /graphql
+2026-05-17 20:10:14 [restartedMain] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 1 endpoint beneath base path '/actuator'
+2026-05-17 20:10:14 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
+2026-05-17 20:10:14 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Started NexxclinicApplication in 1.197 seconds (process running for 212.681)
+2026-05-17 20:10:14 [restartedMain] INFO  o.s.b.d.a.ConditionEvaluationDeltaLoggingListener - Condition evaluation unchanged
+2026-05-17 20:10:28 [http-nio-8080-exec-1] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-05-17 20:10:28 [http-nio-8080-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2026-05-17 20:10:28 [http-nio-8080-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 4 ms
+2026-05-17 20:10:28 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:28 [http-nio-8080-exec-3] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:28 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:10:28 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:10:28 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:10:28 [http-nio-8080-exec-3] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:10:28 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:28 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:28 [http-nio-8080-exec-4] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method getForms with roles: [ADMIN]
+2026-05-17 20:10:28 [http-nio-8080-exec-3] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method departments with roles: [ADMIN]
+2026-05-17 20:10:28 [http-nio-8080-exec-5] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:28 [http-nio-8080-exec-5] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:10:28 [http-nio-8080-exec-5] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:10:28 [http-nio-8080-exec-5] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:33 [http-nio-8080-exec-8] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:33 [http-nio-8080-exec-9] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:33 [http-nio-8080-exec-8] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:10:33 [http-nio-8080-exec-9] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:10:33 [http-nio-8080-exec-8] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:10:33 [http-nio-8080-exec-9] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:10:33 [http-nio-8080-exec-8] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:33 [http-nio-8080-exec-9] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:33 [http-nio-8080-exec-9] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method getForms with roles: [ADMIN]
+2026-05-17 20:10:33 [http-nio-8080-exec-8] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method departments with roles: [ADMIN]
+2026-05-17 20:10:33 [http-nio-8080-exec-10] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:33 [http-nio-8080-exec-10] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:10:33 [http-nio-8080-exec-10] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:10:33 [http-nio-8080-exec-10] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:33 [http-nio-8080-exec-10] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method getForm with roles: [ADMIN]
+2026-05-17 20:10:34 [http-nio-8080-exec-2] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:34 [http-nio-8080-exec-2] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:10:34 [http-nio-8080-exec-2] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:10:34 [http-nio-8080-exec-2] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:34 [http-nio-8080-exec-2] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method getFormVersionHistory with roles: [ADMIN]
+2026-05-17 20:10:47 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:47 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:10:47 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:10:47 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:47 [http-nio-8080-exec-4] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method updateForm with roles: [ADMIN]
+2026-05-17 20:10:47 [http-nio-8080-exec-3] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:47 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:10:47 [http-nio-8080-exec-3] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:10:47 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:47 [http-nio-8080-exec-3] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method getForms with roles: [ADMIN]
+2026-05-17 20:10:47 [http-nio-8080-exec-5] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:47 [http-nio-8080-exec-5] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:10:47 [http-nio-8080-exec-5] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:10:47 [http-nio-8080-exec-5] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:47 [http-nio-8080-exec-5] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method getFormVersionHistory with roles: [ADMIN]
+2026-05-17 20:10:49 [http-nio-8080-exec-6] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:49 [http-nio-8080-exec-6] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:10:49 [http-nio-8080-exec-6] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:10:49 [http-nio-8080-exec-6] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:49 [http-nio-8080-exec-6] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method finalizeForm with roles: [ADMIN]
+2026-05-17 20:10:49 [http-nio-8080-exec-7] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:49 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:10:49 [http-nio-8080-exec-7] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:10:49 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:49 [http-nio-8080-exec-7] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method getForms with roles: [ADMIN]
+2026-05-17 20:10:49 [http-nio-8080-exec-9] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:49 [http-nio-8080-exec-9] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 20:10:49 [http-nio-8080-exec-9] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 20:10:49 [http-nio-8080-exec-9] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 20:10:49 [http-nio-8080-exec-9] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method getFormVersionHistory with roles: [ADMIN]
+2026-05-17 21:23:15 [File Watcher] INFO  o.s.b.d.a.LocalDevToolsAutoConfiguration$RestartingClassPathChangeChangedEventListener - Restarting due to 20 class path changes (0 additions, 0 deletions, 20 modifications)
+2026-05-17 21:23:15 [Thread-5] INFO  o.s.boot.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2026-05-17 21:23:15 [tomcat-shutdown] INFO  o.s.boot.tomcat.GracefulShutdown - Graceful shutdown complete
+2026-05-17 21:23:15 [Thread-5] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-05-17 21:23:15 [Thread-5] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown initiated...
+2026-05-17 21:23:15 [Thread-5] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown completed.
+2026-05-17 21:23:15 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Starting NexxclinicApplication using Java 21.0.11 with PID 3906 (/Users/nex/workspace/nexxserve/nexxclinic/build/classes/java/main started by nex in /Users/nex/workspace/nexxserve/nexxclinic)
+2026-05-17 21:23:15 [restartedMain] DEBUG c.n.nexxclinic.NexxclinicApplication - Running with Spring Boot v4.0.5, Spring v7.0.6
+2026-05-17 21:23:15 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - No active profile set, falling back to 1 default profile: "default"
+2026-05-17 21:23:15 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-05-17 21:23:15 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 21 ms. Found 24 JPA repository interfaces.
+2026-05-17 21:23:15 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-05-17 21:23:15 [restartedMain] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-05-17 21:23:15 [restartedMain] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.20]
+2026-05-17 21:23:15 [restartedMain] INFO  o.s.b.w.c.s.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 410 ms
+2026-05-17 21:23:15 [restartedMain] INFO  org.hibernate.orm.jpa - HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-05-17 21:23:15 [restartedMain] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-05-17 21:23:15 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-3 - Starting...
+2026-05-17 21:23:15 [restartedMain] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-3 - Added connection org.postgresql.jdbc.PgConnection@763ed649
+2026-05-17 21:23:15 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-3 - Start completed.
+2026-05-17 21:23:15 [restartedMain] INFO  o.hibernate.orm.connections.pooling - HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/nexxclinic]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 17.9
+	Default catalog/schema: nexxclinic/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-05-17 21:23:16 [restartedMain] INFO  org.hibernate.orm.core - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-05-17 21:23:16 [restartedMain] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-05-17 21:23:16 [restartedMain] INFO  c.n.nexxclinic.auth.JwtService - JwtService initialized with expiration: 120 minutes
+2026-05-17 21:23:16 [restartedMain] WARN  o.s.b.s.a.UserDetailsServiceAutoConfiguration - 
+
+Using generated security password: d6953025-71c9-41c1-986a-9d4ea5a014db
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+2026-05-17 21:23:16 [restartedMain] INFO  o.s.s.c.a.a.c.InitializeUserDetailsBeanManagerConfigurer$InitializeUserDetailsManagerConfigurer - Global AuthenticationManager configured with UserDetailsService bean with name inMemoryUserDetailsManager
+2026-05-17 21:23:16 [restartedMain] INFO  c.n.n.config.WebSecurityConfig - Configuring security filter chain
+2026-05-17 21:23:16 [restartedMain] INFO  o.s.g.e.DefaultSchemaResourceGraphQlSourceBuilder - Loaded 3 resource(s) in the GraphQL schema.
+2026-05-17 21:23:16 [restartedMain] INFO  o.s.b.g.a.GraphQlAutoConfiguration - GraphQL schema inspection:
+	Unmapped fields: {Mutation=[completeVisitDepartment, generateConsultationPdf]}
+	Unmapped registrations: {}
+	Unmapped arguments: {}
+	Field nullness errors: {}
+	Argument nullness errors: {}
+	Skipped types: [Worker, Worker, AuditLog, InsuranceProvider, InsuranceProvider, PaginationInfo, Patient, Patient, PaginationInfo, PatientInsurance, PaginationInfo, Product, Product, PaginationInfo, ProductInsuranceCoverage, Department, Department, PaginationInfo, Visit, Visit, PaginationInfo, VisitBilling, VisitBilling, Invoice, Form, Form, FormVersion, FormVersion, ConsultationAnswers, AuthTokens, PatientInsurance, StringResponse, StringResponse]
+2026-05-17 21:23:16 [restartedMain] INFO  o.s.b.g.a.s.GraphQlWebMvcAutoConfiguration - GraphQL endpoint HTTP POST /graphql
+2026-05-17 21:23:16 [restartedMain] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 1 endpoint beneath base path '/actuator'
+2026-05-17 21:23:16 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
+2026-05-17 21:23:16 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Started NexxclinicApplication in 1.562 seconds (process running for 4595.309)
+2026-05-17 21:23:16 [restartedMain] INFO  o.s.b.d.a.ConditionEvaluationDeltaLoggingListener - Condition evaluation unchanged
+2026-05-17 21:34:31 [http-nio-8080-exec-2] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-05-17 21:34:31 [http-nio-8080-exec-2] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2026-05-17 21:34:31 [http-nio-8080-exec-2] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 1 ms
+2026-05-17 21:34:31 [http-nio-8080-exec-3] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 21:34:31 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 21:34:31 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 21:34:31 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 21:34:31 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 21:34:31 [http-nio-8080-exec-3] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 21:34:31 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 21:34:31 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 21:34:31 [http-nio-8080-exec-3] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method products with roles: [ADMIN]
+2026-05-17 21:34:31 [http-nio-8080-exec-4] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method insuranceProviders with roles: [ADMIN]
+2026-05-17 21:34:35 [http-nio-8080-exec-5] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 21:34:35 [http-nio-8080-exec-5] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 21:34:35 [http-nio-8080-exec-5] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 21:34:35 [http-nio-8080-exec-5] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 21:34:35 [http-nio-8080-exec-5] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method insuranceProviders with roles: [ADMIN]
+2026-05-17 21:34:48 [http-nio-8080-exec-6] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 21:34:48 [http-nio-8080-exec-9] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 21:34:48 [http-nio-8080-exec-10] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 21:34:48 [http-nio-8080-exec-9] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 21:34:48 [http-nio-8080-exec-9] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 21:34:48 [http-nio-8080-exec-9] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 21:34:48 [http-nio-8080-exec-6] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 21:34:48 [http-nio-8080-exec-6] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 21:34:48 [http-nio-8080-exec-6] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 21:34:48 [http-nio-8080-exec-9] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method products with roles: [ADMIN]
+2026-05-17 21:34:48 [http-nio-8080-exec-6] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method departments with roles: [ADMIN]
+2026-05-17 21:34:48 [http-nio-8080-exec-10] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 21:34:48 [http-nio-8080-exec-10] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 21:34:48 [http-nio-8080-exec-10] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 21:34:48 [http-nio-8080-exec-10] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method insuranceProviders with roles: [ADMIN]
+2026-05-17 21:34:48 [http-nio-8080-exec-1] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 21:34:48 [http-nio-8080-exec-2] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 21:34:48 [http-nio-8080-exec-2] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 21:34:48 [http-nio-8080-exec-2] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 21:34:48 [http-nio-8080-exec-2] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 21:34:48 [http-nio-8080-exec-1] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 21:34:48 [http-nio-8080-exec-1] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 21:34:48 [http-nio-8080-exec-1] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 21:34:48 [http-nio-8080-exec-1] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method insuranceProviders with roles: [ADMIN]
+2026-05-17 21:34:48 [http-nio-8080-exec-2] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method products with roles: [ADMIN]
+2026-05-17 21:34:49 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-17 21:34:49 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-17 21:34:49 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-17 21:34:49 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-17 21:34:49 [http-nio-8080-exec-4] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method insuranceProviders with roles: [ADMIN]

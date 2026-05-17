@@ -145,6 +145,9 @@ enum FieldType {
   file
   heading
   paragraph
+  diagnosticRecord
+  medicationLongForm
+  medicationMiniForm
 }
 
 enum TableMode {
@@ -414,9 +417,11 @@ type Visit {
 type VisitDepartment {
   id: ID!
   department: Department!
-status: VisitDepartmentStatus!
+  status: VisitDepartmentStatus!
   completedAt: String
   products: [VisitDepartmentProduct!]!
+  diagnostics: [VisitDepartmentDiagnosis!]
+  medications: [VisitDepartmentMedication!]
   createdAt: String!
   updatedAt: String!
 }
@@ -1068,12 +1073,6 @@ type Query {
   visitBilling(visitBillingId: ID!): VisitBillingResponse!
   visitBillings(visitId: ID!): VisitBillingListResponse!
   getInvoice(billId: ID!): InvoiceResponse!
-getForms(departmentId: ID!): FormListResponse!
-  getForm(departmentId: ID!, formId: ID!): FormResponse!
-  getLatestForm(departmentId: ID!): FormResponse!
-  getFormVersionHistory(departmentId: ID!, formId: ID!): FormVersionListResponse!
-  getFormVersion(departmentId: ID!, formId: ID!, version: String!): FormVersionResponse!
-  getConsultationAnswers(consultationId: ID!, departmentId: ID!, formId: ID!): ConsultationAnswersResponse!
 }
 
 type Mutation {
@@ -1120,8 +1119,4 @@ updateVisitDepartmentStatus(input: UpdateVisitDepartmentStatusInput!): VisitResp
   generateInvoice(billId: ID!): InvoiceResponse!
   completeVisit(visitId: ID!): VisitResponse!
   cancelVisit(visitId: ID!): VisitResponse!
-createForm(departmentId: ID!, input: FormInput!): FormResponse!
-  updateForm(departmentId: ID!, formId: ID!, input: FormInput!): FormResponse!
-  finalizeForm(departmentId: ID!, formId: ID!): FormResponse!
-  upsertConsultationAnswers(input: ConsultationAnswersInput!): ConsultationAnswersResponse!
 }

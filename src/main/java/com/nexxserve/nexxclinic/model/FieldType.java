@@ -14,5 +14,9 @@ public enum FieldType {
     signature,
     file,
     heading,
-    paragraph
+    paragraph,
+    diagnosticRecord,
+    medicationLongForm,
+    medicationMiniForm
 }
+

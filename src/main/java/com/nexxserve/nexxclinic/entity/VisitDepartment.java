@@ -1,6 +1,7 @@
 package com.nexxserve.nexxclinic.entity;
 
 import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -10,11 +11,14 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -44,6 +48,12 @@ public class VisitDepartment {
 
     @Column
     private LocalDateTime completedAt;
+
+    @OneToMany(mappedBy = "visitDepartment", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<VisitDepartmentDiagnosis> diagnostics = new ArrayList<>();
+
+    @OneToMany(mappedBy = "visitDepartment", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<VisitDepartmentMedication> medications = new ArrayList<>();
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -103,6 +113,22 @@ public class VisitDepartment {
         this.completedAt = completedAt;
     }
 
+    public List<VisitDepartmentDiagnosis> getDiagnostics() {
+        return diagnostics;
+    }
+
+    public void setDiagnostics(List<VisitDepartmentDiagnosis> diagnostics) {
+        this.diagnostics = diagnostics;
+    }
+
+    public List<VisitDepartmentMedication> getMedications() {
+        return medications;
+    }
+
+    public void setMedications(List<VisitDepartmentMedication> medications) {
+        this.medications = medications;
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
@@ -119,3 +145,4 @@ public class VisitDepartment {
         this.updatedAt = updatedAt;
     }
 }
+

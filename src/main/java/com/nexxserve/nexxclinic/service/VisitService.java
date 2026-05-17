@@ -9,6 +9,8 @@ import com.nexxserve.nexxclinic.entity.Product;
 import com.nexxserve.nexxclinic.entity.Visit;
 import com.nexxserve.nexxclinic.entity.VisitDepartment;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
+import com.nexxserve.nexxclinic.entity.VisitDepartmentDiagnosis;
+import com.nexxserve.nexxclinic.entity.VisitDepartmentMedication;
 import com.nexxserve.nexxclinic.entity.VisitInsurance;
 import com.nexxserve.nexxclinic.entity.Worker;
 import com.nexxserve.nexxclinic.graphql.input.CreateVisitDepartmentInput;
@@ -17,6 +19,8 @@ import com.nexxserve.nexxclinic.graphql.input.ChangeVisitDateInput;
 import com.nexxserve.nexxclinic.graphql.input.CreateVisitInput;
 import com.nexxserve.nexxclinic.graphql.input.SearchVisitsInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentProductStatusInput;
+import com.nexxserve.nexxclinic.graphql.input.AddDiagnosisInput;
+import com.nexxserve.nexxclinic.graphql.input.AddMedicationInput;
 import com.nexxserve.nexxclinic.model.ApiResponse;
 import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
@@ -27,6 +31,8 @@ import com.nexxserve.nexxclinic.repository.PatientRepository;
 import com.nexxserve.nexxclinic.repository.ProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentDiagnosisRepository;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentMedicationRepository;
 import com.nexxserve.nexxclinic.repository.VisitBillingRepository;
 import com.nexxserve.nexxclinic.repository.VisitInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.VisitRepository;
@@ -57,6 +63,8 @@ public class VisitService {
     private final VisitInsuranceRepository visitInsuranceRepository;
     private final VisitDepartmentRepository visitDepartmentRepository;
     private final VisitDepartmentProductRepository visitDepartmentProductRepository;
+    private final VisitDepartmentDiagnosisRepository visitDepartmentDiagnosisRepository;
+    private final VisitDepartmentMedicationRepository visitDepartmentMedicationRepository;
     private final VisitBillingRepository visitBillingRepository;
     private final PatientRepository patientRepository;
     private final PatientInsuranceRepository patientInsuranceRepository;
@@ -69,6 +77,8 @@ public class VisitService {
             VisitInsuranceRepository visitInsuranceRepository,
             VisitDepartmentRepository visitDepartmentRepository,
             VisitDepartmentProductRepository visitDepartmentProductRepository,
+            VisitDepartmentDiagnosisRepository visitDepartmentDiagnosisRepository,
+            VisitDepartmentMedicationRepository visitDepartmentMedicationRepository,
             VisitBillingRepository visitBillingRepository,
             PatientRepository patientRepository,
             PatientInsuranceRepository patientInsuranceRepository,
@@ -80,6 +90,8 @@ public class VisitService {
         this.visitInsuranceRepository = visitInsuranceRepository;
         this.visitDepartmentRepository = visitDepartmentRepository;
         this.visitDepartmentProductRepository = visitDepartmentProductRepository;
+        this.visitDepartmentDiagnosisRepository = visitDepartmentDiagnosisRepository;
+        this.visitDepartmentMedicationRepository = visitDepartmentMedicationRepository;
         this.visitBillingRepository = visitBillingRepository;
         this.patientRepository = patientRepository;
         this.patientInsuranceRepository = patientInsuranceRepository;
@@ -87,6 +99,7 @@ public class VisitService {
         this.productRepository = productRepository;
         this.workerRepository = workerRepository;
     }
+
 
     @Transactional
     public ApiResponse createVisit(CreateVisitInput input, AuthenticatedUser authUser) {
@@ -610,8 +623,40 @@ public class VisitService {
                         .map(this::visitDepartmentProductToMap)
                         .toList()
         );
+        data.put(
+                "diagnostics",
+                visitDepartmentDiagnosisRepository.findByVisitDepartmentId(visitDepartment.getId())
+                        .stream()
+                        .map(this::visitDepartmentDiagnosisToMap)
+                        .toList()
+        );
+        data.put(
+                "medications",
+                visitDepartmentMedicationRepository.findByVisitDepartmentId(visitDepartment.getId())
+                        .stream()
+                        .map(this::visitDepartmentMedicationToMap)
+                        .toList()
+        );
         data.put("createdAt", visitDepartment.getCreatedAt());
         data.put("updatedAt", visitDepartment.getUpdatedAt());
+        return data;
+    }
+
+    private Map<String, Object> visitDepartmentDiagnosisToMap(VisitDepartmentDiagnosis item) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", item.getId());
+        data.put("diagnosisName", item.getDiagnosisName());
+        data.put("icd11Code", item.getIcd11Code());
+        data.put("createdAt", item.getCreatedAt());
+        return data;
+    }
+
+    private Map<String, Object> visitDepartmentMedicationToMap(VisitDepartmentMedication item) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", item.getId());
+        data.put("medicationName", item.getMedicationName());
+        data.put("instructions", item.getInstructions());
+        data.put("createdAt", item.getCreatedAt());
         return data;
     }
 
@@ -628,6 +673,7 @@ public class VisitService {
         data.put("updatedAt", item.getUpdatedAt());
         return data;
     }
+
 
     private Map<String, Object> departmentToMap(Department department) {
         Map<String, Object> data = new HashMap<>();
@@ -794,5 +840,89 @@ public class VisitService {
         }
 
         return BigDecimal.ZERO;
+    }
+
+    @Transactional
+    public ApiResponse addDiagnosisToVisitDepartment(AddDiagnosisInput input) {
+        if (input == null || input.visitDepartmentId() == null || input.diagnosisName() == null || input.diagnosisName().isBlank()) {
+            return ApiResponse.error("visitDepartmentId and diagnosisName are required.", "VALIDATION_ERROR");
+        }
+
+        UUID visitDeptId;
+        try {
+            visitDeptId = UUID.fromString(input.visitDepartmentId());
+        } catch (IllegalArgumentException e) {
+            return ApiResponse.error("Invalid visitDepartmentId format.", "VALIDATION_ERROR");
+        }
+
+        Optional<VisitDepartment> visitDeptOptional = visitDepartmentRepository.findById(visitDeptId);
+        if (visitDeptOptional.isEmpty()) {
+            return ApiResponse.error("Visit department not found.", "NOT_FOUND");
+        }
+
+        VisitDepartment visitDept = visitDeptOptional.get();
+        if (visitDept.getStatus() == VisitDepartmentStatus.COMPLETED) {
+            return ApiResponse.error("Cannot add diagnostics to a completed department.", "DEPARTMENT_IS_COMPLETED");
+        }
+        if (visitDept.getStatus() == VisitDepartmentStatus.CANCELLED) {
+            return ApiResponse.error("Cannot add diagnostics to a cancelled department.", "DEPARTMENT_IS_CANCELLED");
+        }
+
+        VisitDepartmentDiagnosis diagnosis = new VisitDepartmentDiagnosis();
+        diagnosis.setVisitDepartment(visitDept);
+        diagnosis.setDiagnosisName(input.diagnosisName().trim());
+        diagnosis.setIcd11Code(input.icd11Code() == null || input.icd11Code().isBlank() ? null : input.icd11Code().trim());
+
+        VisitDepartmentDiagnosis saved = visitDepartmentDiagnosisRepository.save(diagnosis);
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", saved.getId());
+        data.put("diagnosisName", saved.getDiagnosisName());
+        data.put("icd11Code", saved.getIcd11Code());
+        data.put("createdAt", saved.getCreatedAt());
+
+        return ApiResponse.success("Diagnosis added successfully.", data);
+    }
+
+    @Transactional
+    public ApiResponse addMedicationToVisitDepartment(AddMedicationInput input) {
+        if (input == null || input.visitDepartmentId() == null || input.medicationName() == null || input.medicationName().isBlank() || input.instructions() == null || input.instructions().isBlank()) {
+            return ApiResponse.error("visitDepartmentId, medicationName and instructions are required.", "VALIDATION_ERROR");
+        }
+
+        UUID visitDeptId;
+        try {
+            visitDeptId = UUID.fromString(input.visitDepartmentId());
+        } catch (IllegalArgumentException e) {
+            return ApiResponse.error("Invalid visitDepartmentId format.", "VALIDATION_ERROR");
+        }
+
+        Optional<VisitDepartment> visitDeptOptional = visitDepartmentRepository.findById(visitDeptId);
+        if (visitDeptOptional.isEmpty()) {
+            return ApiResponse.error("Visit department not found.", "NOT_FOUND");
+        }
+
+        VisitDepartment visitDept = visitDeptOptional.get();
+        if (visitDept.getStatus() == VisitDepartmentStatus.COMPLETED) {
+            return ApiResponse.error("Cannot add medication to a completed department.", "DEPARTMENT_IS_COMPLETED");
+        }
+        if (visitDept.getStatus() == VisitDepartmentStatus.CANCELLED) {
+            return ApiResponse.error("Cannot add medication to a cancelled department.", "DEPARTMENT_IS_CANCELLED");
+        }
+
+        VisitDepartmentMedication medication = new VisitDepartmentMedication();
+        medication.setVisitDepartment(visitDept);
+        medication.setMedicationName(input.medicationName().trim());
+        medication.setInstructions(input.instructions().trim());
+
+        VisitDepartmentMedication saved = visitDepartmentMedicationRepository.save(medication);
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", saved.getId());
+        data.put("medicationName", saved.getMedicationName());
+        data.put("instructions", saved.getInstructions());
+        data.put("createdAt", saved.getCreatedAt());
+
+        return ApiResponse.success("Medication added successfully.", data);
     }
 }

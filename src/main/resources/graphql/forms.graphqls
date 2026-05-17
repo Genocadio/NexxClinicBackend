@@ -1,0 +1,21 @@
+# Department Forms GraphQL Schema
+# All shared types, enums, inputs, scalars, and root operation types are defined in user.graphqls.
+# This file only adds form-specific operations via extend blocks.
+
+extend type Query {
+  getForms(departmentId: ID!): FormListResponse!
+  getForm(departmentId: ID!, formId: ID!): FormResponse!
+  getLatestForm(departmentId: ID!): FormResponse!
+  getFormVersionHistory(departmentId: ID!, formId: ID!): FormVersionListResponse!
+  getFormVersion(departmentId: ID!, formId: ID!, version: String!): FormVersionResponse!
+  getConsultationAnswers(consultationId: ID!, departmentId: ID!, formId: ID!): ConsultationAnswersResponse!
+}
+
+extend type Mutation {
+  createForm(departmentId: ID!, input: FormInput!): FormResponse!
+  updateForm(departmentId: ID!, formId: ID!, input: FormInput!): FormResponse!
+  finalizeForm(departmentId: ID!, formId: ID!): FormResponse!
+  upsertConsultationAnswers(input: ConsultationAnswersInput!): ConsultationAnswersResponse!
+  generateConsultationPdf(consultationId: ID!, departmentId: ID!, formId: ID!): ApiResponse!
+}
+

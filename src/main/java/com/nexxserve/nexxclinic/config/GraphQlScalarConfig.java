@@ -13,3 +13,5 @@ public class GraphQlScalarConfig {
         return wiringBuilder -> wiringBuilder.scalar(ExtendedScalars.Json);
     }
 }
+
+

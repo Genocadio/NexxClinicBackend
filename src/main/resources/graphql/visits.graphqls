@@ -1,0 +1,76 @@
+# Visit Department Diagnostics and Medications Schema
+# Extends visit functionality with support for diagnoses and medications
+
+"""
+Diagnosis entry for a visit department.
+"""
+type VisitDepartmentDiagnosis {
+  id: ID!
+  diagnosisName: String!
+  icd11Code: String
+  createdAt: String!
+}
+
+"""
+Medication entry for a visit department.
+"""
+type VisitDepartmentMedication {
+  id: ID!
+  medicationName: String!
+  instructions: String!
+  createdAt: String!
+}
+
+"""
+Extended VisitDepartment with diagnostics and medications.
+"""
+type VisitDepartmentExtended {
+  id: ID!
+  visitId: ID!
+  departmentId: ID!
+  status: VisitDepartmentStatus!
+  diagnostics: [VisitDepartmentDiagnosis!]
+  medications: [VisitDepartmentMedication!]
+  completedAt: String
+  createdAt: String!
+  updatedAt: String!
+}
+
+# ========== INPUT TYPES ==========
+
+"""
+Input for adding a diagnosis to a visit department.
+"""
+input AddDiagnosisInput {
+  visitDepartmentId: String!
+  diagnosisName: String!
+  icd11Code: String
+}
+
+"""
+Input for adding a medication to a visit department.
+"""
+input AddMedicationInput {
+  visitDepartmentId: String!
+  medicationName: String!
+  instructions: String!
+}
+
+# ========== MUTATIONS ==========
+
+extend type Mutation {
+  """
+  Add a diagnosis to a visit department.
+  diagnosisName is mandatory, icd11Code is optional.
+  Multiple diagnostics can be added to the same visit department.
+  """
+  addDiagnosis(input: AddDiagnosisInput!): ApiResponse!
+
+  """
+  Add a medication to a visit department.
+  Both medicationName and instructions are mandatory.
+  Multiple medications can be added to the same visit department.
+  """
+  addMedication(input: AddMedicationInput!): ApiResponse!
+}
+
