@@ -1,0 +1,27 @@
+services:
+  db:
+    image:  postgres:16-alpine
+    container_name: nexxclinic-db
+    environment:
+      POSTGRES_DB: nexxclinic
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - nexxclinic-data:/var/lib/postgresql/data
+
+  app:
+    image: genoyves/nexclinic:latest
+    container_name: nexxclinic-app
+    depends_on:
+      - db
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/nexxclinic
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
+    ports:
+      - "8091:8080"
+
+volumes:
+  nexxclinic-data:

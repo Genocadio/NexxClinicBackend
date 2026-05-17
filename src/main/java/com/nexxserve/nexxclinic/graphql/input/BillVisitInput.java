@@ -22,6 +22,10 @@ public record BillVisitInput(
             UUID visitDepartmentProductId,
 
             UUID patientInsuranceId
+            ,
+            java.math.BigDecimal quantity,
+            java.math.BigDecimal unitPrice,
+            Boolean isExempted
     ) {
     }
 }

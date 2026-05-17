@@ -24,8 +24,12 @@ import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
 import com.nexxserve.nexxclinic.repository.VisitInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.VisitRepository;
 import com.nexxserve.nexxclinic.repository.WorkerRepository;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -35,6 +39,13 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.font.PDType0Font;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +53,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class VisitBillingService {
 
     private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+    private static final String INVOICE_DIR = "invoices";
+    private static final String INVOICE_URL_PATH = "/invoices/";
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     private final VisitRepository visitRepository;
     private final VisitDepartmentRepository visitDepartmentRepository;
@@ -95,7 +109,17 @@ public class VisitBillingService {
                 .collect(Collectors.toMap(VisitDepartmentProduct::getId, p -> p));
 
         Map<UUID, UUID> requestedInsuranceByItem = new LinkedHashMap<>();
-        List<VisitDepartmentProduct> targetItems = resolveTargetBillingItems(input, allProductsById, requestedInsuranceByItem);
+        Map<UUID, java.math.BigDecimal> requestedUnitPriceByItem = new LinkedHashMap<>();
+        Map<UUID, java.math.BigDecimal> requestedQuantityByItem = new LinkedHashMap<>();
+        Map<UUID, Boolean> requestedExemptedByItem = new LinkedHashMap<>();
+        List<VisitDepartmentProduct> targetItems = resolveTargetBillingItems(
+            input,
+            allProductsById,
+            requestedInsuranceByItem,
+            requestedUnitPriceByItem,
+            requestedQuantityByItem,
+            requestedExemptedByItem
+        );
         if (targetItems == null) {
             return ApiResponse.error("Invalid billing selection. Ensure item ids exist and are billable.", "INVALID_BILLING_SELECTION");
         }
@@ -136,11 +160,31 @@ public class VisitBillingService {
                 return ApiResponse.error("Selected patientInsuranceId is invalid for the visit or does not cover the product.", "INVALID_VISIT_INSURANCE_SELECTION");
             }
 
-            BigDecimal unitPrice = toMoney(item.getPrice());
-            BigDecimal quantity = toQuantity(item.getQuantity());
-            BigDecimal lineTotal = toMoney(unitPrice.multiply(quantity));
-            BigDecimal coveredAmount = calculateCoveredAmount(item, appliedInsurance, quantity, lineTotal);
-            BigDecimal patientAmount = toMoney(lineTotal.subtract(coveredAmount));
+            boolean isExempted = Boolean.TRUE.equals(requestedExemptedByItem.get(item.getId()));
+
+            java.math.BigDecimal unitPrice = requestedUnitPriceByItem.containsKey(item.getId())
+                    ? toMoney(requestedUnitPriceByItem.get(item.getId()))
+                    : toMoney(item.getPrice());
+
+            java.math.BigDecimal quantity = requestedQuantityByItem.containsKey(item.getId())
+                    ? toQuantity(requestedQuantityByItem.get(item.getId()))
+                    : toQuantity(item.getQuantity());
+
+            java.math.BigDecimal lineTotal;
+            java.math.BigDecimal coveredAmount;
+            java.math.BigDecimal patientAmount;
+
+            if (isExempted) {
+                unitPrice = ZERO;
+                quantity = java.math.BigDecimal.ONE.setScale(4, java.math.RoundingMode.HALF_UP);
+                lineTotal = ZERO;
+                coveredAmount = ZERO;
+                patientAmount = ZERO;
+            } else {
+                lineTotal = toMoney(unitPrice.multiply(quantity));
+                coveredAmount = calculateCoveredAmount(item, appliedInsurance, quantity, lineTotal);
+                patientAmount = toMoney(lineTotal.subtract(coveredAmount));
+            }
 
             VisitBillingItem billingItem = new VisitBillingItem();
             billingItem.setVisitBilling(savedBilling);
@@ -157,7 +201,11 @@ public class VisitBillingService {
             insuranceCovered = toMoney(insuranceCovered.add(coveredAmount));
             patientPayable = toMoney(patientPayable.add(patientAmount));
 
-            item.setStatus(VisitProductStatus.BILLED);
+            if (Boolean.TRUE.equals(requestedExemptedByItem.get(item.getId()))) {
+                item.setStatus(VisitProductStatus.EXEMPTED);
+            } else {
+                item.setStatus(VisitProductStatus.BILLED);
+            }
             item.setBilledBy(actingUser);
             visitDepartmentProductRepository.save(item);
         }
@@ -253,6 +301,186 @@ public class VisitBillingService {
         return ApiResponse.success("Visit billings fetched.", billings);
     }
 
+    @Transactional(readOnly = true)
+    public ApiResponse generateInvoice(UUID billId, AuthenticatedUser authUser) {
+        if (billId == null) {
+            return ApiResponse.error("billId is required.", "VALIDATION_ERROR");
+        }
+
+        Optional<VisitBilling> billingOptional = visitBillingRepository.findById(billId);
+        if (billingOptional.isEmpty()) {
+            return ApiResponse.error("Visit billing not found.", "NOT_FOUND");
+        }
+
+        VisitBilling billing = billingOptional.get();
+
+        try {
+            Path invoiceDirectory = Path.of(INVOICE_DIR).toAbsolutePath();
+            Files.createDirectories(invoiceDirectory);
+            String filename = "invoice-" + billId + ".pdf";
+            Path invoiceFile = invoiceDirectory.resolve(filename);
+
+            // If invoice already exists, return existing URL
+            if (Files.exists(invoiceFile)) {
+                Map<String, Object> data = Map.of("invoiceUrl", INVOICE_URL_PATH + filename);
+                return ApiResponse.success("Invoice already exists.", data);
+            }
+
+            // If visit is not completed, mark it completed now
+            if (billing.getVisit() != null && billing.getVisit().getStatus() != VisitStatus.COMPLETED) {
+                billing.getVisit().setStatus(VisitStatus.COMPLETED);
+                visitRepository.save(billing.getVisit());
+            }
+
+            createInvoicePdf(invoiceFile, billing);
+            Map<String, Object> data = Map.of("invoiceUrl", INVOICE_URL_PATH + filename);
+            return ApiResponse.success("Invoice generated successfully.", data);
+        } catch (IOException e) {
+            return ApiResponse.error("Failed to generate invoice PDF.", "INVOICE_GENERATION_FAILED");
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public ApiResponse getInvoice(UUID billId) {
+        if (billId == null) {
+            return ApiResponse.error("billId is required.", "VALIDATION_ERROR");
+        }
+
+        Optional<VisitBilling> billingOptional = visitBillingRepository.findById(billId);
+        if (billingOptional.isEmpty()) {
+            return ApiResponse.error("Visit billing not found.", "NOT_FOUND");
+        }
+
+        String filename = "invoice-" + billId + ".pdf";
+        Path invoiceFile = Path.of(INVOICE_DIR).toAbsolutePath().resolve(filename);
+        if (Files.exists(invoiceFile)) {
+            Map<String, Object> data = Map.of("invoiceUrl", INVOICE_URL_PATH + filename);
+            return ApiResponse.success("Invoice fetched.", data);
+        }
+
+        return ApiResponse.error("Invoice not found. Generate it first.", "INVOICE_NOT_FOUND");
+    }
+
+    private void createInvoicePdf(Path invoiceFile, VisitBilling billing) throws IOException {
+        try (PDDocument document = new PDDocument()) {
+            PDPage page = new PDPage(PDRectangle.LETTER);
+            document.addPage(page);
+            try (PDPageContentStream content = new PDPageContentStream(document, page)) {
+                float margin = 50;
+                float y = page.getMediaBox().getHeight() - margin;
+                float leading = 16;
+                // Prefer loading a bundled TTF to avoid scanning system fonts (which may be malformed)
+                PDType0Font fallbackFont = null;
+                try (var fontStream = VisitBillingService.class.getResourceAsStream("/fonts/DejaVuSans.ttf")) {
+                    if (fontStream != null) {
+                        fallbackFont = PDType0Font.load(document, fontStream);
+                    }
+                } catch (Exception ignore) {
+                }
+
+                content.beginText();
+                if (fallbackFont != null) {
+                    content.setFont(fallbackFont, 20);
+                } else {
+                    content.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), 20);
+                }
+                content.newLineAtOffset(margin, y);
+                content.showText("Invoice");
+                content.endText();
+
+                y -= leading * 2;
+                content.beginText();
+                if (fallbackFont != null) {
+                    content.setFont(fallbackFont, 12);
+                } else {
+                    content.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
+                }
+                content.newLineAtOffset(margin, y);
+                content.showText("Invoice ID: " + billing.getId());
+                content.endText();
+
+                y -= leading;
+                content.beginText();
+                content.newLineAtOffset(margin, y);
+                content.showText("Visit ID: " + billing.getVisit().getId());
+                content.endText();
+
+                y -= leading;
+                content.beginText();
+                content.newLineAtOffset(margin, y);
+                content.showText("Billing Date: " + DATE_FORMATTER.format(billing.getBillingDate()));
+                content.endText();
+
+                y -= leading;
+                String patientName = billing.getVisit().getPatient() == null ? "Unknown" : (
+                        billing.getVisit().getPatient().getFirstName() +
+                                (billing.getVisit().getPatient().getLastName() == null ? "" : " " + billing.getVisit().getPatient().getLastName())
+                );
+                content.beginText();
+                content.newLineAtOffset(margin, y);
+                content.showText("Patient: " + patientName);
+                content.endText();
+
+                y -= leading * 2;
+                content.beginText();
+                if (fallbackFont != null) {
+                    content.setFont(fallbackFont, 12);
+                } else {
+                    content.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD), 12);
+                }
+                content.newLineAtOffset(margin, y);
+                content.showText(String.format("%-40s %8s %12s %12s", "Product", "Qty", "Unit", "Total"));
+                content.endText();
+
+                y -= leading;
+                if (fallbackFont != null) {
+                    content.setFont(fallbackFont, 12);
+                } else {
+                    content.setFont(new PDType1Font(Standard14Fonts.FontName.HELVETICA), 12);
+                }
+                List<Map<String, Object>> items = visitBillingItemRepository.findByVisitBillingId(billing.getId())
+                        .stream()
+                        .map(this::visitBillingItemToMap)
+                        .toList();
+                for (Map<String, Object> item : items) {
+                    if (y < margin + leading * 5) {
+                        break;
+                    }
+                    content.beginText();
+                    content.newLineAtOffset(margin, y);
+                    String productName = item.get("productName").toString();
+                    String line = String.format("%-40.40s %8s %12s %12s",
+                            productName,
+                            item.get("quantitySnapshot"),
+                            item.get("unitPriceSnapshot"),
+                            item.get("lineTotal"));
+                    content.showText(line);
+                    content.endText();
+                    y -= leading;
+                }
+
+                y -= leading;
+                content.beginText();
+                content.newLineAtOffset(margin, y);
+                content.showText("Total: " + billing.getTotalAmount());
+                content.endText();
+
+                y -= leading;
+                content.beginText();
+                content.newLineAtOffset(margin, y);
+                content.showText("Insurance Covered: " + billing.getInsuranceCoveredAmount());
+                content.endText();
+
+                y -= leading;
+                content.beginText();
+                content.newLineAtOffset(margin, y);
+                content.showText("Patient Payable: " + billing.getPatientPayableAmount());
+                content.endText();
+            }
+            document.save(invoiceFile.toFile());
+        }
+    }
+
     private List<VisitDepartmentProduct> loadVisitDepartmentProducts(UUID visitId) {
         return visitDepartmentRepository.findByVisitId(visitId)
                 .stream()
@@ -260,11 +488,14 @@ public class VisitBillingService {
                 .toList();
     }
 
-    private List<VisitDepartmentProduct> resolveTargetBillingItems(
+        private List<VisitDepartmentProduct> resolveTargetBillingItems(
             BillVisitInput input,
             Map<UUID, VisitDepartmentProduct> allProductsById,
-            Map<UUID, UUID> requestedInsuranceByItem
-    ) {
+            Map<UUID, UUID> requestedInsuranceByItem,
+            Map<UUID, java.math.BigDecimal> requestedUnitPriceByItem,
+            Map<UUID, java.math.BigDecimal> requestedQuantityByItem,
+            Map<UUID, Boolean> requestedExemptedByItem
+        ) {
         boolean billAll = Boolean.TRUE.equals(input.billAllProducts());
 
         if (billAll) {
@@ -290,6 +521,15 @@ public class VisitBillingService {
 
             selected.add(product);
             requestedInsuranceByItem.put(product.getId(), itemInput.patientInsuranceId());
+            if (itemInput.unitPrice() != null) {
+                requestedUnitPriceByItem.put(product.getId(), itemInput.unitPrice());
+            }
+            if (itemInput.quantity() != null) {
+                requestedQuantityByItem.put(product.getId(), itemInput.quantity());
+            }
+            if (itemInput.isExempted() != null) {
+                requestedExemptedByItem.put(product.getId(), itemInput.isExempted());
+            }
         }
 
         return selected;

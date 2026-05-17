@@ -171,7 +171,7 @@ enum AnswerStatus {
 interface ApiResponse {
   status: ResponseStatus!
   message: String
-}
+  }
 
 type PaginationInfo {
   total: Int!
@@ -189,19 +189,19 @@ type AuthTokens {
 type AuthResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: AuthTokens
+    data: AuthTokens
 }
 
 type BooleanResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: Boolean
+    data: Boolean
 }
 
 type StringResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: String
+    data: String
 }
 
 type Worker {
@@ -221,13 +221,13 @@ type Worker {
 type WorkerResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: Worker
+    data: Worker
 }
 
 type WorkerListResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: [Worker!]
+    data: [Worker!]
 }
 
 type AuditLog {
@@ -240,7 +240,7 @@ type AuditLog {
 type AuditLogListResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: [AuditLog!]
+    data: [AuditLog!]
 }
 
 type InsuranceProvider {
@@ -257,13 +257,13 @@ type InsuranceProvider {
 type InsuranceProviderResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: InsuranceProvider
+    data: InsuranceProvider
 }
 
 type PaginatedInsuranceProviderResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: [InsuranceProvider!]
+    data: [InsuranceProvider!]
   pagination: PaginationInfo
 }
 
@@ -293,13 +293,13 @@ type Patient {
 type PatientResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: Patient
+    data: Patient
 }
 
 type PaginatedPatientResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: [Patient!]
+    data: [Patient!]
   pagination: PaginationInfo
 }
 
@@ -321,13 +321,13 @@ type PatientInsurance {
 type PatientInsuranceResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: PatientInsurance
+    data: PatientInsurance
 }
 
 type PaginatedPatientInsuranceResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: [PatientInsurance!]
+    data: [PatientInsurance!]
   pagination: PaginationInfo
 }
 
@@ -363,20 +363,20 @@ type Product {
 type ProductResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: Product
+    data: Product
 }
 
 type PaginatedProductResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: [Product!]
+    data: [Product!]
   pagination: PaginationInfo
 }
 
 type ProductInsuranceCoverageResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: ProductInsuranceCoverage
+    data: ProductInsuranceCoverage
 }
 
 type Department {
@@ -392,13 +392,13 @@ type Department {
 type DepartmentResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: Department
+    data: Department
 }
 
 type PaginatedDepartmentResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: [Department!]
+    data: [Department!]
   pagination: PaginationInfo
 }
 
@@ -414,7 +414,7 @@ type Visit {
 type VisitDepartment {
   id: ID!
   department: Department!
-  status: VisitDepartmentStatus!
+status: VisitDepartmentStatus!
   completedAt: String
   products: [VisitDepartmentProduct!]!
   createdAt: String!
@@ -436,7 +436,7 @@ type VisitDepartmentProduct {
 type VisitResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: Visit
+    data: Visit
 }
 
 type VisitBillingItem {
@@ -472,19 +472,29 @@ type VisitBilling {
 type VisitBillingResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: VisitBilling
+    data: VisitBilling
+}
+
+type Invoice {
+  invoiceUrl: String!
+}
+
+type InvoiceResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+    data: Invoice
 }
 
 type VisitBillingListResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: [VisitBilling!]
+    data: [VisitBilling!]
 }
 
 type PaginatedVisitResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: [Visit!]
+    data: [Visit!]
   pagination: PaginationInfo
 }
 
@@ -939,6 +949,9 @@ input UpdateVisitDepartmentProductQuantityInput {
 input BillVisitItemInput {
   visitDepartmentProductId: ID!
   patientInsuranceId: ID
+  quantity: Float
+  unitPrice: Float
+  isExempted: Boolean
 }
 
 input BillVisitInput {
@@ -1054,7 +1067,8 @@ type Query {
   visits(input: SearchVisitsInput): PaginatedVisitResponse!
   visitBilling(visitBillingId: ID!): VisitBillingResponse!
   visitBillings(visitId: ID!): VisitBillingListResponse!
-  getForms(departmentId: ID!): FormListResponse!
+  getInvoice(billId: ID!): InvoiceResponse!
+getForms(departmentId: ID!): FormListResponse!
   getForm(departmentId: ID!, formId: ID!): FormResponse!
   getLatestForm(departmentId: ID!): FormResponse!
   getFormVersionHistory(departmentId: ID!, formId: ID!): FormVersionListResponse!
@@ -1095,17 +1109,18 @@ type Mutation {
   createVisit(input: CreateVisitInput!): VisitResponse!
   changeVisitDate(input: ChangeVisitDateInput!): VisitResponse!
   addVisitDepartment(visitId: ID!, departmentId: ID!): VisitResponse!
-  completeVisitDepartment(visitDepartmentId: ID!): VisitResponse!
+completeVisitDepartment(visitDepartmentId: ID!): VisitResponse!
   addVisitDepartmentProduct(input: CreateVisitDepartmentProductInput!): VisitResponse!
   updateVisitDepartmentProductStatus(input: UpdateVisitDepartmentProductStatusInput!): VisitResponse!
-  updateVisitDepartmentStatus(input: UpdateVisitDepartmentStatusInput!): VisitResponse!
+updateVisitDepartmentStatus(input: UpdateVisitDepartmentStatusInput!): VisitResponse!
   updateVisitDepartmentProductQuantity(input: UpdateVisitDepartmentProductQuantityInput!): VisitResponse!
   removeVisitDepartmentProduct(visitDepartmentProductId: ID!): VisitResponse!
   billVisit(input: BillVisitInput!): VisitBillingResponse!
   recordVisitBillingPayment(input: RecordVisitBillingPaymentInput!): VisitBillingResponse!
+  generateInvoice(billId: ID!): InvoiceResponse!
   completeVisit(visitId: ID!): VisitResponse!
   cancelVisit(visitId: ID!): VisitResponse!
-  createForm(departmentId: ID!, input: FormInput!): FormResponse!
+createForm(departmentId: ID!, input: FormInput!): FormResponse!
   updateForm(departmentId: ID!, formId: ID!, input: FormInput!): FormResponse!
   finalizeForm(departmentId: ID!, formId: ID!): FormResponse!
   upsertConsultationAnswers(input: ConsultationAnswersInput!): ConsultationAnswersResponse!

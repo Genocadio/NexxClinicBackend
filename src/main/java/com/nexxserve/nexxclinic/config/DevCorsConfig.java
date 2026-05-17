@@ -20,7 +20,8 @@ public class DevCorsConfig {
                 "http://localhost",
                 "http://localhost:*",
                 "http://127.0.0.1",
-                "http://127.0.0.1:*"
+                "http://127.0.0.1:*",
+                "https://nexxclinic.vercel.app"
         ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));

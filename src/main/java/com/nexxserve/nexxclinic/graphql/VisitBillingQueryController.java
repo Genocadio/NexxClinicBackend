@@ -37,4 +37,13 @@ public class VisitBillingQueryController {
     ) {
         return visitBillingService.visitBillings(visitId);
     }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
+    @QueryMapping
+    public ApiResponse getInvoice(
+            @Argument UUID billId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitBillingService.getInvoice(billId);
+    }
 }

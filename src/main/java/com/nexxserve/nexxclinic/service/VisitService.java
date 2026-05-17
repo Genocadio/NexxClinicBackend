@@ -212,6 +212,25 @@ public class VisitService {
             return ApiResponse.error("Cancelled visit cannot be completed.", "INVALID_VISIT_STATUS_TRANSITION");
         }
 
+        // Check if all products on the visit are billed (not PENDING)
+        List<VisitDepartmentProduct> visitProducts = visitDepartmentProductRepository.findByVisitDepartmentVisitId(visitId);
+        boolean hasUnbilledProducts = visitProducts.stream()
+                .anyMatch(product -> product.getStatus() == VisitProductStatus.PENDING);
+        
+        if (hasUnbilledProducts) {
+            return ApiResponse.error("Cannot complete visit with unbilled products. All products must be billed first.", "VISIT_HAS_UNBILLED_PRODUCTS");
+        }
+
+        // Mark all departments as COMPLETED
+        List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(visitId);
+        for (VisitDepartment dept : departments) {
+            if (dept.getStatus() != VisitDepartmentStatus.CANCELLED) {
+                dept.setStatus(VisitDepartmentStatus.COMPLETED);
+                dept.setCompletedAt(java.time.LocalDateTime.now());
+                visitDepartmentRepository.save(dept);
+            }
+        }
+
         visit.setStatus(VisitStatus.COMPLETED);
         Visit saved = visitRepository.save(visit);
         return ApiResponse.success("Visit completed.", visitToMap(saved));
@@ -233,6 +252,19 @@ public class VisitService {
             return ApiResponse.error("Completed visit cannot be cancelled.", "INVALID_VISIT_STATUS_TRANSITION");
         }
 
+        // Check if there are any products on the visit
+        List<VisitDepartmentProduct> visitProducts = visitDepartmentProductRepository.findByVisitDepartmentVisitId(visitId);
+        if (!visitProducts.isEmpty()) {
+            return ApiResponse.error("Cannot cancel visit with existing products. Remove all products first.", "VISIT_HAS_PRODUCTS");
+        }
+
+        // Mark all departments as CANCELLED
+        List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(visitId);
+        for (VisitDepartment dept : departments) {
+            dept.setStatus(VisitDepartmentStatus.CANCELLED);
+            visitDepartmentRepository.save(dept);
+        }
+
         visit.setStatus(VisitStatus.CANCELLED);
         Visit saved = visitRepository.save(visit);
         return ApiResponse.success("Visit cancelled.", visitToMap(saved));
@@ -249,6 +281,15 @@ public class VisitService {
             return ApiResponse.error("Visit not found.", "NOT_FOUND");
         }
 
+        Visit visit = visitOptional.get();
+        if (visit.getStatus() == VisitStatus.COMPLETED) {
+            return ApiResponse.error("Cannot add departments to a completed visit.", "VISIT_IS_COMPLETED");
+        }
+
+        if (visit.getStatus() == VisitStatus.CANCELLED) {
+            return ApiResponse.error("Cannot add departments to a cancelled visit.", "VISIT_IS_CANCELLED");
+        }
+
         Optional<Department> departmentOptional = departmentRepository.findById(departmentId);
         if (departmentOptional.isEmpty()) {
             return ApiResponse.error("Department not found.", "NOT_FOUND");
@@ -259,12 +300,12 @@ public class VisitService {
         }
 
         VisitDepartment visitDepartment = new VisitDepartment();
-        visitDepartment.setVisit(visitOptional.get());
+        visitDepartment.setVisit(visit);
         visitDepartment.setDepartment(departmentOptional.get());
         visitDepartment.setStatus(VisitDepartmentStatus.PENDING);
         visitDepartmentRepository.save(visitDepartment);
 
-        return ApiResponse.success("Department added to visit.", visitToMap(visitOptional.get()));
+        return ApiResponse.success("Department added to visit.", visitToMap(visit));
     }
 
     @Transactional
@@ -278,9 +319,27 @@ public class VisitService {
             return ApiResponse.error("Visit not found.", "NOT_FOUND");
         }
 
+        Visit visit = visitOptional.get();
+        if (visit.getStatus() == VisitStatus.COMPLETED) {
+            return ApiResponse.error("Cannot add products to a completed visit.", "VISIT_IS_COMPLETED");
+        }
+
+        if (visit.getStatus() == VisitStatus.CANCELLED) {
+            return ApiResponse.error("Cannot add products to a cancelled visit.", "VISIT_IS_CANCELLED");
+        }
+
         Optional<VisitDepartment> visitDepartmentOptional = visitDepartmentRepository.findByVisitIdAndDepartmentId(input.visitId(), input.departmentId());
         if (visitDepartmentOptional.isEmpty()) {
             return ApiResponse.error("Department is not linked to this visit.", "VISIT_DEPARTMENT_NOT_FOUND");
+        }
+
+        VisitDepartment visitDepartment = visitDepartmentOptional.get();
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.COMPLETED) {
+            return ApiResponse.error("Cannot add products to a completed department.", "DEPARTMENT_IS_COMPLETED");
+        }
+
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.CANCELLED) {
+            return ApiResponse.error("Cannot add products to a cancelled department.", "DEPARTMENT_IS_CANCELLED");
         }
 
         Optional<Product> productOptional = productRepository.findById(input.productId());
@@ -289,14 +348,14 @@ public class VisitService {
         }
 
         Optional<VisitDepartmentProduct> existing = visitDepartmentProductRepository.findByVisitDepartmentIdAndProductId(
-                visitDepartmentOptional.get().getId(), input.productId()
+                visitDepartment.getId(), input.productId()
         );
         if (existing.isPresent()) {
             return ApiResponse.error("Product already exists for this visit department.", "DUPLICATE_VISIT_DEPARTMENT_PRODUCT");
         }
 
         VisitDepartmentProduct item = new VisitDepartmentProduct();
-        item.setVisitDepartment(visitDepartmentOptional.get());
+        item.setVisitDepartment(visitDepartment);
         item.setProduct(productOptional.get());
         item.setQuantity(normalizeQuantity(input.quantity()));
         item.setPrice(resolveUnitPriceSnapshot(productOptional.get(), input.price()));
@@ -309,8 +368,8 @@ public class VisitService {
         }
 
         visitDepartmentProductRepository.save(item);
-        reopenVisitIfCompleted(visitOptional.get());
-        return ApiResponse.success("Product added to visit department.", visitToMap(visitOptional.get()));
+        reopenVisitIfCompleted(visit);
+        return ApiResponse.success("Product added to visit department.", visitToMap(visit));
     }
 
     @Transactional

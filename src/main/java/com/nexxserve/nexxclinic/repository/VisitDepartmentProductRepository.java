@@ -11,4 +11,6 @@ public interface VisitDepartmentProductRepository extends JpaRepository<VisitDep
     List<VisitDepartmentProduct> findByVisitDepartmentId(UUID visitDepartmentId);
 
     Optional<VisitDepartmentProduct> findByVisitDepartmentIdAndProductId(UUID visitDepartmentId, UUID productId);
+
+    List<VisitDepartmentProduct> findByVisitDepartmentVisitId(UUID visitId);
 }

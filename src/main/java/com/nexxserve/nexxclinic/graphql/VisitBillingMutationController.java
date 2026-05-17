@@ -8,6 +8,7 @@ import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.security.HasRole;
 import com.nexxserve.nexxclinic.service.VisitBillingService;
 import jakarta.validation.Valid;
+import java.util.UUID;
 import org.springframework.graphql.data.method.annotation.Argument;
 import org.springframework.graphql.data.method.annotation.ContextValue;
 import org.springframework.graphql.data.method.annotation.MutationMapping;
@@ -38,5 +39,14 @@ public class VisitBillingMutationController {
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         return visitBillingService.recordVisitBillingPayment(input, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.CLINICIAN, RoleName.FINANCE})
+    @MutationMapping
+    public ApiResponse generateInvoice(
+            @Argument UUID billId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitBillingService.generateInvoice(billId, authUser);
     }
 }
