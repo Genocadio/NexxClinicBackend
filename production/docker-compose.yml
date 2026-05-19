@@ -24,7 +24,7 @@ services:
         condition: service_healthy
     environment:
         # configure production profile and database connection via environment variables
-      - SPRING_PROFILES_ACTIVE: prod
+      - SPRING_PROFILES_ACTIVE=prod
 
       # Database connection
       - DB_URL=jdbc:postgresql://db:5432/nexxclinic
@@ -53,4 +53,4 @@ services:
 
 volumes:
   nexxclinic-data:
-    name: nexxclinic-data%
+    name: nexxclinic-data

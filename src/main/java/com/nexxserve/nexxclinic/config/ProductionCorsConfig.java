@@ -10,18 +10,14 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
-@Profile("default")
-public class DevCorsConfig {
+@Profile("prod")
+public class ProductionCorsConfig {
 
     @Bean
     CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(List.of(
-                "http://localhost",
-                "http://localhost:*",
-                "http://127.0.0.1",
-                "http://127.0.0.1:*",
-                "https://demo.med.rw"
+                "https://*.med.rw"
         ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
@@ -31,4 +27,3 @@ public class DevCorsConfig {
         return source;
     }
 }
-
