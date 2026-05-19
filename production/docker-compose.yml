@@ -1,27 +1,56 @@
 services:
   db:
-    image:  postgres:16-alpine
+    image: postgres:16-alpine
     container_name: nexxclinic-db
     environment:
       POSTGRES_DB: nexxclinic
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: nexxclinic_user      # Changed to match your app config
+      POSTGRES_PASSWORD: nexxclinic_pass   # Changed to match your app config
     ports:
       - "5432:5432"
     volumes:
       - nexxclinic-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexxclinic_user -d nexxclinic"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   app:
     image: genoyves/nexclinic:latest
     container_name: nexxclinic-app
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/nexxclinic
-      - SPRING_DATASOURCE_USERNAME=postgres
-      - SPRING_DATASOURCE_PASSWORD=postgres
+        # configure production profile and database connection via environment variables
+      - SPRING_PROFILES_ACTIVE: prod
+
+      # Database connection
+      - DB_URL=jdbc:postgresql://db:5432/nexxclinic
+      - DB_USER=nexxclinic_user
+      - DB_PASSWORD=nexxclinic_pass
+      - DB_DRIVER=org.postgresql.Driver
+      
+      # JWT Configuration (change these in production!)
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-at-least-32-chars-long}
+      - JWT_EXPIRATION_MINUTES=120
+      - JWT_REFRESH_EXPIRATION_DAYS=14
+      
+      # Password history
+      - PASSWORD_HISTORY_COUNT=5
+      
+      # Java options
+      - JAVA_OPTS=-Xmx512m -Xms256m
     ports:
       - "8091:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
   nexxclinic-data:
+    name: nexxclinic-data%
