@@ -1,40 +1,6 @@
 # Visit Department Diagnostics and Medications Schema
-# Extends visit functionality with support for diagnoses and medications
-
-"""
-Diagnosis entry for a visit department.
-"""
-type VisitDepartmentDiagnosis {
-  id: ID!
-  diagnosisName: String!
-  icd11Code: String
-  createdAt: String!
-}
-
-"""
-Medication entry for a visit department.
-"""
-type VisitDepartmentMedication {
-  id: ID!
-  medicationName: String!
-  instructions: String!
-  createdAt: String!
-}
-
-"""
-Extended VisitDepartment with diagnostics and medications.
-"""
-type VisitDepartmentExtended {
-  id: ID!
-  visitId: ID!
-  departmentId: ID!
-  status: VisitDepartmentStatus!
-  diagnostics: [VisitDepartmentDiagnosis!]
-  medications: [VisitDepartmentMedication!]
-  completedAt: String
-  createdAt: String!
-  updatedAt: String!
-}
+# Diagnostics and medications are now nested within VisitDepartment (nullable arrays)
+# Following the same pattern: Visit may have 0..* departments; VisitDepartment may have 0..* diagnostics/medications
 
 # ========== INPUT TYPES ==========
 

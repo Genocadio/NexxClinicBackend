@@ -426,6 +426,20 @@ type VisitDepartment {
   updatedAt: String!
 }
 
+type VisitDepartmentDiagnosis {
+  id: ID!
+  diagnosisName: String!
+  icd11Code: String
+  createdAt: String!
+}
+
+type VisitDepartmentMedication {
+  id: ID!
+  medicationName: String!
+  instructions: String!
+  createdAt: String!
+}
+
 type VisitDepartmentProduct {
   id: ID!
   product: Product!

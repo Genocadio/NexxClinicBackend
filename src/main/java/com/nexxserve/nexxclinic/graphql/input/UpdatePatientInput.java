@@ -1,7 +1,7 @@
 package com.nexxserve.nexxclinic.graphql.input;
 
 import com.nexxserve.nexxclinic.model.Gender;
-import jakarta.validation.constraints.PastOrPresent;
+import com.nexxserve.nexxclinic.validation.NotFutureDate;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 
@@ -15,7 +15,7 @@ public record UpdatePatientInput(
         @Size(max = 120, message = "lastName must not exceed 120 characters")
         String lastName,
 
-        @PastOrPresent(message = "dateOfBirth must be in the past or present")
+        @NotFutureDate(message = "dateOfBirth must be in the past or present")
         LocalDate dateOfBirth,
 
         Gender gender,

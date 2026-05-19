@@ -2,10 +2,10 @@ package com.nexxserve.nexxclinic.graphql.input;
 
 import com.nexxserve.nexxclinic.model.DocumentType;
 import com.nexxserve.nexxclinic.model.Gender;
+import com.nexxserve.nexxclinic.validation.NotFutureDate;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.PastOrPresent;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -20,7 +20,7 @@ public record SelfRegisterInput(
 
         Gender gender,
 
-        @PastOrPresent(message = "dateOfBirth must be in the past or present")
+        @NotFutureDate(message = "dateOfBirth must be in the past or present")
         LocalDate dateOfBirth,
 
         @Size(max = 500, message = "profilePhotoUrl must not exceed 500 characters")
