@@ -12,6 +12,10 @@ import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentDiagnosis;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentMedication;
 import com.nexxserve.nexxclinic.entity.VisitInsurance;
+import com.nexxserve.nexxclinic.entity.VisitVitalSignsGroup;
+import com.nexxserve.nexxclinic.entity.VitalMeasurement;
+import com.nexxserve.nexxclinic.entity.VisitPreInstruction;
+import com.nexxserve.nexxclinic.entity.VisitPreInstructionMedication;
 import com.nexxserve.nexxclinic.entity.Worker;
 import com.nexxserve.nexxclinic.graphql.input.CreateVisitDepartmentInput;
 import com.nexxserve.nexxclinic.graphql.input.CreateVisitDepartmentProductInput;
@@ -21,6 +25,10 @@ import com.nexxserve.nexxclinic.graphql.input.SearchVisitsInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentProductStatusInput;
 import com.nexxserve.nexxclinic.graphql.input.AddDiagnosisInput;
 import com.nexxserve.nexxclinic.graphql.input.AddMedicationInput;
+import com.nexxserve.nexxclinic.graphql.input.AddVisitVitalSignItemInput;
+import com.nexxserve.nexxclinic.graphql.input.AddVisitVitalSignsInput;
+import com.nexxserve.nexxclinic.graphql.input.AddVisitPreInstructionsInput;
+import com.nexxserve.nexxclinic.entity.VisitPreInstructionProductRequest;
 import com.nexxserve.nexxclinic.model.ApiResponse;
 import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
@@ -33,6 +41,8 @@ import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentDiagnosisRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentMedicationRepository;
+import com.nexxserve.nexxclinic.repository.VisitVitalSignsGroupRepository;
+import com.nexxserve.nexxclinic.repository.VitalMeasurementRepository;
 import com.nexxserve.nexxclinic.repository.VisitBillingRepository;
 import com.nexxserve.nexxclinic.repository.VisitInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.VisitRepository;
@@ -65,6 +75,9 @@ public class VisitService {
     private final VisitDepartmentProductRepository visitDepartmentProductRepository;
     private final VisitDepartmentDiagnosisRepository visitDepartmentDiagnosisRepository;
     private final VisitDepartmentMedicationRepository visitDepartmentMedicationRepository;
+    private final VisitVitalSignsGroupRepository visitVitalSignsGroupRepository;
+    private final VitalMeasurementRepository vitalMeasurementRepository;
+    private final com.nexxserve.nexxclinic.repository.VisitPreInstructionRepository visitPreInstructionRepository;
     private final VisitBillingRepository visitBillingRepository;
     private final PatientRepository patientRepository;
     private final PatientInsuranceRepository patientInsuranceRepository;
@@ -79,7 +92,10 @@ public class VisitService {
             VisitDepartmentProductRepository visitDepartmentProductRepository,
             VisitDepartmentDiagnosisRepository visitDepartmentDiagnosisRepository,
             VisitDepartmentMedicationRepository visitDepartmentMedicationRepository,
+            VisitVitalSignsGroupRepository visitVitalSignsGroupRepository,
+            VitalMeasurementRepository vitalMeasurementRepository,
             VisitBillingRepository visitBillingRepository,
+            com.nexxserve.nexxclinic.repository.VisitPreInstructionRepository visitPreInstructionRepository,
             PatientRepository patientRepository,
             PatientInsuranceRepository patientInsuranceRepository,
             DepartmentRepository departmentRepository,
@@ -92,6 +108,9 @@ public class VisitService {
         this.visitDepartmentProductRepository = visitDepartmentProductRepository;
         this.visitDepartmentDiagnosisRepository = visitDepartmentDiagnosisRepository;
         this.visitDepartmentMedicationRepository = visitDepartmentMedicationRepository;
+        this.visitVitalSignsGroupRepository = visitVitalSignsGroupRepository;
+        this.vitalMeasurementRepository = vitalMeasurementRepository;
+        this.visitPreInstructionRepository = visitPreInstructionRepository;
         this.visitBillingRepository = visitBillingRepository;
         this.patientRepository = patientRepository;
         this.patientInsuranceRepository = patientInsuranceRepository;
@@ -382,7 +401,143 @@ public class VisitService {
 
         visitDepartmentProductRepository.save(item);
         reopenVisitIfCompleted(visit);
-        return ApiResponse.success("Product added to visit department.", visitToMap(visit));
+        return ApiResponse.success("Product added to visit department.", visitDepartmentToMap(visitDepartment));
+    }
+
+    @Transactional
+    public ApiResponse addVisitVitalSigns(AddVisitVitalSignsInput input, AuthenticatedUser authUser) {
+        if (input == null || input.visitId() == null || input.vitalSigns() == null || input.vitalSigns().isEmpty()) {
+            return ApiResponse.error("visitId and vitalSigns are required.", "VALIDATION_ERROR");
+        }
+
+        Optional<Visit> visitOptional = visitRepository.findById(input.visitId());
+        if (visitOptional.isEmpty()) {
+            return ApiResponse.error("Visit not found.", "NOT_FOUND");
+        }
+
+        Visit visit = visitOptional.get();
+        if (visit.getStatus() == VisitStatus.COMPLETED) {
+            return ApiResponse.error("Cannot add vital signs to a completed visit.", "VISIT_IS_COMPLETED");
+        }
+        if (visit.getStatus() == VisitStatus.CANCELLED) {
+            return ApiResponse.error("Cannot add vital signs to a cancelled visit.", "VISIT_IS_CANCELLED");
+        }
+
+        Worker actingUser = resolveWorker(authUser);
+        VisitVitalSignsGroup group = new VisitVitalSignsGroup();
+        group.setVisit(visit);
+        group.setAddedBy(actingUser);
+        group = visitVitalSignsGroupRepository.save(group);
+
+        List<VitalMeasurement> measurements = new ArrayList<>();
+        for (AddVisitVitalSignItemInput vitalSignInput : input.vitalSigns()) {
+            if (vitalSignInput == null
+                    || vitalSignInput.measurementName() == null
+                    || vitalSignInput.measurementName().isBlank()
+                    || vitalSignInput.value() == null
+                    || vitalSignInput.value().isBlank()
+                    || vitalSignInput.unit() == null
+                    || vitalSignInput.unit().isBlank()) {
+                return ApiResponse.error("measurementName, value and unit are required for each vital sign.", "VALIDATION_ERROR");
+            }
+
+            VitalMeasurement item = new VitalMeasurement();
+            item.setGroup(group);
+            item.setMeasurementName(vitalSignInput.measurementName().trim());
+            item.setValue(vitalSignInput.value().trim());
+            item.setUnit(vitalSignInput.unit().trim());
+            measurements.add(item);
+        }
+
+        vitalMeasurementRepository.saveAll(measurements);
+        return ApiResponse.success("Vital signs added to visit.", visitToMap(visit));
+    }
+
+    @Transactional
+    public ApiResponse addVisitPreInstructions(AddVisitPreInstructionsInput input, AuthenticatedUser authUser) {
+        if (input == null || input.visitDepartmentId() == null || input.items() == null || input.items().isEmpty()) {
+            return ApiResponse.error("visitDepartmentId and items are required.", "VALIDATION_ERROR");
+        }
+
+        Optional<VisitDepartment> visitDepartmentOptional = visitDepartmentRepository.findById(input.visitDepartmentId());
+        if (visitDepartmentOptional.isEmpty()) {
+            return ApiResponse.error("Visit department not found.", "NOT_FOUND");
+        }
+
+        VisitDepartment visitDepartment = visitDepartmentOptional.get();
+        Visit visit = visitDepartment.getVisit();
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.COMPLETED) {
+            return ApiResponse.error("Cannot add pre-instructions to a completed department.", "DEPARTMENT_IS_COMPLETED");
+        }
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.CANCELLED) {
+            return ApiResponse.error("Cannot add pre-instructions to a cancelled department.", "DEPARTMENT_IS_CANCELLED");
+        }
+
+        Worker actingUser = resolveWorker(authUser);
+        List<VisitPreInstruction> items = new ArrayList<>();
+        for (com.nexxserve.nexxclinic.graphql.input.AddVisitPreInstructionItemInput itemInput : input.items()) {
+            if (itemInput == null || itemInput.type() == null || itemInput.type().isBlank()) {
+                return ApiResponse.error("Each item must have a type (NOTE or MEDICATION).", "VALIDATION_ERROR");
+            }
+            String type = itemInput.type().trim().toUpperCase();
+            if (!type.equals("NOTE") && !type.equals("MEDICATION") && !type.equals("PRODUCT")) {
+                return ApiResponse.error("Item type must be NOTE, MEDICATION or PRODUCT.", "VALIDATION_ERROR");
+            }
+
+            VisitPreInstruction pi = new VisitPreInstruction();
+            pi.setVisit(visit);
+            pi.setVisitDepartment(visitDepartment);
+            pi.setType(type);
+            pi.setNote(itemInput.note());
+            pi.setAddedBy(actingUser);
+
+            if (type.equals("MEDICATION")) {
+                if (itemInput.medications() == null || itemInput.medications().isEmpty()) {
+                    return ApiResponse.error("Medication items must include at least one medication entry.", "VALIDATION_ERROR");
+                }
+                for (com.nexxserve.nexxclinic.graphql.input.AddVisitPreInstructionMedicationInput medIn : itemInput.medications()) {
+                    if (medIn == null || medIn.medName() == null || medIn.medName().isBlank()) {
+                        return ApiResponse.error("medName is required for medication entries.", "VALIDATION_ERROR");
+                    }
+                    VisitPreInstructionMedication med = new VisitPreInstructionMedication();
+                    med.setPreInstruction(pi);
+                    med.setMedName(medIn.medName().trim());
+                    med.setDosage(medIn.dosage());
+                    med.setRoute(medIn.route());
+                    med.setFrequency(medIn.frequency());
+                    med.setDuration(medIn.duration());
+                    med.setQuantity(medIn.quantity());
+                    med.setOtherInstructions(medIn.otherInstructions());
+                    pi.getMedications().add(med);
+                }
+            }
+            if (type.equals("PRODUCT")) {
+                if (itemInput.products() == null || itemInput.products().isEmpty()) {
+                    return ApiResponse.error("Product items must include at least one product entry.", "VALIDATION_ERROR");
+                }
+                for (com.nexxserve.nexxclinic.graphql.input.AddVisitPreInstructionProductInput prodIn : itemInput.products()) {
+                    if (prodIn == null || prodIn.productId() == null) {
+                        return ApiResponse.error("productId is required for product entries.", "VALIDATION_ERROR");
+                    }
+                    Optional<com.nexxserve.nexxclinic.entity.Product> productOptional = productRepository.findById(prodIn.productId());
+                    if (productOptional.isEmpty()) {
+                        return ApiResponse.error("Product not found.", "NOT_FOUND");
+                    }
+                    VisitPreInstructionProductRequest pr = new VisitPreInstructionProductRequest();
+                    pr.setPreInstruction(pi);
+                    pr.setProduct(productOptional.get());
+                    pr.setQuantity(prodIn.quantity());
+                    pr.setRequestedBy(actingUser);
+                    pr.setStatus(com.nexxserve.nexxclinic.model.VisitPreInstructionProductStatus.PENDING);
+                    pi.getProducts().add(pr);
+                }
+            }
+
+            items.add(pi);
+        }
+
+        visitPreInstructionRepository.saveAll(items);
+        return ApiResponse.success("Pre-instructions added to visit department.", visitDepartmentToMap(visitDepartment));
     }
 
     @Transactional
@@ -406,7 +561,7 @@ public class VisitService {
         }
 
         VisitDepartmentProduct saved = visitDepartmentProductRepository.save(item);
-        return ApiResponse.success("Visit department product status updated.", visitToMap(saved.getVisitDepartment().getVisit()));
+        return ApiResponse.success("Visit department product status updated.", visitDepartmentToMap(saved.getVisitDepartment()));
     }
 
     @Transactional
@@ -427,7 +582,7 @@ public class VisitService {
         }
 
         VisitDepartment saved = visitDepartmentRepository.save(department);
-        return ApiResponse.success("Visit department status updated.", visitToMap(saved.getVisit()));
+        return ApiResponse.success("Visit department status updated.", visitDepartmentToMap(saved));
     }
 
     @Transactional
@@ -448,13 +603,13 @@ public class VisitService {
             // Delete product from visit department when quantity is 0 or less
             visitDepartmentProductRepository.delete(item);
             reopenVisitIfCompleted(visit);
-            return ApiResponse.success("Visit department product removed.", visitToMap(visit));
+            return ApiResponse.success("Visit department product removed.", visitDepartmentToMap(item.getVisitDepartment()));
         }
 
         item.setQuantity(input.quantity());
 
         VisitDepartmentProduct saved = visitDepartmentProductRepository.save(item);
-        return ApiResponse.success("Visit department product quantity updated.", visitToMap(saved.getVisitDepartment().getVisit()));
+        return ApiResponse.success("Visit department product quantity updated.", visitDepartmentToMap(saved.getVisitDepartment()));
     }
 
     @Transactional
@@ -475,7 +630,7 @@ public class VisitService {
         visitDepartmentProductRepository.delete(item);
         reopenVisitIfCompleted(visit);
 
-        return ApiResponse.success("Visit department product removed.", visitToMap(visit));
+        return ApiResponse.success("Visit department product removed.", visitDepartmentToMap(item.getVisitDepartment()));
     }
 
     private ApiResponse addDepartmentsToVisit(
@@ -607,6 +762,43 @@ public class VisitService {
                         .map(this::visitDepartmentToMap)
                         .toList()
         );
+        data.put(
+                "vitalSigns",
+            visitVitalSignsGroupRepository.findByVisitIdOrderByCreatedAtAsc(visit.getId())
+                        .stream()
+                .map(this::visitVitalSignsGroupToMap)
+                        .toList()
+        );
+        return data;
+    }
+
+    private Map<String, Object> visitPreInstructionToMap(VisitPreInstruction pre) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", pre.getId());
+        data.put("type", pre.getType());
+        data.put("note", pre.getNote());
+        data.put("addedBy", pre.getAddedBy() == null ? null : workerToMap(pre.getAddedBy()));
+        data.put("createdAt", pre.getCreatedAt());
+        data.put(
+                "medications",
+                pre.getMedications().stream().map(m -> {
+                    Map<String, Object> med = new HashMap<>();
+                    med.put("id", m.getId());
+                    med.put("medName", m.getMedName());
+                    med.put("dosage", m.getDosage());
+                    med.put("route", m.getRoute());
+                    med.put("frequency", m.getFrequency());
+                    med.put("duration", m.getDuration());
+                    med.put("quantity", m.getQuantity());
+                    med.put("otherInstructions", m.getOtherInstructions());
+                    med.put("createdAt", m.getCreatedAt());
+                    return med;
+                }).toList()
+        );
+                data.put(
+                    "products",
+                    pre.getProducts().stream().map(this::visitPreInstructionProductToMap).toList()
+                );
         return data;
     }
 
@@ -637,8 +829,28 @@ public class VisitService {
                         .map(this::visitDepartmentMedicationToMap)
                         .toList()
         );
+        data.put(
+                "preInstructions",
+                visitPreInstructionRepository.findByVisitDepartmentIdOrderByCreatedAtAsc(visitDepartment.getId())
+                        .stream()
+                        .map(this::visitPreInstructionToMap)
+                        .toList()
+        );
         data.put("createdAt", visitDepartment.getCreatedAt());
         data.put("updatedAt", visitDepartment.getUpdatedAt());
+        return data;
+    }
+
+    private Map<String, Object> visitPreInstructionProductToMap(VisitPreInstructionProductRequest item) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", item.getId());
+        data.put("product", productToMap(item.getProduct()));
+        data.put("quantity", item.getQuantity());
+        data.put("requestedBy", workerToMap(item.getRequestedBy()));
+        data.put("status", item.getStatus());
+        data.put("processedBy", workerToMap(item.getProcessedBy()));
+        data.put("createdAt", item.getCreatedAt());
+        data.put("updatedAt", item.getUpdatedAt());
         return data;
     }
 
@@ -674,6 +886,30 @@ public class VisitService {
         return data;
     }
 
+    private Map<String, Object> visitVitalSignsGroupToMap(VisitVitalSignsGroup group) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", group.getId());
+        data.put("createdAt", group.getCreatedAt());
+        data.put("addedBy", workerToMap(group.getAddedBy()));
+        data.put(
+                "measurements",
+                vitalMeasurementRepository.findByGroupIdOrderByCreatedAtAsc(group.getId())
+                        .stream()
+                        .map(this::vitalMeasurementToMap)
+                        .toList()
+        );
+        return data;
+    }
+
+    private Map<String, Object> vitalMeasurementToMap(VitalMeasurement item) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", item.getId());
+        data.put("measurementName", item.getMeasurementName());
+        data.put("value", item.getValue());
+        data.put("unit", item.getUnit());
+        data.put("createdAt", item.getCreatedAt());
+        return data;
+    }
 
     private Map<String, Object> departmentToMap(Department department) {
         Map<String, Object> data = new HashMap<>();
@@ -682,6 +918,8 @@ public class VisitService {
         data.put("insurancePolicyMode", department.getInsurancePolicyMode());
         data.put("createdAt", department.getCreatedAt());
         data.put("updatedAt", department.getUpdatedAt());
+        data.put("nursing", department.isNursing());
+        data.put("supportRequests", department.isSupportRequests());
         return data;
     }
 
@@ -873,15 +1111,8 @@ public class VisitService {
         diagnosis.setDiagnosisName(input.diagnosisName().trim());
         diagnosis.setIcd11Code(input.icd11Code() == null || input.icd11Code().isBlank() ? null : input.icd11Code().trim());
 
-        VisitDepartmentDiagnosis saved = visitDepartmentDiagnosisRepository.save(diagnosis);
-
-        Map<String, Object> data = new HashMap<>();
-        data.put("id", saved.getId());
-        data.put("diagnosisName", saved.getDiagnosisName());
-        data.put("icd11Code", saved.getIcd11Code());
-        data.put("createdAt", saved.getCreatedAt());
-
-        return ApiResponse.success("Diagnosis added successfully.", data);
+        visitDepartmentDiagnosisRepository.save(diagnosis);
+        return ApiResponse.success("Diagnosis added successfully.", visitDepartmentToMap(visitDept));
     }
 
     @Transactional
@@ -915,14 +1146,7 @@ public class VisitService {
         medication.setMedicationName(input.medicationName().trim());
         medication.setInstructions(input.instructions().trim());
 
-        VisitDepartmentMedication saved = visitDepartmentMedicationRepository.save(medication);
-
-        Map<String, Object> data = new HashMap<>();
-        data.put("id", saved.getId());
-        data.put("medicationName", saved.getMedicationName());
-        data.put("instructions", saved.getInstructions());
-        data.put("createdAt", saved.getCreatedAt());
-
-        return ApiResponse.success("Medication added successfully.", data);
+        visitDepartmentMedicationRepository.save(medication);
+        return ApiResponse.success("Medication added successfully.", visitDepartmentToMap(visitDept));
     }
 }

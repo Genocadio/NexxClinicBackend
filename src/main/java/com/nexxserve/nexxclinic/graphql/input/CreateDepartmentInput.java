@@ -15,6 +15,10 @@ public record CreateDepartmentInput(
 
         List<UUID> insuranceProviderIds,
 
-        List<UUID> defaultProductIds
+        List<UUID> defaultProductIds,
+
+        Boolean nursing,
+
+        Boolean supportRequests
 ) {
 }

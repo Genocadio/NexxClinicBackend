@@ -1,0 +1,10 @@
+package com.nexxserve.nexxclinic.repository;
+
+import com.nexxserve.nexxclinic.entity.VitalMeasurement;
+import java.util.List;
+import java.util.UUID;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface VitalMeasurementRepository extends JpaRepository<VitalMeasurement, UUID> {
+    List<VitalMeasurement> findByGroupIdOrderByCreatedAtAsc(UUID groupId);
+}

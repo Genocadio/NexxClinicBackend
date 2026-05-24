@@ -31,7 +31,7 @@ public class DepartmentQueryController {
         return departmentService.department(departmentId);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE, RoleName.NURSE   })
     @QueryMapping
     public ApiResponse departments(
             @Argument @Valid SearchDepartmentsInput input,

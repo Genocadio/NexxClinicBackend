@@ -34,6 +34,12 @@ public class Department {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
+    @Column(nullable = false)
+    private boolean nursing = false;
+
+    @Column(nullable = false)
+    private boolean supportRequests = false;
+
     @PrePersist
     void onCreate() {
         LocalDateTime now = LocalDateTime.now();
@@ -90,5 +96,21 @@ public class Department {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public boolean isNursing() {
+        return nursing;
+    }
+
+    public void setNursing(boolean nursing) {
+        this.nursing = nursing;
+    }
+
+    public boolean isSupportRequests() {
+        return supportRequests;
+    }
+
+    public void setSupportRequests(boolean supportRequests) {
+        this.supportRequests = supportRequests;
     }
 }

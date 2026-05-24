@@ -113,6 +113,7 @@ Every field object shares these properties regardless of type:
 | `radio` | Radio button group | `options` |
 | `checkbox` | Multi-select checkboxes | `options` |
 | `table` | Grid / spreadsheet | `tableConfig` |
+| `labRecord` | Structured lab panel | `labRecordConfig` |
 | `diagnosticRecord` | Add-diagnosis list widget | — |
 | `medicationLongForm` | Full medication entry list | — |
 | `medicationMiniForm` | Lightweight medication entry list | — |
@@ -136,6 +137,34 @@ Must include an `options` array of non-empty strings:
 #### `table`
 
 Must include a `tableConfig` object (see §6).
+
+#### `labRecord`
+
+Should include a `labRecordConfig` object with the layout and row definitions used by the consultation UI.
+
+```json
+{
+  "type": "labRecord",
+  "labRecordConfig": {
+    "layout": "valueUnit",
+    "rows": [
+      {
+        "id": "hemoglobin",
+        "name": "Hemoglobin",
+        "unitMode": "dropdown",
+        "unitOptions": ["g/dL"],
+        "defaultUnit": "g/dL"
+      },
+      {
+        "id": "malaria",
+        "name": "Malaria RDT",
+        "unitMode": "none",
+        "resultOptions": ["+ve", "-ve"]
+      }
+    ]
+  }
+}
+```
 
 #### `diagnosticRecord`
 

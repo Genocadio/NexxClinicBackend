@@ -9,6 +9,8 @@ import com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentStatusInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentProductQuantityInput;
 import com.nexxserve.nexxclinic.graphql.input.AddDiagnosisInput;
 import com.nexxserve.nexxclinic.graphql.input.AddMedicationInput;
+import com.nexxserve.nexxclinic.graphql.input.AddVisitVitalSignsInput;
+import com.nexxserve.nexxclinic.graphql.input.AddVisitPreInstructionsInput;
 import com.nexxserve.nexxclinic.model.ApiResponse;
 import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.security.HasRole;
@@ -127,6 +129,24 @@ public class VisitMutationController {
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         return visitService.addDiagnosisToVisitDepartment(input);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
+    public ApiResponse addVisitVitalSigns(
+            @Argument @Valid AddVisitVitalSignsInput input,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.addVisitVitalSigns(input, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
+    public ApiResponse addVisitPreInstructions(
+            @Argument @Valid AddVisitPreInstructionsInput input,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.addVisitPreInstructions(input, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})

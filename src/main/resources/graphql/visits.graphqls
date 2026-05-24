@@ -24,19 +24,69 @@ input AddMedicationInput {
 
 # ========== MUTATIONS ==========
 
+input AddVisitVitalSignItemInput {
+  measurementName: String!
+  value: String!
+  unit: String!
+}
+
+input AddVisitVitalSignsInput {
+  visitId: String!
+  vitalSigns: [AddVisitVitalSignItemInput!]!
+}
+
+input AddVisitPreInstructionMedicationInput {
+  medName: String!
+  dosage: String
+  route: String
+  frequency: String
+  duration: String
+  quantity: String
+  otherInstructions: String
+}
+
+input AddVisitPreInstructionProductInput {
+  productId: ID!
+  quantity: Float
+}
+
+input AddVisitPreInstructionItemInput {
+  type: String!
+  note: String
+  medications: [AddVisitPreInstructionMedicationInput!]
+  products: [AddVisitPreInstructionProductInput!]
+}
+
+input AddVisitPreInstructionsInput {
+  visitDepartmentId: String!
+  items: [AddVisitPreInstructionItemInput!]!
+}
+
 extend type Mutation {
   """
   Add a diagnosis to a visit department.
   diagnosisName is mandatory, icd11Code is optional.
   Multiple diagnostics can be added to the same visit department.
   """
-  addDiagnosis(input: AddDiagnosisInput!): ApiResponse!
+  addDiagnosis(input: AddDiagnosisInput!): VisitDepartmentResponse!
 
   """
   Add a medication to a visit department.
   Both medicationName and instructions are mandatory.
   Multiple medications can be added to the same visit department.
   """
-  addMedication(input: AddMedicationInput!): ApiResponse!
+  addMedication(input: AddMedicationInput!): VisitDepartmentResponse!
+
+  """
+  Record one or more vital sign measurements for a visit.
+  Each vital sign item must include measurementName, value, and unit.
+  """
+  addVisitVitalSigns(input: AddVisitVitalSignsInput!): VisitResponse!
+  
+  """
+  Add pre-instructions to a visit. Items can be of type `NOTE` or `MEDICATION`.
+  For `MEDICATION` items each medication entry must include `medName` (mandatory); other fields are optional.
+  """
+  addVisitPreInstructions(input: AddVisitPreInstructionsInput!): VisitDepartmentResponse!
 }
 

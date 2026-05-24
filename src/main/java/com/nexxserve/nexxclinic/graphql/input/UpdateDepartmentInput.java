@@ -13,6 +13,10 @@ public record UpdateDepartmentInput(
 
         List<UUID> insuranceProviderIds,
 
-        List<UUID> defaultProductIds
+        List<UUID> defaultProductIds,
+
+        Boolean nursing,
+
+        Boolean supportRequests
 ) {
 }

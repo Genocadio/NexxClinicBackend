@@ -11,6 +11,7 @@ public enum FieldType {
     radio,
     checkbox,
     table,
+    labRecord,
     signature,
     file,
     heading,

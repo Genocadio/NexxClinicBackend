@@ -116,6 +116,7 @@ enum VisitProductStatus {
 enum VisitDepartmentStatus {
   ACTIVE
   PENDING
+  ON_HOLD
   COMPLETED
 }
 
@@ -141,6 +142,7 @@ enum FieldType {
   radio
   checkbox
   table
+  labRecord
   signature
   file
   heading
@@ -390,12 +392,20 @@ type Department {
   defaultProducts: [Product!]!
   createdAt: String!
   updatedAt: String!
+  nursing: Boolean!
+  supportRequests: Boolean!
 }
 
 type DepartmentResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
     data: Department
+}
+
+type VisitDepartmentResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+    data: VisitDepartment
 }
 
 type PaginatedDepartmentResponse implements ApiResponse {
@@ -412,6 +422,22 @@ type Visit {
   visitDate: String!
   linkedInsurances: [PatientInsurance!]!
   departments: [VisitDepartment!]!
+  vitalSigns: [VisitVitalSignsGroup!]!
+}
+
+type VisitVitalSignsGroup {
+  id: ID!
+  addedBy: Worker
+  createdAt: String!
+  measurements: [VitalMeasurement!]!
+}
+
+type VitalMeasurement {
+  id: ID!
+  measurementName: String!
+  value: String!
+  unit: String!
+  createdAt: String!
 }
 
 type VisitDepartment {
@@ -422,8 +448,49 @@ type VisitDepartment {
   products: [VisitDepartmentProduct!]!
   diagnostics: [VisitDepartmentDiagnosis!]
   medications: [VisitDepartmentMedication!]
+  preInstructions: [VisitPreInstruction!]!
   createdAt: String!
   updatedAt: String!
+}
+
+type VisitPreInstructionMedication {
+  id: ID!
+  medName: String!
+  dosage: String
+  route: String
+  frequency: String
+  duration: String
+  quantity: String
+  otherInstructions: String
+  createdAt: String!
+}
+
+enum VisitPreInstructionProductStatus {
+  PENDING
+  ONGOING
+  COMPLETED
+  REJECTED
+}
+
+type VisitPreInstructionProduct {
+  id: ID!
+  product: Product
+  quantity: Float
+  requestedBy: Worker
+  status: VisitPreInstructionProductStatus!
+  processedBy: Worker
+  createdAt: String!
+  updatedAt: String!
+}
+
+type VisitPreInstruction {
+  id: ID!
+  type: String!
+  note: String
+  addedBy: Worker
+  medications: [VisitPreInstructionMedication!]!
+  products: [VisitPreInstructionProduct!]!
+  createdAt: String!
 }
 
 type VisitDepartmentDiagnosis {
@@ -902,6 +969,8 @@ input CreateDepartmentInput {
   insurancePolicyMode: DepartmentInsurancePolicyMode
   insuranceProviderIds: [ID!]
   defaultProductIds: [ID!]
+  nursing: Boolean
+  supportRequests: Boolean
 }
 
 input UpdateDepartmentInput {
@@ -909,6 +978,8 @@ input UpdateDepartmentInput {
   insurancePolicyMode: DepartmentInsurancePolicyMode
   insuranceProviderIds: [ID!]
   defaultProductIds: [ID!]
+  nursing: Boolean
+  supportRequests: Boolean
 }
 
 input SearchDepartmentsInput {
@@ -1009,6 +1080,20 @@ input TableConfigInput {
   rowHeaders: [String!]
 }
 
+input LabRecordRowInput {
+  id: String
+  name: String!
+  unitMode: String
+  unitOptions: [String!]
+  defaultUnit: String
+  resultOptions: [String!]
+}
+
+input LabRecordConfigInput {
+  layout: String!
+  rows: [LabRecordRowInput!]
+}
+
 input FormFieldInput {
   id: String!
   label: String!
@@ -1023,6 +1108,7 @@ input FormFieldInput {
   centerLabel: Boolean!
   options: [String!]
   tableConfig: TableConfigInput
+  labRecordConfig: LabRecordConfigInput
   conditionalRendering: ConditionalRenderingInput
 }
 
@@ -1122,12 +1208,12 @@ type Mutation {
   createVisit(input: CreateVisitInput!): VisitResponse!
   changeVisitDate(input: ChangeVisitDateInput!): VisitResponse!
   addVisitDepartment(visitId: ID!, departmentId: ID!): VisitResponse!
-completeVisitDepartment(visitDepartmentId: ID!): VisitResponse!
-  addVisitDepartmentProduct(input: CreateVisitDepartmentProductInput!): VisitResponse!
-  updateVisitDepartmentProductStatus(input: UpdateVisitDepartmentProductStatusInput!): VisitResponse!
-updateVisitDepartmentStatus(input: UpdateVisitDepartmentStatusInput!): VisitResponse!
-  updateVisitDepartmentProductQuantity(input: UpdateVisitDepartmentProductQuantityInput!): VisitResponse!
-  removeVisitDepartmentProduct(visitDepartmentProductId: ID!): VisitResponse!
+  completeVisitDepartment(visitDepartmentId: ID!): VisitDepartmentResponse!
+  addVisitDepartmentProduct(input: CreateVisitDepartmentProductInput!): VisitDepartmentResponse!
+  updateVisitDepartmentProductStatus(input: UpdateVisitDepartmentProductStatusInput!): VisitDepartmentResponse!
+  updateVisitDepartmentStatus(input: UpdateVisitDepartmentStatusInput!): VisitDepartmentResponse!
+  updateVisitDepartmentProductQuantity(input: UpdateVisitDepartmentProductQuantityInput!): VisitDepartmentResponse!
+  removeVisitDepartmentProduct(visitDepartmentProductId: ID!): VisitDepartmentResponse!
   billVisit(input: BillVisitInput!): VisitBillingResponse!
   recordVisitBillingPayment(input: RecordVisitBillingPaymentInput!): VisitBillingResponse!
   generateInvoice(billId: ID!): InvoiceResponse!

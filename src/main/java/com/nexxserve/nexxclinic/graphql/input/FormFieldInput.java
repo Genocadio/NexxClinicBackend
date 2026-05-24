@@ -38,6 +38,8 @@ public record FormFieldInput(
 
         @Valid TableConfigInput tableConfig,
 
+        @Valid LabRecordConfigInput labRecordConfig,
+
         @Valid ConditionalRenderingInput conditionalRendering
 ) {
 }

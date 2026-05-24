@@ -80,6 +80,12 @@ public class DepartmentService {
         Department department = new Department();
         department.setName(name);
         department.setInsurancePolicyMode(resolveMode(input.insurancePolicyMode(), input.insuranceProviderIds()));
+        if (input.nursing() != null) {
+            department.setNursing(input.nursing());
+        }
+        if (input.supportRequests() != null) {
+            department.setSupportRequests(input.supportRequests());
+        }
 
         Department savedDepartment = departmentRepository.save(department);
 
@@ -135,6 +141,14 @@ public class DepartmentService {
             if (defaultProductsError != null) {
                 return defaultProductsError;
             }
+        }
+
+        if (input.nursing() != null) {
+            department.setNursing(input.nursing());
+        }
+
+        if (input.supportRequests() != null) {
+            department.setSupportRequests(input.supportRequests());
         }
 
         Department saved = departmentRepository.save(department);
@@ -299,6 +313,8 @@ public class DepartmentService {
         data.put("defaultProducts", departmentDefaultProductRepository.findByDepartmentId(department.getId()).stream().map(link -> productToMap(link.getProduct())).toList());
         data.put("createdAt", department.getCreatedAt());
         data.put("updatedAt", department.getUpdatedAt());
+        data.put("nursing", department.isNursing());
+        data.put("supportRequests", department.isSupportRequests());
         return data;
     }
 

@@ -55,8 +55,12 @@ public class VisitDepartment {
     @OneToMany(mappedBy = "visitDepartment", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<VisitDepartmentMedication> medications = new ArrayList<>();
 
+    @OneToMany(mappedBy = "visitDepartment", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<VisitPreInstruction> preInstructions = new ArrayList<>();
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
 
     @Column(nullable = false)
     private LocalDateTime updatedAt;
@@ -127,6 +131,14 @@ public class VisitDepartment {
 
     public void setMedications(List<VisitDepartmentMedication> medications) {
         this.medications = medications;
+    }
+
+    public List<VisitPreInstruction> getPreInstructions() {
+        return preInstructions;
+    }
+
+    public void setPreInstructions(List<VisitPreInstruction> preInstructions) {
+        this.preInstructions = preInstructions;
     }
 
     public LocalDateTime getCreatedAt() {

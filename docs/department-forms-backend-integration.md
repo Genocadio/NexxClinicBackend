@@ -459,7 +459,7 @@ WHERE id = ? AND department_id = ?
 ```typescript
 enum FieldType {
   text, email, number, date, textarea, 
-  select, radio, checkbox, table, 
+  select, radio, checkbox, table, labRecord, 
   signature, file, heading, paragraph
 }
 
@@ -483,6 +483,17 @@ interface FormField {
     headerPlacement?: string
     columnHeaders?: string[]
     rowHeaders?: string[]
+  }
+  labRecordConfig?: {
+    layout: 'valueUnit' | 'result'
+    rows?: Array<{
+      id?: string
+      name: string
+      unitMode?: 'dropdown' | 'none'
+      unitOptions?: string[]
+      defaultUnit?: string
+      resultOptions?: string[]
+    }>
   }
   conditionalRendering?: {
     dependsOn: string!

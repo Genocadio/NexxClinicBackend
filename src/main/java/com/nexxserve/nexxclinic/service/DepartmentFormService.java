@@ -15,6 +15,8 @@ import com.nexxserve.nexxclinic.graphql.input.FormActionInput;
 import com.nexxserve.nexxclinic.graphql.input.FormFieldInput;
 import com.nexxserve.nexxclinic.graphql.input.FormInput;
 import com.nexxserve.nexxclinic.graphql.input.FormSectionInput;
+import com.nexxserve.nexxclinic.graphql.input.LabRecordConfigInput;
+import com.nexxserve.nexxclinic.graphql.input.LabRecordRowInput;
 import com.nexxserve.nexxclinic.graphql.input.TableConfigInput;
 import com.nexxserve.nexxclinic.model.AnswerStatus;
 import com.nexxserve.nexxclinic.model.ApiResponse;
@@ -479,6 +481,7 @@ public class DepartmentFormService {
             row.put("centerLabel", bool(field.centerLabel()));
             row.put("options", field.options() == null ? List.of() : field.options());
             row.put("tableConfig", normalizeTableConfig(field.tableConfig()));
+            row.put("labRecordConfig", normalizeLabRecordConfig(field.labRecordConfig()));
             row.put("conditionalRendering", normalizeConditionalRendering(field.conditionalRendering()));
             normalized.add(row);
         }
@@ -545,6 +548,31 @@ public class DepartmentFormService {
         row.put("headerPlacement", config.headerPlacement());
         row.put("columnHeaders", config.columnHeaders() == null ? List.of() : config.columnHeaders());
         row.put("rowHeaders", config.rowHeaders() == null ? List.of() : config.rowHeaders());
+        return row;
+    }
+
+    private Map<String, Object> normalizeLabRecordConfig(LabRecordConfigInput config) {
+        if (config == null) {
+            return null;
+        }
+
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("layout", config.layout());
+        row.put("rows", config.rows() == null ? List.of() : config.rows().stream()
+                .filter(java.util.Objects::nonNull)
+                .map(this::normalizeLabRecordRow)
+                .toList());
+        return row;
+    }
+
+    private Map<String, Object> normalizeLabRecordRow(LabRecordRowInput rowInput) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("id", rowInput.id());
+        row.put("name", rowInput.name());
+        row.put("unitMode", rowInput.unitMode());
+        row.put("unitOptions", rowInput.unitOptions() == null ? List.of() : rowInput.unitOptions());
+        row.put("defaultUnit", rowInput.defaultUnit());
+        row.put("resultOptions", rowInput.resultOptions() == null ? List.of() : rowInput.resultOptions());
         return row;
     }
 
