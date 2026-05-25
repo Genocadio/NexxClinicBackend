@@ -140,7 +140,7 @@ public class VisitService {
 
         Visit visit = new Visit();
         visit.setPatient(patientOptional.get());
-        visit.setVisitDate(input.visitDate());
+        visit.setVisitDate(input.visitDate() == null ? LocalDate.now() : input.visitDate());
         visit.setStatus(VisitStatus.CREATED);
 
         Visit saved = visitRepository.save(visit);

@@ -7,7 +7,6 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 public record CreatePatientInsuranceInput(
-        @NotNull(message = "patientId is required")
         UUID patientId,
 
         @NotNull(message = "insuranceProviderId is required")

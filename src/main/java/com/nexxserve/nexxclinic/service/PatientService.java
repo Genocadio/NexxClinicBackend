@@ -5,10 +5,12 @@ import com.nexxserve.nexxclinic.entity.Patient;
 import com.nexxserve.nexxclinic.entity.PatientInsurance;
 import com.nexxserve.nexxclinic.graphql.input.CreatePatientInput;
 import com.nexxserve.nexxclinic.graphql.input.CreatePatientInsuranceInput;
+import com.nexxserve.nexxclinic.graphql.input.CreateVisitInput;
 import com.nexxserve.nexxclinic.graphql.input.SearchPatientsInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdatePatientInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdatePatientInsuranceInput;
 import com.nexxserve.nexxclinic.model.ApiResponse;
+import com.nexxserve.nexxclinic.model.ResponseStatus;
 import com.nexxserve.nexxclinic.repository.InsuranceProviderRepository;
 import com.nexxserve.nexxclinic.repository.PatientInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.PatientRepository;
@@ -35,15 +37,18 @@ public class PatientService {
     private final PatientRepository patientRepository;
     private final PatientInsuranceRepository patientInsuranceRepository;
     private final InsuranceProviderRepository insuranceProviderRepository;
+    private final VisitService visitService;
 
     public PatientService(
             PatientRepository patientRepository,
             PatientInsuranceRepository patientInsuranceRepository,
-            InsuranceProviderRepository insuranceProviderRepository
+            InsuranceProviderRepository insuranceProviderRepository,
+            VisitService visitService
     ) {
         this.patientRepository = patientRepository;
         this.patientInsuranceRepository = patientInsuranceRepository;
         this.insuranceProviderRepository = insuranceProviderRepository;
+        this.visitService = visitService;
     }
 
     @Transactional(readOnly = true)
@@ -193,8 +198,41 @@ public class PatientService {
                 input.postalAddress(), input.nationalIdNumber(), input.passportNumber(), input.emergencyContactName(),
                 input.emergencyContactRelationship(), input.emergencyContactPhoneNumber());
 
+        if (input.insurances() != null && !input.insurances().isEmpty()) {
+            ApiResponse insuranceValidation = validatePatientInsuranceInputs(patient, input.insurances());
+            if (insuranceValidation.status() != ResponseStatus.SUCCESS) {
+                return insuranceValidation;
+            }
+        }
+
         Patient saved = patientRepository.save(patient);
-        return ApiResponse.success("Patient registered.", patientToMap(saved));
+
+        List<UUID> linkedInsuranceIds = new ArrayList<>();
+        if (input.insurances() != null && !input.insurances().isEmpty()) {
+            for (CreatePatientInsuranceInput insuranceInput : input.insurances()) {
+                ApiResponse insuranceResponse = createPatientInsuranceForSavedPatient(saved, insuranceInput);
+                if (insuranceResponse.status() != ResponseStatus.SUCCESS) {
+                    return insuranceResponse;
+                }
+
+                PatientInsurance savedInsurance = (PatientInsurance) insuranceResponse.data();
+                linkedInsuranceIds.add(savedInsurance.getId());
+            }
+        }
+
+        CreateVisitInput visitInput = new CreateVisitInput(
+                saved.getId(),
+                LocalDate.now(),
+                linkedInsuranceIds.isEmpty() ? null : linkedInsuranceIds,
+                null
+        );
+
+        ApiResponse visitResponse = visitService.createVisit(visitInput, null);
+        if (visitResponse.status() != ResponseStatus.SUCCESS) {
+            return visitResponse;
+        }
+
+        return visitResponse;
     }
 
     @Transactional
@@ -390,6 +428,90 @@ public class PatientService {
         return ApiResponse.success("Patient insurance added.", patientInsuranceToMap(saved));
     }
 
+    private ApiResponse validatePatientInsuranceInputs(Patient patient, List<CreatePatientInsuranceInput> insurances) {
+        for (CreatePatientInsuranceInput input : insurances) {
+            if (input == null || input.insuranceProviderId() == null) {
+                return ApiResponse.error("insuranceProviderId is required for patient insurance.", "VALIDATION_ERROR");
+            }
+
+            Optional<InsuranceProvider> providerOptional = insuranceProviderRepository.findById(input.insuranceProviderId());
+            if (providerOptional.isEmpty()) {
+                return ApiResponse.error("Insurance provider not found.", "NOT_FOUND");
+            }
+
+            if (!providerOptional.get().isSupportedByClinic()) {
+                return ApiResponse.error("Insurance provider is not currently supported by clinic.", "INSURANCE_NOT_SUPPORTED");
+            }
+
+            PatientInsurance patientInsurance = new PatientInsurance();
+            patientInsurance.setPatient(patient);
+            patientInsurance.setInsuranceProvider(providerOptional.get());
+
+            ApiResponse validationError = applyPatientInsuranceInput(
+                    patientInsurance,
+                    input.insuranceCardNumber(),
+                    input.providingCompanyOrEmployer(),
+                    input.principalMember(),
+                    input.principalMemberName(),
+                    input.principalMemberPhoneNumber(),
+                    input.validFrom(),
+                    input.validUntil(),
+                    true
+            );
+            if (validationError != null) {
+                return validationError;
+            }
+
+            ApiResponse businessRuleError = validateInsuranceBusinessRules(patient, patientInsurance);
+            if (businessRuleError != null) {
+                return businessRuleError;
+            }
+        }
+        return ApiResponse.success("Insurance inputs validated.", null);
+    }
+
+    private ApiResponse createPatientInsuranceForSavedPatient(Patient patient, CreatePatientInsuranceInput input) {
+        if (input == null || input.insuranceProviderId() == null) {
+            return ApiResponse.error("insuranceProviderId is required for patient insurance.", "VALIDATION_ERROR");
+        }
+
+        Optional<InsuranceProvider> providerOptional = insuranceProviderRepository.findById(input.insuranceProviderId());
+        if (providerOptional.isEmpty()) {
+            return ApiResponse.error("Insurance provider not found.", "NOT_FOUND");
+        }
+
+        if (!providerOptional.get().isSupportedByClinic()) {
+            return ApiResponse.error("Insurance provider is not currently supported by clinic.", "INSURANCE_NOT_SUPPORTED");
+        }
+
+        PatientInsurance patientInsurance = new PatientInsurance();
+        patientInsurance.setPatient(patient);
+        patientInsurance.setInsuranceProvider(providerOptional.get());
+
+        ApiResponse validationError = applyPatientInsuranceInput(
+                patientInsurance,
+                input.insuranceCardNumber(),
+                input.providingCompanyOrEmployer(),
+                input.principalMember(),
+                input.principalMemberName(),
+                input.principalMemberPhoneNumber(),
+                input.validFrom(),
+                input.validUntil(),
+                true
+        );
+        if (validationError != null) {
+            return validationError;
+        }
+
+        ApiResponse businessRuleError = validateInsuranceBusinessRules(patient, patientInsurance);
+        if (businessRuleError != null) {
+            return businessRuleError;
+        }
+
+        PatientInsurance saved = patientInsuranceRepository.save(patientInsurance);
+        return ApiResponse.success("Patient insurance added.", saved);
+    }
+
     @Transactional
     public ApiResponse updatePatientInsurance(UUID patientInsuranceId, UpdatePatientInsuranceInput input) {
         if (patientInsuranceId == null || input == null) {
@@ -544,12 +666,19 @@ public class PatientService {
             return ApiResponse.error("validFrom cannot be after validUntil.", "VALIDATION_ERROR");
         }
 
-        if (!patientInsurance.isPrincipalMember()
-                && (patientInsurance.getPrincipalMemberName() == null || patientInsurance.getPrincipalMemberPhoneNumber() == null)) {
-            return ApiResponse.error(
-                    "principalMemberName and principalMemberPhoneNumber are required for dependent members.",
-                    "VALIDATION_ERROR"
-            );
+        if (!patientInsurance.isPrincipalMember()) {
+            if (patientInsurance.getPrincipalMemberName() == null || patientInsurance.getPrincipalMemberPhoneNumber() == null) {
+                return ApiResponse.error(
+                        "principalMemberName and principalMemberPhoneNumber are required for dependent members.",
+                        "VALIDATION_ERROR"
+                );
+            }
+            if (patientInsurance.getProvidingCompanyOrEmployer() == null || patientInsurance.getProvidingCompanyOrEmployer().isBlank()) {
+                return ApiResponse.error(
+                        "providingCompanyOrEmployer is required for dependent members.",
+                        "VALIDATION_ERROR"
+                );
+            }
         }
 
         if (patientInsurance.getValidUntil() != null && patientInsurance.getValidUntil().isBefore(LocalDate.now())) {
@@ -629,7 +758,7 @@ public class PatientService {
         data.put("emergencyContactName", patient.getEmergencyContactName());
         data.put("emergencyContactRelationship", patient.getEmergencyContactRelationship());
         data.put("emergencyContactPhoneNumber", patient.getEmergencyContactPhoneNumber());
-        data.put("insurances", patientInsuranceRepository.findByPatientId(patient.getId()).stream().map(this::patientInsuranceToMap).toList());
+        data.put("patientInsurances", patientInsuranceRepository.findByPatientId(patient.getId()).stream().map(this::patientInsuranceToMap).toList());
         data.put("createdAt", patient.getCreatedAt());
         data.put("updatedAt", patient.getUpdatedAt());
         return data;

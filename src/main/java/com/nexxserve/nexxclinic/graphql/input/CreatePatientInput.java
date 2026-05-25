@@ -2,10 +2,12 @@ package com.nexxserve.nexxclinic.graphql.input;
 
 import com.nexxserve.nexxclinic.model.Gender;
 import com.nexxserve.nexxclinic.validation.NotFutureDate;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
+import java.util.List;
 
 public record CreatePatientInput(
         @NotBlank(message = "firstName is required")
@@ -56,6 +58,9 @@ public record CreatePatientInput(
         String emergencyContactRelationship,
 
         @Size(max = 30, message = "emergencyContactPhoneNumber must not exceed 30 characters")
-        String emergencyContactPhoneNumber
+        String emergencyContactPhoneNumber,
+
+        @Valid
+        List<CreatePatientInsuranceInput> insurances
 ) {
 }
