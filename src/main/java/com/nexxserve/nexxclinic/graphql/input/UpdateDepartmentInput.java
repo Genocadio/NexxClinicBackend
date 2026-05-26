@@ -17,6 +17,8 @@ public record UpdateDepartmentInput(
 
         Boolean nursing,
 
-        Boolean supportRequests
+        Boolean supportRequests,
+
+        Boolean requestsProducts
 ) {
 }

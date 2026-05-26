@@ -49,6 +49,7 @@ import com.nexxserve.nexxclinic.repository.VisitRepository;
 import com.nexxserve.nexxclinic.repository.WorkerRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.Period;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -140,7 +141,7 @@ public class VisitService {
 
         Visit visit = new Visit();
         visit.setPatient(patientOptional.get());
-        visit.setVisitDate(input.visitDate() == null ? LocalDate.now() : input.visitDate());
+        visit.setVisitDate(input.visitDate() == null ? LocalDateTime.now() : input.visitDate());
         visit.setStatus(VisitStatus.CREATED);
 
         Visit saved = visitRepository.save(visit);

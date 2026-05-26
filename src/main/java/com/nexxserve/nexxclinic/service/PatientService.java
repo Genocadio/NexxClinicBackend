@@ -222,7 +222,7 @@ public class PatientService {
 
         CreateVisitInput visitInput = new CreateVisitInput(
                 saved.getId(),
-                LocalDate.now(),
+                java.time.LocalDateTime.now(),
                 linkedInsuranceIds.isEmpty() ? null : linkedInsuranceIds,
                 null
         );

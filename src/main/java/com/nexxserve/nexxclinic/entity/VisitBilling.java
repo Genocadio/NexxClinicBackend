@@ -14,7 +14,6 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -57,7 +56,7 @@ public class VisitBilling {
     private boolean fullyBilledVisit;
 
     @Column
-    private LocalDate billingDate;
+    private LocalDateTime billingDate;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -199,11 +198,11 @@ public class VisitBilling {
         this.fullyBilledVisit = fullyBilledVisit;
     }
 
-    public LocalDate getBillingDate() {
+    public LocalDateTime getBillingDate() {
         return billingDate;
     }
 
-    public void setBillingDate(LocalDate billingDate) {
+    public void setBillingDate(LocalDateTime billingDate) {
         this.billingDate = billingDate;
     }
 

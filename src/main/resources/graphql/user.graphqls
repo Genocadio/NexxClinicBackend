@@ -395,6 +395,7 @@ type Department {
   updatedAt: String!
   nursing: Boolean!
   supportRequests: Boolean!
+  requestsProducts: Boolean!
 }
 
 type DepartmentResponse implements ApiResponse {
@@ -973,6 +974,7 @@ input CreateDepartmentInput {
   defaultProductIds: [ID!]
   nursing: Boolean
   supportRequests: Boolean
+  requestsProducts: Boolean
 }
 
 input UpdateDepartmentInput {
@@ -982,6 +984,7 @@ input UpdateDepartmentInput {
   defaultProductIds: [ID!]
   nursing: Boolean
   supportRequests: Boolean
+  requestsProducts: Boolean
 }
 
 input SearchDepartmentsInput {

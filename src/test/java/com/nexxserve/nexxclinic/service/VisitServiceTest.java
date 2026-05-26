@@ -61,7 +61,7 @@ class VisitServiceTest {
         Visit visit = new Visit();
         visit.setPatient(patient);
         visit.setStatus(VisitStatus.IN_PROGRESS);
-        visit.setVisitDate(java.time.LocalDate.now());
+        visit.setVisitDate(java.time.LocalDateTime.now());
         visit = visitRepository.save(visit);
 
         Department department = new Department();

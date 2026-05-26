@@ -40,6 +40,9 @@ public class Department {
     @Column(nullable = false)
     private boolean supportRequests = false;
 
+    @Column(columnDefinition = "boolean default true")
+    private Boolean requestsProducts = true;
+
     @PrePersist
     void onCreate() {
         LocalDateTime now = LocalDateTime.now();
@@ -47,6 +50,9 @@ public class Department {
         this.updatedAt = now;
         if (this.insurancePolicyMode == null) {
             this.insurancePolicyMode = DepartmentInsurancePolicyMode.ALL;
+        }
+        if (this.requestsProducts == null) {
+            this.requestsProducts = true;
         }
     }
 
@@ -112,5 +118,13 @@ public class Department {
 
     public void setSupportRequests(boolean supportRequests) {
         this.supportRequests = supportRequests;
+    }
+
+    public boolean isRequestsProducts() {
+        return requestsProducts == null || requestsProducts;
+    }
+
+    public void setRequestsProducts(Boolean requestsProducts) {
+        this.requestsProducts = requestsProducts;
     }
 }

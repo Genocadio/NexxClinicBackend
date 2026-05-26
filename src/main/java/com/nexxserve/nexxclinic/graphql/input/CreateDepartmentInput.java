@@ -19,6 +19,8 @@ public record CreateDepartmentInput(
 
         Boolean nursing,
 
-        Boolean supportRequests
+        Boolean supportRequests,
+
+        Boolean requestsProducts
 ) {
 }

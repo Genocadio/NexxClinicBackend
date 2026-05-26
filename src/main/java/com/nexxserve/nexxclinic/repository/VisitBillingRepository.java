@@ -1,7 +1,7 @@
 package com.nexxserve.nexxclinic.repository;
 
 import com.nexxserve.nexxclinic.entity.VisitBilling;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -15,5 +15,5 @@ public interface VisitBillingRepository extends JpaRepository<VisitBilling, UUID
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update VisitBilling vb set vb.billingDate = :billingDate where vb.visit.id = :visitId")
-    int updateBillingDateByVisitId(@Param("visitId") UUID visitId, @Param("billingDate") LocalDate billingDate);
+    int updateBillingDateByVisitId(@Param("visitId") UUID visitId, @Param("billingDate") LocalDateTime billingDate);
 }

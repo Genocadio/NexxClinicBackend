@@ -86,6 +86,9 @@ public class DepartmentService {
         if (input.supportRequests() != null) {
             department.setSupportRequests(input.supportRequests());
         }
+        if (input.requestsProducts() != null) {
+            department.setRequestsProducts(input.requestsProducts());
+        }
 
         Department savedDepartment = departmentRepository.save(department);
 
@@ -149,6 +152,10 @@ public class DepartmentService {
 
         if (input.supportRequests() != null) {
             department.setSupportRequests(input.supportRequests());
+        }
+
+        if (input.requestsProducts() != null) {
+            department.setRequestsProducts(input.requestsProducts());
         }
 
         Department saved = departmentRepository.save(department);
@@ -315,6 +322,7 @@ public class DepartmentService {
         data.put("updatedAt", department.getUpdatedAt());
         data.put("nursing", department.isNursing());
         data.put("supportRequests", department.isSupportRequests());
+        data.put("requestsProducts", department.isRequestsProducts());
         return data;
     }
 

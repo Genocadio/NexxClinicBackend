@@ -13,7 +13,6 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -30,7 +29,7 @@ public class Visit {
     private Patient patient;
 
     @Column(nullable = false)
-    private LocalDate visitDate;
+    private LocalDateTime visitDate;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -51,7 +50,7 @@ public class Visit {
             this.status = VisitStatus.CREATED;
         }
         if (this.visitDate == null) {
-            this.visitDate = now.toLocalDate();
+            this.visitDate = now;
         }
     }
 
@@ -79,11 +78,11 @@ public class Visit {
         this.patient = patient;
     }
 
-    public LocalDate getVisitDate() {
+    public LocalDateTime getVisitDate() {
         return visitDate;
     }
 
-    public void setVisitDate(LocalDate visitDate) {
+    public void setVisitDate(LocalDateTime visitDate) {
         this.visitDate = visitDate;
     }
 
