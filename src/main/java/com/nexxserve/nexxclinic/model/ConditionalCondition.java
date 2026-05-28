@@ -8,5 +8,6 @@ public enum ConditionalCondition {
     greater_than,
     less_than,
     is_empty,
-    is_not_empty
+    is_not_empty,
+    hasItem
 }

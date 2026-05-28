@@ -166,6 +166,7 @@ enum ConditionalCondition {
   less_than
   is_empty
   is_not_empty
+  hasItem
 }
 
 enum AnswerStatus {
