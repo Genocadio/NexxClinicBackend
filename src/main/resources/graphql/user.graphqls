@@ -695,18 +695,16 @@ type FormVersionListResponse implements ApiResponse {
   data: [FormVersion!]
 }
 
-type ConsultationAnswers {
-  id: ID!
-  consultationId: ID!
-  visitId: ID!
-  patientId: ID!
-  departmentId: ID!
-  formId: ID!
-  formVersion: String!
+type ConsultationAnswer {
   status: AnswerStatus!
   answers: String!
   submittedAt: String
   updatedAt: String!
+}
+
+type ConsultationAnswers {
+  answer: ConsultationAnswer!
+  form: Form!
 }
 
 type ConsultationAnswersResponse implements ApiResponse {
@@ -1234,10 +1232,10 @@ type Mutation {
   updateVisitDepartmentProductStatus(input: UpdateVisitDepartmentProductStatusInput!): VisitDepartmentResponse!
   updateVisitDepartmentStatus(input: UpdateVisitDepartmentStatusInput!): VisitDepartmentResponse!
   updateVisitDepartmentProductQuantity(input: UpdateVisitDepartmentProductQuantityInput!): VisitDepartmentResponse!
+  completeVisit(input: ConsultationAnswersInput!, final: Boolean!): VisitResponse!
   removeVisitDepartmentProduct(visitDepartmentProductId: ID!): VisitDepartmentResponse!
   billVisit(input: BillVisitInput!): VisitBillingResponse!
   recordVisitBillingPayment(input: RecordVisitBillingPaymentInput!): VisitBillingResponse!
   generateInvoice(billId: ID!): InvoiceResponse!
-  completeVisit(visitId: ID!): VisitResponse!
   cancelVisit(visitId: ID!): VisitResponse!
 }

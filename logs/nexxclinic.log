@@ -429,3 +429,669 @@ This generated password is for development use only. Your security configuration
 2026-05-28 10:14:31 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
 2026-05-28 10:14:31 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Started NexxclinicApplication in 1.289 seconds (process running for 726.011)
 2026-05-28 10:14:31 [restartedMain] INFO  o.s.b.d.a.ConditionEvaluationDeltaLoggingListener - Condition evaluation unchanged
+2026-05-28 10:21:53 [http-nio-8080-exec-1] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-05-28 10:21:53 [http-nio-8080-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2026-05-28 10:21:53 [http-nio-8080-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 5 ms
+2026-05-28 10:21:53 [http-nio-8080-exec-2] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:21:53 [http-nio-8080-exec-2] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:21:53 [http-nio-8080-exec-2] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:21:53 [http-nio-8080-exec-2] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:21:53 [http-nio-8080-exec-2] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method updateVisitDepartmentStatus with roles: [CLINICIAN]
+2026-05-28 10:21:53 [http-nio-8080-exec-3] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:21:53 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:21:53 [http-nio-8080-exec-3] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:21:53 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:21:53 [http-nio-8080-exec-3] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method visits with roles: [CLINICIAN]
+2026-05-28 10:21:54 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:21:54 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:21:54 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:21:54 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:21:54 [http-nio-8080-exec-4] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method visit with roles: [CLINICIAN]
+2026-05-28 10:21:54 [http-nio-8080-exec-5] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:21:54 [http-nio-8080-exec-6] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:21:54 [http-nio-8080-exec-5] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:21:54 [http-nio-8080-exec-5] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:21:54 [http-nio-8080-exec-5] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:21:54 [http-nio-8080-exec-5] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method visit with roles: [CLINICIAN]
+2026-05-28 10:21:54 [http-nio-8080-exec-6] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:21:54 [http-nio-8080-exec-6] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:21:54 [http-nio-8080-exec-6] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:21:54 [http-nio-8080-exec-6] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method getLatestForm with roles: [CLINICIAN]
+2026-05-28 10:21:54 [http-nio-8080-exec-7] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:21:54 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:21:54 [http-nio-8080-exec-7] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:21:54 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:21:54 [http-nio-8080-exec-7] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method getConsultationAnswers with roles: [CLINICIAN]
+2026-05-28 10:21:55 [http-nio-8080-exec-8] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:21:55 [http-nio-8080-exec-8] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:21:55 [http-nio-8080-exec-8] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:21:55 [http-nio-8080-exec-8] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:21:55 [http-nio-8080-exec-8] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method upsertConsultationAnswers with roles: [CLINICIAN]
+2026-05-28 10:21:55 [http-nio-8080-exec-9] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:21:55 [http-nio-8080-exec-9] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:21:55 [http-nio-8080-exec-9] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:21:55 [http-nio-8080-exec-9] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:21:55 [http-nio-8080-exec-9] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method upsertConsultationAnswers with roles: [CLINICIAN]
+2026-05-28 10:24:13 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:24:13 [http-nio-8080-exec-5] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:24:13 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:24:13 [http-nio-8080-exec-5] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:24:13 [http-nio-8080-exec-5] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:24:13 [http-nio-8080-exec-5] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:24:13 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:24:13 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:24:13 [http-nio-8080-exec-5] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method getConsultationAnswers with roles: [CLINICIAN]
+2026-05-28 10:24:13 [http-nio-8080-exec-4] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method getLatestForm with roles: [CLINICIAN]
+2026-05-28 10:24:13 [http-nio-8080-exec-6] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:24:13 [http-nio-8080-exec-6] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:24:13 [http-nio-8080-exec-6] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:24:13 [http-nio-8080-exec-6] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:24:13 [http-nio-8080-exec-6] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method getConsultationAnswers with roles: [CLINICIAN]
+2026-05-28 10:24:25 [http-nio-8080-exec-7] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:24:25 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:24:25 [http-nio-8080-exec-7] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:24:25 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:24:25 [http-nio-8080-exec-7] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method products with roles: [CLINICIAN]
+2026-05-28 10:24:28 [http-nio-8080-exec-8] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:24:28 [http-nio-8080-exec-8] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:24:28 [http-nio-8080-exec-8] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:24:28 [http-nio-8080-exec-8] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:24:28 [http-nio-8080-exec-8] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method addVisitDepartmentProduct with roles: [CLINICIAN]
+2026-05-28 10:24:28 [http-nio-8080-exec-9] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:24:28 [http-nio-8080-exec-9] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:24:28 [http-nio-8080-exec-9] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:24:28 [http-nio-8080-exec-9] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:24:28 [http-nio-8080-exec-9] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method visit with roles: [CLINICIAN]
+2026-05-28 10:24:28 [http-nio-8080-exec-10] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:24:28 [http-nio-8080-exec-10] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:24:28 [http-nio-8080-exec-10] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:24:28 [http-nio-8080-exec-10] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:24:28 [http-nio-8080-exec-10] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method upsertConsultationAnswers with roles: [CLINICIAN]
+2026-05-28 10:24:28 [http-nio-8080-exec-1] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:24:28 [http-nio-8080-exec-1] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:24:28 [http-nio-8080-exec-1] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:24:28 [http-nio-8080-exec-1] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:24:28 [http-nio-8080-exec-1] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method upsertConsultationAnswers with roles: [CLINICIAN]
+2026-05-28 10:33:38 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:38 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:33:38 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:33:38 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:38 [http-nio-8080-exec-4] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method upsertConsultationAnswers with roles: [CLINICIAN]
+2026-05-28 10:33:44 [http-nio-8080-exec-7] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:44 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:33:44 [http-nio-8080-exec-7] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:33:44 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:44 [http-nio-8080-exec-7] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method addDiagnosis with roles: [CLINICIAN]
+2026-05-28 10:33:44 [http-nio-8080-exec-8] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:44 [http-nio-8080-exec-8] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:33:44 [http-nio-8080-exec-8] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:33:44 [http-nio-8080-exec-8] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:44 [http-nio-8080-exec-8] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method upsertConsultationAnswers with roles: [CLINICIAN]
+2026-05-28 10:33:44 [http-nio-8080-exec-9] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:44 [http-nio-8080-exec-9] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:33:44 [http-nio-8080-exec-9] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:33:44 [http-nio-8080-exec-9] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:44 [http-nio-8080-exec-9] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method upsertConsultationAnswers with roles: [CLINICIAN]
+2026-05-28 10:33:46 [http-nio-8080-exec-10] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:46 [http-nio-8080-exec-10] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:33:46 [http-nio-8080-exec-10] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:33:46 [http-nio-8080-exec-10] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:46 [http-nio-8080-exec-10] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method upsertConsultationAnswers with roles: [CLINICIAN]
+2026-05-28 10:33:53 [http-nio-8080-exec-3] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:53 [http-nio-8080-exec-5] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:53 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:33:53 [http-nio-8080-exec-3] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:33:53 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:53 [http-nio-8080-exec-5] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:33:53 [http-nio-8080-exec-5] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:33:53 [http-nio-8080-exec-5] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:53 [http-nio-8080-exec-3] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method visits with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:33:57 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:33:57 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-4] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method updateVisitDepartmentStatus with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-6] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-6] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:33:57 [http-nio-8080-exec-6] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:33:57 [http-nio-8080-exec-6] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-6] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method visits with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-7] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:33:57 [http-nio-8080-exec-7] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:33:57 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-7] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method visit with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-8] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-9] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-8] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:33:57 [http-nio-8080-exec-9] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:33:57 [http-nio-8080-exec-8] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:33:57 [http-nio-8080-exec-9] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:33:57 [http-nio-8080-exec-9] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-8] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-9] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method getLatestForm with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-8] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method visit with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-10] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-10] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:33:57 [http-nio-8080-exec-10] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:33:57 [http-nio-8080-exec-10] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-10] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method getConsultationAnswers with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-1] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-1] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:33:57 [http-nio-8080-exec-1] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:33:57 [http-nio-8080-exec-1] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-1] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method upsertConsultationAnswers with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-2] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-2] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:33:57 [http-nio-8080-exec-2] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:33:57 [http-nio-8080-exec-2] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:33:57 [http-nio-8080-exec-2] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method upsertConsultationAnswers with roles: [CLINICIAN]
+2026-05-28 10:34:03 [http-nio-8080-exec-3] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:03 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:34:03 [http-nio-8080-exec-3] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:34:03 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:03 [http-nio-8080-exec-3] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method upsertConsultationAnswers with roles: [CLINICIAN]
+2026-05-28 10:34:05 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:05 [http-nio-8080-exec-6] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:05 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:34:05 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:34:05 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:05 [http-nio-8080-exec-6] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:34:05 [http-nio-8080-exec-6] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:34:05 [http-nio-8080-exec-6] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:05 [http-nio-8080-exec-4] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method visits with roles: [CLINICIAN]
+2026-05-28 10:34:06 [http-nio-8080-exec-7] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:06 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:34:06 [http-nio-8080-exec-7] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:34:06 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:06 [http-nio-8080-exec-7] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method updateVisitDepartmentStatus with roles: [CLINICIAN]
+2026-05-28 10:34:06 [http-nio-8080-exec-9] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:06 [http-nio-8080-exec-9] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:34:06 [http-nio-8080-exec-9] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:34:06 [http-nio-8080-exec-9] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:06 [http-nio-8080-exec-9] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method visits with roles: [CLINICIAN]
+2026-05-28 10:34:06 [http-nio-8080-exec-8] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:06 [http-nio-8080-exec-8] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:34:06 [http-nio-8080-exec-8] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:34:06 [http-nio-8080-exec-8] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:06 [http-nio-8080-exec-8] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method visit with roles: [CLINICIAN]
+2026-05-28 10:34:06 [http-nio-8080-exec-1] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:06 [http-nio-8080-exec-10] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:06 [http-nio-8080-exec-1] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:34:06 [http-nio-8080-exec-1] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:34:06 [http-nio-8080-exec-10] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:34:06 [http-nio-8080-exec-10] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:34:06 [http-nio-8080-exec-10] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:06 [http-nio-8080-exec-1] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:06 [http-nio-8080-exec-1] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method getLatestForm with roles: [CLINICIAN]
+2026-05-28 10:34:06 [http-nio-8080-exec-10] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method visit with roles: [CLINICIAN]
+2026-05-28 10:34:06 [http-nio-8080-exec-2] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:06 [http-nio-8080-exec-2] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:34:06 [http-nio-8080-exec-2] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:34:06 [http-nio-8080-exec-2] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:06 [http-nio-8080-exec-2] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method getConsultationAnswers with roles: [CLINICIAN]
+2026-05-28 10:34:07 [http-nio-8080-exec-5] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:07 [http-nio-8080-exec-5] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:34:07 [http-nio-8080-exec-5] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:34:07 [http-nio-8080-exec-5] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:07 [http-nio-8080-exec-5] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method upsertConsultationAnswers with roles: [CLINICIAN]
+2026-05-28 10:34:07 [http-nio-8080-exec-3] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:07 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:34:07 [http-nio-8080-exec-3] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:34:07 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:07 [http-nio-8080-exec-3] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method upsertConsultationAnswers with roles: [CLINICIAN]
+2026-05-28 10:34:17 [http-nio-8080-exec-7] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:17 [http-nio-8080-exec-8] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:17 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:34:17 [http-nio-8080-exec-7] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:34:17 [http-nio-8080-exec-8] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:34:17 [http-nio-8080-exec-8] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:34:17 [http-nio-8080-exec-8] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:17 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:34:17 [http-nio-8080-exec-7] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method visits with roles: [CLINICIAN]
+2026-05-28 10:40:23 [http-nio-8080-exec-3] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:40:23 [http-nio-8080-exec-5] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:40:23 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:40:23 [http-nio-8080-exec-3] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:40:23 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:40:23 [http-nio-8080-exec-5] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 10:40:23 [http-nio-8080-exec-5] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 10:40:23 [http-nio-8080-exec-5] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 10:40:23 [http-nio-8080-exec-5] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method visits with roles: [CLINICIAN]
+2026-05-28 10:40:38 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - No authentication token found in request
+2026-05-28 10:40:38 [http-nio-8080-exec-4] INFO  c.n.nexxclinic.service.WorkerService - Login attempt for identifier: admin@email.com
+2026-05-28 10:40:38 [http-nio-8080-exec-4] INFO  c.n.nexxclinic.auth.JwtService - Generated access token for user: admin@email.com (ID: 7b1dbb67-4710-43e3-be68-bb61f2acca73) with roles: [ADMIN]
+2026-05-28 10:40:38 [http-nio-8080-exec-4] INFO  c.n.nexxclinic.service.WorkerService - User successfully logged in: null (ID: 7b1dbb67-4710-43e3-be68-bb61f2acca73) with roles: [ADMIN]
+2026-05-28 10:40:39 [http-nio-8080-exec-8] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-28 10:40:39 [http-nio-8080-exec-7] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-28 10:40:39 [http-nio-8080-exec-8] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-28 10:40:39 [http-nio-8080-exec-8] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-28 10:40:39 [http-nio-8080-exec-8] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-28 10:40:39 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-28 10:40:39 [http-nio-8080-exec-7] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-28 10:40:39 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-28 10:40:39 [http-nio-8080-exec-8] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method visits with roles: [ADMIN]
+2026-05-28 10:40:49 [http-nio-8080-exec-3] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-28 10:40:49 [http-nio-8080-exec-5] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-28 10:40:49 [http-nio-8080-exec-2] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-28 10:40:49 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-28 10:40:49 [http-nio-8080-exec-3] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-28 10:40:49 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-28 10:40:49 [http-nio-8080-exec-5] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-28 10:40:49 [http-nio-8080-exec-5] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-28 10:40:49 [http-nio-8080-exec-5] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-28 10:40:49 [http-nio-8080-exec-2] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-28 10:40:49 [http-nio-8080-exec-2] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-28 10:40:49 [http-nio-8080-exec-2] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-28 10:40:49 [http-nio-8080-exec-5] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method products with roles: [ADMIN]
+2026-05-28 10:40:49 [http-nio-8080-exec-3] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method departments with roles: [ADMIN]
+2026-05-28 10:40:49 [http-nio-8080-exec-2] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method insuranceProviders with roles: [ADMIN]
+2026-05-28 10:40:53 [http-nio-8080-exec-6] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-28 10:40:53 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-28 10:40:53 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-28 10:40:53 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-28 10:40:53 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-28 10:40:53 [http-nio-8080-exec-6] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-28 10:40:53 [http-nio-8080-exec-6] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-28 10:40:53 [http-nio-8080-exec-6] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-28 10:40:53 [http-nio-8080-exec-6] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method departments with roles: [ADMIN]
+2026-05-28 10:40:53 [http-nio-8080-exec-4] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method getForms with roles: [ADMIN]
+2026-05-28 10:40:55 [http-nio-8080-exec-1] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-28 10:40:55 [http-nio-8080-exec-10] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-28 10:40:55 [http-nio-8080-exec-10] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-28 10:40:55 [http-nio-8080-exec-1] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-28 10:40:55 [http-nio-8080-exec-1] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-28 10:40:55 [http-nio-8080-exec-10] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-28 10:40:55 [http-nio-8080-exec-1] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-28 10:40:55 [http-nio-8080-exec-10] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-28 10:40:55 [http-nio-8080-exec-1] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method getForms with roles: [ADMIN]
+2026-05-28 10:40:55 [http-nio-8080-exec-10] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method departments with roles: [ADMIN]
+2026-05-28 10:40:55 [http-nio-8080-exec-9] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-28 10:40:55 [http-nio-8080-exec-9] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-28 10:40:55 [http-nio-8080-exec-9] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-28 10:40:55 [http-nio-8080-exec-9] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-28 10:40:55 [http-nio-8080-exec-9] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method getForm with roles: [ADMIN]
+2026-05-28 10:40:55 [http-nio-8080-exec-2] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: admin@email.com with roles: [ADMIN]
+2026-05-28 10:40:55 [http-nio-8080-exec-2] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: admin@email.com
+2026-05-28 10:40:55 [http-nio-8080-exec-2] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: admin@email.com
+2026-05-28 10:40:55 [http-nio-8080-exec-2] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: admin@email.com with roles: [ADMIN]
+2026-05-28 10:40:55 [http-nio-8080-exec-2] DEBUG c.n.n.security.HasRoleAspect - Access granted: User admin@email.com called method getFormVersionHistory with roles: [ADMIN]
+2026-05-28 11:13:51 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - No authentication token found in request
+2026-05-28 11:13:51 [http-nio-8080-exec-7] INFO  c.n.nexxclinic.service.WorkerService - Login attempt for identifier: doctor@email.com
+2026-05-28 11:13:51 [http-nio-8080-exec-7] INFO  c.n.nexxclinic.auth.JwtService - Generated access token for user: doctor@email.com (ID: 1169a865-9f8d-4919-adf0-5ae3ed3ee6af) with roles: [CLINICIAN]
+2026-05-28 11:13:51 [http-nio-8080-exec-7] INFO  c.n.nexxclinic.service.WorkerService - User successfully logged in: null (ID: 1169a865-9f8d-4919-adf0-5ae3ed3ee6af) with roles: [CLINICIAN]
+2026-05-28 11:13:51 [http-nio-8080-exec-8] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 11:13:51 [http-nio-8080-exec-1] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 11:13:51 [http-nio-8080-exec-8] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 11:13:51 [http-nio-8080-exec-8] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 11:13:51 [http-nio-8080-exec-8] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 11:13:51 [http-nio-8080-exec-1] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 11:13:51 [http-nio-8080-exec-1] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 11:13:51 [http-nio-8080-exec-1] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 11:13:51 [http-nio-8080-exec-8] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method visits with roles: [CLINICIAN]
+2026-05-28 11:13:53 [http-nio-8080-exec-10] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 11:13:53 [http-nio-8080-exec-10] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 11:13:53 [http-nio-8080-exec-10] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 11:13:53 [http-nio-8080-exec-10] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 11:13:53 [http-nio-8080-exec-10] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method updateVisitDepartmentStatus with roles: [CLINICIAN]
+2026-05-28 11:13:53 [http-nio-8080-exec-9] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 11:13:53 [http-nio-8080-exec-9] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 11:13:53 [http-nio-8080-exec-9] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 11:13:53 [http-nio-8080-exec-9] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 11:13:53 [http-nio-8080-exec-9] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method visits with roles: [CLINICIAN]
+2026-05-28 11:13:53 [http-nio-8080-exec-2] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 11:13:53 [http-nio-8080-exec-2] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 11:13:53 [http-nio-8080-exec-2] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 11:13:53 [http-nio-8080-exec-2] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 11:13:53 [http-nio-8080-exec-2] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method visit with roles: [CLINICIAN]
+2026-05-28 11:13:54 [http-nio-8080-exec-3] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 11:13:54 [http-nio-8080-exec-5] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 11:13:54 [http-nio-8080-exec-5] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 11:13:54 [http-nio-8080-exec-5] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 11:13:54 [http-nio-8080-exec-5] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 11:13:54 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 11:13:54 [http-nio-8080-exec-3] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 11:13:54 [http-nio-8080-exec-3] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 11:13:54 [http-nio-8080-exec-5] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method getLatestForm with roles: [CLINICIAN]
+2026-05-28 11:13:54 [http-nio-8080-exec-3] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method visit with roles: [CLINICIAN]
+2026-05-28 11:13:54 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 11:13:54 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 11:13:54 [http-nio-8080-exec-4] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 11:13:54 [http-nio-8080-exec-4] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 11:13:54 [http-nio-8080-exec-4] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method getConsultationAnswers with roles: [CLINICIAN]
+2026-05-28 11:14:35 [http-nio-8080-exec-7] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 11:14:36 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 11:14:36 [http-nio-8080-exec-7] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 11:14:36 [http-nio-8080-exec-7] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 11:14:36 [http-nio-8080-exec-7] DEBUG c.n.n.security.HasRoleAspect - Access granted: User doctor@email.com called method upsertConsultationAnswers with roles: [CLINICIAN]
+2026-05-28 11:14:36 [http-nio-8080-exec-1] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 11:14:36 [http-nio-8080-exec-1] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 11:14:36 [http-nio-8080-exec-1] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 11:14:36 [http-nio-8080-exec-1] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 11:23:48 [http-nio-8080-exec-2] DEBUG c.n.nexxclinic.auth.JwtService - Successfully parsed token for principal: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 11:23:48 [http-nio-8080-exec-2] DEBUG c.n.n.config.GraphQlAuthInterceptor - Token parsed successfully for user: doctor@email.com
+2026-05-28 11:23:48 [http-nio-8080-exec-2] DEBUG c.n.nexxclinic.auth.JwtService - Converting token info to authenticated user: doctor@email.com
+2026-05-28 11:23:48 [http-nio-8080-exec-2] DEBUG c.n.n.config.GraphQlAuthInterceptor - User authenticated: doctor@email.com with roles: [CLINICIAN]
+2026-05-28 11:40:40 [File Watcher] INFO  o.s.b.d.a.LocalDevToolsAutoConfiguration$RestartingClassPathChangeChangedEventListener - Restarting due to 11 class path changes (0 additions, 0 deletions, 11 modifications)
+2026-05-28 11:40:40 [Thread-5] INFO  o.s.boot.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2026-05-28 11:40:40 [tomcat-shutdown] INFO  o.s.boot.tomcat.GracefulShutdown - Graceful shutdown complete
+2026-05-28 11:40:40 [Thread-5] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-05-28 11:40:40 [Thread-5] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown initiated...
+2026-05-28 11:40:40 [Thread-5] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-2 - Shutdown completed.
+2026-05-28 11:40:40 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Starting NexxclinicApplication using Java 21.0.11 with PID 93040 (/Users/nex/workspace/nexxserve/nexxclinic/build/classes/java/main started by nex in /Users/nex/workspace/nexxserve/nexxclinic)
+2026-05-28 11:40:40 [restartedMain] DEBUG c.n.nexxclinic.NexxclinicApplication - Running with Spring Boot v4.0.5, Spring v7.0.6
+2026-05-28 11:40:40 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - No active profile set, falling back to 1 default profile: "default"
+2026-05-28 11:40:40 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-05-28 11:40:40 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 28 ms. Found 28 JPA repository interfaces.
+2026-05-28 11:40:40 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-05-28 11:40:40 [restartedMain] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-05-28 11:40:40 [restartedMain] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.20]
+2026-05-28 11:40:40 [restartedMain] INFO  o.s.b.w.c.s.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 403 ms
+2026-05-28 11:40:40 [restartedMain] INFO  org.hibernate.orm.jpa - HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-05-28 11:40:41 [restartedMain] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-05-28 11:40:41 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-3 - Starting...
+2026-05-28 11:40:41 [restartedMain] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-3 - Added connection org.postgresql.jdbc.PgConnection@455547cb
+2026-05-28 11:40:41 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-3 - Start completed.
+2026-05-28 11:40:41 [restartedMain] INFO  o.hibernate.orm.connections.pooling - HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/nexxclinic]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 17.9
+	Default catalog/schema: nexxclinic/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-05-28 11:40:41 [restartedMain] INFO  org.hibernate.orm.core - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-05-28 11:40:41 [restartedMain] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-05-28 11:40:41 [restartedMain] INFO  c.n.nexxclinic.auth.JwtService - JwtService initialized with expiration: 120 minutes
+2026-05-28 11:40:41 [restartedMain] WARN  o.s.b.s.a.UserDetailsServiceAutoConfiguration - 
+
+Using generated security password: b32250d3-02ac-4814-9543-5efa6c089c3f
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+2026-05-28 11:40:41 [restartedMain] INFO  o.s.s.c.a.a.c.InitializeUserDetailsBeanManagerConfigurer$InitializeUserDetailsManagerConfigurer - Global AuthenticationManager configured with UserDetailsService bean with name inMemoryUserDetailsManager
+2026-05-28 11:40:41 [restartedMain] INFO  c.n.n.config.WebSecurityConfig - Configuring security filter chain
+2026-05-28 11:40:41 [restartedMain] INFO  o.s.g.e.DefaultSchemaResourceGraphQlSourceBuilder - Loaded 3 resource(s) in the GraphQL schema.
+2026-05-28 11:40:41 [restartedMain] INFO  o.s.b.g.a.GraphQlAutoConfiguration - GraphQL schema inspection:
+	Unmapped fields: {Mutation=[completeVisitDepartment, generateConsultationPdf]}
+	Unmapped registrations: {}
+	Unmapped arguments: {}
+	Field nullness errors: {}
+	Argument nullness errors: {}
+	Skipped types: [Worker, Worker, AuditLog, InsuranceProvider, InsuranceProvider, PaginationInfo, Patient, Patient, PaginationInfo, PatientInsurance, PaginationInfo, Product, Product, PaginationInfo, ProductInsuranceCoverage, Department, Department, PaginationInfo, Visit, Visit, PaginationInfo, VisitBilling, VisitBilling, Invoice, Form, Form, FormVersion, FormVersion, ConsultationAnswers, AuthTokens, PatientInsurance, VisitDepartment]
+2026-05-28 11:40:41 [restartedMain] INFO  o.s.b.g.a.s.GraphQlWebMvcAutoConfiguration - GraphQL endpoint HTTP POST /graphql
+2026-05-28 11:40:42 [restartedMain] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 1 endpoint beneath base path '/actuator'
+2026-05-28 11:40:42 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
+2026-05-28 11:40:42 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Started NexxclinicApplication in 1.656 seconds (process running for 5896.138)
+2026-05-28 11:40:42 [restartedMain] INFO  o.s.b.d.a.ConditionEvaluationDeltaLoggingListener - Condition evaluation unchanged
+2026-05-28 11:51:08 [File Watcher] INFO  o.s.b.d.a.LocalDevToolsAutoConfiguration$RestartingClassPathChangeChangedEventListener - Restarting due to 6 class path changes (0 additions, 0 deletions, 6 modifications)
+2026-05-28 11:51:08 [Thread-9] INFO  o.s.boot.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2026-05-28 11:51:10 [tomcat-shutdown] INFO  o.s.boot.tomcat.GracefulShutdown - Graceful shutdown complete
+2026-05-28 11:51:10 [http-nio-8080-Acceptor] ERROR org.apache.tomcat.util.net.Acceptor - Socket accept failed
+java.nio.channels.AsynchronousCloseException
+	at java.base/java.nio.channels.spi.AbstractInterruptibleChannel.end(AbstractInterruptibleChannel.java:203) ~[na:na]
+	at java.base/sun.nio.ch.ServerSocketChannelImpl.end(ServerSocketChannelImpl.java:383) ~[na:na]
+	at java.base/sun.nio.ch.ServerSocketChannelImpl.accept(ServerSocketChannelImpl.java:407) ~[na:na]
+	at org.apache.tomcat.util.net.NioEndpoint.serverSocketAccept(NioEndpoint.java:532) ~[tomcat-embed-core-11.0.20.jar:11.0.20]
+	at org.apache.tomcat.util.net.NioEndpoint.serverSocketAccept(NioEndpoint.java:71) ~[tomcat-embed-core-11.0.20.jar:11.0.20]
+	at org.apache.tomcat.util.net.Acceptor.run(Acceptor.java:127) ~[tomcat-embed-core-11.0.20.jar:11.0.20]
+	at java.base/java.lang.Thread.run(Thread.java:1583) ~[na:na]
+2026-05-28 11:51:10 [Thread-9] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-05-28 11:51:10 [Thread-9] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-3 - Shutdown initiated...
+2026-05-28 11:51:10 [Thread-9] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-3 - Shutdown completed.
+2026-05-28 11:51:10 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Starting NexxclinicApplication using Java 21.0.11 with PID 93040 (/Users/nex/workspace/nexxserve/nexxclinic/build/classes/java/main started by nex in /Users/nex/workspace/nexxserve/nexxclinic)
+2026-05-28 11:51:10 [restartedMain] DEBUG c.n.nexxclinic.NexxclinicApplication - Running with Spring Boot v4.0.5, Spring v7.0.6
+2026-05-28 11:51:10 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - No active profile set, falling back to 1 default profile: "default"
+2026-05-28 11:51:10 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-05-28 11:51:10 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 21 ms. Found 28 JPA repository interfaces.
+2026-05-28 11:51:10 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-05-28 11:51:10 [restartedMain] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-05-28 11:51:10 [restartedMain] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.20]
+2026-05-28 11:51:10 [restartedMain] INFO  o.s.b.w.c.s.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 249 ms
+2026-05-28 11:51:10 [restartedMain] INFO  org.hibernate.orm.jpa - HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-05-28 11:51:10 [restartedMain] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-05-28 11:51:10 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-4 - Starting...
+2026-05-28 11:51:10 [restartedMain] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-4 - Added connection org.postgresql.jdbc.PgConnection@4ff2846
+2026-05-28 11:51:10 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-4 - Start completed.
+2026-05-28 11:51:10 [restartedMain] INFO  o.hibernate.orm.connections.pooling - HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/nexxclinic]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 17.9
+	Default catalog/schema: nexxclinic/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-05-28 11:51:10 [restartedMain] INFO  org.hibernate.orm.core - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-05-28 11:51:10 [restartedMain] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-05-28 11:51:10 [restartedMain] INFO  c.n.nexxclinic.auth.JwtService - JwtService initialized with expiration: 120 minutes
+2026-05-28 11:51:11 [restartedMain] WARN  o.s.b.s.a.UserDetailsServiceAutoConfiguration - 
+
+Using generated security password: 26db8149-e8e8-463a-a457-44bca2feae72
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+2026-05-28 11:51:11 [restartedMain] INFO  o.s.s.c.a.a.c.InitializeUserDetailsBeanManagerConfigurer$InitializeUserDetailsManagerConfigurer - Global AuthenticationManager configured with UserDetailsService bean with name inMemoryUserDetailsManager
+2026-05-28 11:51:11 [restartedMain] INFO  c.n.n.config.WebSecurityConfig - Configuring security filter chain
+2026-05-28 11:51:11 [restartedMain] INFO  o.s.g.e.DefaultSchemaResourceGraphQlSourceBuilder - Loaded 3 resource(s) in the GraphQL schema.
+2026-05-28 11:51:11 [restartedMain] INFO  o.s.b.g.a.GraphQlAutoConfiguration - GraphQL schema inspection:
+	Unmapped fields: {Mutation=[completeVisitDepartment, generateConsultationPdf]}
+	Unmapped registrations: {}
+	Unmapped arguments: {VisitMutationController#completeVisit[3 args]=[input, final]}
+	Field nullness errors: {}
+	Argument nullness errors: {}
+	Skipped types: [Worker, Worker, AuditLog, InsuranceProvider, InsuranceProvider, PaginationInfo, Patient, Patient, PaginationInfo, PatientInsurance, PaginationInfo, Product, Product, PaginationInfo, ProductInsuranceCoverage, Department, Department, PaginationInfo, Visit, Visit, PaginationInfo, VisitBilling, VisitBilling, Invoice, Form, Form, FormVersion, FormVersion, ConsultationAnswers, AuthTokens, PatientInsurance, VisitDepartment]
+2026-05-28 11:51:11 [restartedMain] INFO  o.s.b.g.a.s.GraphQlWebMvcAutoConfiguration - GraphQL endpoint HTTP POST /graphql
+2026-05-28 11:51:11 [restartedMain] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 1 endpoint beneath base path '/actuator'
+2026-05-28 11:51:11 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
+2026-05-28 11:51:11 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Started NexxclinicApplication in 1.131 seconds (process running for 6525.345)
+2026-05-28 11:51:11 [restartedMain] INFO  o.s.b.d.a.ConditionEvaluationDeltaLoggingListener - Condition evaluation unchanged
+2026-05-28 11:59:17 [File Watcher] INFO  o.s.b.d.a.LocalDevToolsAutoConfiguration$RestartingClassPathChangeChangedEventListener - Restarting due to 10 class path changes (0 additions, 0 deletions, 10 modifications)
+2026-05-28 11:59:17 [Thread-13] INFO  o.s.boot.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2026-05-28 11:59:17 [tomcat-shutdown] INFO  o.s.boot.tomcat.GracefulShutdown - Graceful shutdown complete
+2026-05-28 11:59:17 [Thread-13] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-05-28 11:59:17 [Thread-13] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-4 - Shutdown initiated...
+2026-05-28 11:59:17 [Thread-13] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-4 - Shutdown completed.
+2026-05-28 11:59:17 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Starting NexxclinicApplication using Java 21.0.11 with PID 93040 (/Users/nex/workspace/nexxserve/nexxclinic/build/classes/java/main started by nex in /Users/nex/workspace/nexxserve/nexxclinic)
+2026-05-28 11:59:17 [restartedMain] DEBUG c.n.nexxclinic.NexxclinicApplication - Running with Spring Boot v4.0.5, Spring v7.0.6
+2026-05-28 11:59:17 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - No active profile set, falling back to 1 default profile: "default"
+2026-05-28 11:59:17 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-05-28 11:59:17 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 20 ms. Found 28 JPA repository interfaces.
+2026-05-28 11:59:17 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-05-28 11:59:17 [restartedMain] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-05-28 11:59:17 [restartedMain] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.20]
+2026-05-28 11:59:17 [restartedMain] INFO  o.s.b.w.c.s.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 237 ms
+2026-05-28 11:59:17 [restartedMain] INFO  org.hibernate.orm.jpa - HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-05-28 11:59:17 [restartedMain] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-05-28 11:59:17 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-5 - Starting...
+2026-05-28 11:59:17 [restartedMain] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-5 - Added connection org.postgresql.jdbc.PgConnection@5057ebab
+2026-05-28 11:59:17 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-5 - Start completed.
+2026-05-28 11:59:18 [restartedMain] INFO  o.hibernate.orm.connections.pooling - HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/nexxclinic]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 17.9
+	Default catalog/schema: nexxclinic/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-05-28 11:59:18 [restartedMain] INFO  org.hibernate.orm.core - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-05-28 11:59:18 [restartedMain] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-05-28 11:59:18 [restartedMain] INFO  c.n.nexxclinic.auth.JwtService - JwtService initialized with expiration: 120 minutes
+2026-05-28 11:59:18 [restartedMain] WARN  o.s.b.s.a.UserDetailsServiceAutoConfiguration - 
+
+Using generated security password: f793a6a9-74cc-4a74-bf28-88cffcb7add7
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+2026-05-28 11:59:18 [restartedMain] INFO  o.s.s.c.a.a.c.InitializeUserDetailsBeanManagerConfigurer$InitializeUserDetailsManagerConfigurer - Global AuthenticationManager configured with UserDetailsService bean with name inMemoryUserDetailsManager
+2026-05-28 11:59:18 [restartedMain] INFO  c.n.n.config.WebSecurityConfig - Configuring security filter chain
+2026-05-28 11:59:18 [restartedMain] INFO  o.s.g.e.DefaultSchemaResourceGraphQlSourceBuilder - Loaded 3 resource(s) in the GraphQL schema.
+2026-05-28 11:59:18 [restartedMain] INFO  o.s.b.g.a.GraphQlAutoConfiguration - GraphQL schema inspection:
+	Unmapped fields: {Mutation=[completeVisitDepartment, generateConsultationPdf]}
+	Unmapped registrations: {}
+	Unmapped arguments: {VisitMutationController#completeVisit[3 args]=[input, final]}
+	Field nullness errors: {}
+	Argument nullness errors: {}
+	Skipped types: [Worker, Worker, AuditLog, InsuranceProvider, InsuranceProvider, PaginationInfo, Patient, Patient, PaginationInfo, PatientInsurance, PaginationInfo, Product, Product, PaginationInfo, ProductInsuranceCoverage, Department, Department, PaginationInfo, Visit, Visit, PaginationInfo, VisitBilling, VisitBilling, Invoice, Form, Form, FormVersion, FormVersion, ConsultationAnswers, AuthTokens, PatientInsurance, VisitDepartment]
+2026-05-28 11:59:18 [restartedMain] INFO  o.s.b.g.a.s.GraphQlWebMvcAutoConfiguration - GraphQL endpoint HTTP POST /graphql
+2026-05-28 11:59:18 [restartedMain] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 1 endpoint beneath base path '/actuator'
+2026-05-28 11:59:18 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
+2026-05-28 11:59:18 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Started NexxclinicApplication in 1.144 seconds (process running for 7012.838)
+2026-05-28 11:59:18 [restartedMain] INFO  o.s.b.d.a.ConditionEvaluationDeltaLoggingListener - Condition evaluation unchanged
+2026-05-28 12:02:58 [File Watcher] INFO  o.s.b.d.a.LocalDevToolsAutoConfiguration$RestartingClassPathChangeChangedEventListener - Restarting due to 10 class path changes (0 additions, 0 deletions, 10 modifications)
+2026-05-28 12:02:58 [Thread-17] INFO  o.s.boot.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2026-05-28 12:02:58 [tomcat-shutdown] INFO  o.s.boot.tomcat.GracefulShutdown - Graceful shutdown complete
+2026-05-28 12:02:58 [Thread-17] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-05-28 12:02:58 [Thread-17] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-5 - Shutdown initiated...
+2026-05-28 12:02:58 [Thread-17] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-5 - Shutdown completed.
+2026-05-28 12:02:59 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Starting NexxclinicApplication using Java 21.0.11 with PID 93040 (/Users/nex/workspace/nexxserve/nexxclinic/build/classes/java/main started by nex in /Users/nex/workspace/nexxserve/nexxclinic)
+2026-05-28 12:02:59 [restartedMain] DEBUG c.n.nexxclinic.NexxclinicApplication - Running with Spring Boot v4.0.5, Spring v7.0.6
+2026-05-28 12:02:59 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - No active profile set, falling back to 1 default profile: "default"
+2026-05-28 12:02:59 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-05-28 12:02:59 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 17 ms. Found 28 JPA repository interfaces.
+2026-05-28 12:02:59 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-05-28 12:02:59 [restartedMain] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-05-28 12:02:59 [restartedMain] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.20]
+2026-05-28 12:02:59 [restartedMain] INFO  o.s.b.w.c.s.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 208 ms
+2026-05-28 12:02:59 [restartedMain] INFO  org.hibernate.orm.jpa - HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-05-28 12:02:59 [restartedMain] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-05-28 12:02:59 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-6 - Starting...
+2026-05-28 12:02:59 [restartedMain] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-6 - Added connection org.postgresql.jdbc.PgConnection@4e31b4c9
+2026-05-28 12:02:59 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-6 - Start completed.
+2026-05-28 12:02:59 [restartedMain] INFO  o.hibernate.orm.connections.pooling - HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/nexxclinic]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 17.9
+	Default catalog/schema: nexxclinic/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-05-28 12:02:59 [restartedMain] INFO  org.hibernate.orm.core - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-05-28 12:02:59 [restartedMain] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-05-28 12:02:59 [restartedMain] INFO  c.n.nexxclinic.auth.JwtService - JwtService initialized with expiration: 120 minutes
+2026-05-28 12:02:59 [restartedMain] WARN  o.s.b.s.a.UserDetailsServiceAutoConfiguration - 
+
+Using generated security password: b07ae8f6-0030-4890-ba87-355de9edf77a
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+2026-05-28 12:02:59 [restartedMain] INFO  o.s.s.c.a.a.c.InitializeUserDetailsBeanManagerConfigurer$InitializeUserDetailsManagerConfigurer - Global AuthenticationManager configured with UserDetailsService bean with name inMemoryUserDetailsManager
+2026-05-28 12:02:59 [restartedMain] INFO  c.n.n.config.WebSecurityConfig - Configuring security filter chain
+2026-05-28 12:02:59 [restartedMain] INFO  o.s.g.e.DefaultSchemaResourceGraphQlSourceBuilder - Loaded 3 resource(s) in the GraphQL schema.
+2026-05-28 12:03:00 [restartedMain] INFO  o.s.b.g.a.GraphQlAutoConfiguration - GraphQL schema inspection:
+	Unmapped fields: {Mutation=[completeVisitDepartment, generateConsultationPdf]}
+	Unmapped registrations: {}
+	Unmapped arguments: {VisitMutationController#completeVisit[3 args]=[input, final]}
+	Field nullness errors: {}
+	Argument nullness errors: {}
+	Skipped types: [Worker, Worker, AuditLog, InsuranceProvider, InsuranceProvider, PaginationInfo, Patient, Patient, PaginationInfo, PatientInsurance, PaginationInfo, Product, Product, PaginationInfo, ProductInsuranceCoverage, Department, Department, PaginationInfo, Visit, Visit, PaginationInfo, VisitBilling, VisitBilling, Invoice, Form, Form, FormVersion, FormVersion, ConsultationAnswers, AuthTokens, PatientInsurance, VisitDepartment]
+2026-05-28 12:03:00 [restartedMain] INFO  o.s.b.g.a.s.GraphQlWebMvcAutoConfiguration - GraphQL endpoint HTTP POST /graphql
+2026-05-28 12:03:00 [restartedMain] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 1 endpoint beneath base path '/actuator'
+2026-05-28 12:03:00 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
+2026-05-28 12:03:00 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Started NexxclinicApplication in 1.079 seconds (process running for 7234.196)
+2026-05-28 12:03:00 [restartedMain] INFO  o.s.b.d.a.ConditionEvaluationDeltaLoggingListener - Condition evaluation unchanged
+2026-05-28 12:08:34 [File Watcher] INFO  o.s.b.d.a.LocalDevToolsAutoConfiguration$RestartingClassPathChangeChangedEventListener - Restarting due to 10 class path changes (0 additions, 0 deletions, 10 modifications)
+2026-05-28 12:08:34 [Thread-21] INFO  o.s.boot.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2026-05-28 12:08:35 [tomcat-shutdown] INFO  o.s.boot.tomcat.GracefulShutdown - Graceful shutdown complete
+2026-05-28 12:08:35 [Thread-21] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-05-28 12:08:35 [Thread-21] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-6 - Shutdown initiated...
+2026-05-28 12:08:35 [Thread-21] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-6 - Shutdown completed.
+2026-05-28 12:08:35 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Starting NexxclinicApplication using Java 21.0.11 with PID 93040 (/Users/nex/workspace/nexxserve/nexxclinic/build/classes/java/main started by nex in /Users/nex/workspace/nexxserve/nexxclinic)
+2026-05-28 12:08:35 [restartedMain] DEBUG c.n.nexxclinic.NexxclinicApplication - Running with Spring Boot v4.0.5, Spring v7.0.6
+2026-05-28 12:08:35 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - No active profile set, falling back to 1 default profile: "default"
+2026-05-28 12:08:35 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-05-28 12:08:35 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 17 ms. Found 28 JPA repository interfaces.
+2026-05-28 12:08:35 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-05-28 12:08:35 [restartedMain] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-05-28 12:08:35 [restartedMain] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.20]
+2026-05-28 12:08:35 [restartedMain] INFO  o.s.b.w.c.s.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 208 ms
+2026-05-28 12:08:36 [restartedMain] INFO  org.hibernate.orm.jpa - HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-05-28 12:08:36 [restartedMain] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-05-28 12:08:36 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-7 - Starting...
+2026-05-28 12:08:36 [restartedMain] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-7 - Added connection org.postgresql.jdbc.PgConnection@6268d
+2026-05-28 12:08:36 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-7 - Start completed.
+2026-05-28 12:08:36 [restartedMain] INFO  o.hibernate.orm.connections.pooling - HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/nexxclinic]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 17.9
+	Default catalog/schema: nexxclinic/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-05-28 12:08:36 [restartedMain] INFO  org.hibernate.orm.core - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-05-28 12:08:36 [restartedMain] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-05-28 12:08:36 [restartedMain] INFO  c.n.nexxclinic.auth.JwtService - JwtService initialized with expiration: 120 minutes
+2026-05-28 12:08:36 [restartedMain] WARN  o.s.b.s.a.UserDetailsServiceAutoConfiguration - 
+
+Using generated security password: 0b8c9825-63d1-41c4-ab87-37ce853d1212
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+2026-05-28 12:08:36 [restartedMain] INFO  o.s.s.c.a.a.c.InitializeUserDetailsBeanManagerConfigurer$InitializeUserDetailsManagerConfigurer - Global AuthenticationManager configured with UserDetailsService bean with name inMemoryUserDetailsManager
+2026-05-28 12:08:36 [restartedMain] INFO  c.n.n.config.WebSecurityConfig - Configuring security filter chain
+2026-05-28 12:08:36 [restartedMain] INFO  o.s.g.e.DefaultSchemaResourceGraphQlSourceBuilder - Loaded 3 resource(s) in the GraphQL schema.
+2026-05-28 12:08:36 [restartedMain] INFO  o.s.b.g.a.GraphQlAutoConfiguration - GraphQL schema inspection:
+	Unmapped fields: {Mutation=[completeVisitDepartment, generateConsultationPdf]}
+	Unmapped registrations: {}
+	Unmapped arguments: {VisitMutationController#completeVisit[3 args]=[input, final]}
+	Field nullness errors: {}
+	Argument nullness errors: {}
+	Skipped types: [Worker, Worker, AuditLog, InsuranceProvider, InsuranceProvider, PaginationInfo, Patient, Patient, PaginationInfo, PatientInsurance, PaginationInfo, Product, Product, PaginationInfo, ProductInsuranceCoverage, Department, Department, PaginationInfo, Visit, Visit, PaginationInfo, VisitBilling, VisitBilling, Invoice, Form, Form, FormVersion, FormVersion, ConsultationAnswers, AuthTokens, PatientInsurance, VisitDepartment]
+2026-05-28 12:08:36 [restartedMain] INFO  o.s.b.g.a.s.GraphQlWebMvcAutoConfiguration - GraphQL endpoint HTTP POST /graphql
+2026-05-28 12:08:36 [restartedMain] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 1 endpoint beneath base path '/actuator'
+2026-05-28 12:08:36 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
+2026-05-28 12:08:36 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Started NexxclinicApplication in 1.048 seconds (process running for 7570.873)
+2026-05-28 12:08:36 [restartedMain] INFO  o.s.b.d.a.ConditionEvaluationDeltaLoggingListener - Condition evaluation unchanged
+2026-05-28 12:10:00 [SpringApplicationShutdownHook] INFO  o.s.boot.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2026-05-28 12:10:00 [tomcat-shutdown] INFO  o.s.boot.tomcat.GracefulShutdown - Graceful shutdown complete
+2026-05-28 12:10:00 [SpringApplicationShutdownHook] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-05-28 12:10:00 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-7 - Shutdown initiated...
+2026-05-28 12:10:00 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-7 - Shutdown completed.
+2026-05-28 12:10:02 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Starting NexxclinicApplication using Java 21.0.11 with PID 36758 (/Users/nex/workspace/nexxserve/nexxclinic/build/classes/java/main started by nex in /Users/nex/workspace/nexxserve/nexxclinic)
+2026-05-28 12:10:02 [restartedMain] DEBUG c.n.nexxclinic.NexxclinicApplication - Running with Spring Boot v4.0.5, Spring v7.0.6
+2026-05-28 12:10:02 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - No active profile set, falling back to 1 default profile: "default"
+2026-05-28 12:10:02 [restartedMain] INFO  o.s.b.d.e.DevToolsPropertyDefaultsPostProcessor - Devtools property defaults active! Set 'spring.devtools.add-properties' to 'false' to disable
+2026-05-28 12:10:02 [restartedMain] INFO  o.s.b.d.e.DevToolsPropertyDefaultsPostProcessor - For additional web related logging consider setting the 'logging.level.web' property to 'DEBUG'
+2026-05-28 12:10:02 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-05-28 12:10:02 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 87 ms. Found 28 JPA repository interfaces.
+2026-05-28 12:10:03 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-05-28 12:10:03 [restartedMain] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-05-28 12:10:03 [restartedMain] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.20]
+2026-05-28 12:10:03 [restartedMain] INFO  o.s.b.w.c.s.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 940 ms
+2026-05-28 12:10:03 [restartedMain] INFO  org.hibernate.orm.jpa - HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-05-28 12:10:03 [restartedMain] INFO  org.hibernate.orm.core - HHH000001: Hibernate ORM core version 7.2.7.Final
+2026-05-28 12:10:03 [restartedMain] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-05-28 12:10:03 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-05-28 12:10:03 [restartedMain] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@1c717b8d
+2026-05-28 12:10:03 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-05-28 12:10:03 [restartedMain] INFO  o.hibernate.orm.connections.pooling - HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/nexxclinic]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 17.9
+	Default catalog/schema: nexxclinic/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown

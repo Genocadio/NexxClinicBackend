@@ -1,6 +1,7 @@
 package com.nexxserve.nexxclinic.graphql;
 
 import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
+import com.nexxserve.nexxclinic.graphql.input.ConsultationAnswersInput;
 import com.nexxserve.nexxclinic.graphql.input.ChangeVisitDateInput;
 import com.nexxserve.nexxclinic.graphql.input.CreateVisitDepartmentProductInput;
 import com.nexxserve.nexxclinic.graphql.input.CreateVisitInput;
@@ -70,6 +71,16 @@ public class VisitMutationController {
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
     @MutationMapping
+    public ApiResponse saveAnswerAndCompleteVisit(
+            @Argument @Valid ConsultationAnswersInput input,
+            @Argument("final") boolean finalAnswer,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.saveAnswerAndCompleteVisit(input, finalAnswer, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
     public ApiResponse addVisitDepartmentProduct(
             @Argument @Valid CreateVisitDepartmentProductInput input,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
@@ -98,10 +109,11 @@ public class VisitMutationController {
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
     @MutationMapping
     public ApiResponse completeVisit(
-            @Argument UUID visitId,
+            @Argument @Valid ConsultationAnswersInput input,
+            @Argument("final") boolean finalAnswer,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.completeVisit(visitId);
+        return visitService.completeVisit(input, finalAnswer, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})

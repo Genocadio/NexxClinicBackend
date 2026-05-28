@@ -17,6 +17,7 @@ import com.nexxserve.nexxclinic.entity.VitalMeasurement;
 import com.nexxserve.nexxclinic.entity.VisitPreInstruction;
 import com.nexxserve.nexxclinic.entity.VisitPreInstructionMedication;
 import com.nexxserve.nexxclinic.entity.Worker;
+import com.nexxserve.nexxclinic.graphql.input.ConsultationAnswersInput;
 import com.nexxserve.nexxclinic.graphql.input.CreateVisitDepartmentInput;
 import com.nexxserve.nexxclinic.graphql.input.CreateVisitDepartmentProductInput;
 import com.nexxserve.nexxclinic.graphql.input.ChangeVisitDateInput;
@@ -29,7 +30,9 @@ import com.nexxserve.nexxclinic.graphql.input.AddVisitVitalSignItemInput;
 import com.nexxserve.nexxclinic.graphql.input.AddVisitVitalSignsInput;
 import com.nexxserve.nexxclinic.graphql.input.AddVisitPreInstructionsInput;
 import com.nexxserve.nexxclinic.entity.VisitPreInstructionProductRequest;
+import com.nexxserve.nexxclinic.model.AnswerStatus;
 import com.nexxserve.nexxclinic.model.ApiResponse;
+import com.nexxserve.nexxclinic.model.ResponseStatus;
 import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
 import com.nexxserve.nexxclinic.model.VisitStatus;
@@ -80,6 +83,7 @@ public class VisitService {
     private final VitalMeasurementRepository vitalMeasurementRepository;
     private final com.nexxserve.nexxclinic.repository.VisitPreInstructionRepository visitPreInstructionRepository;
     private final VisitBillingRepository visitBillingRepository;
+    private final DepartmentFormService departmentFormService;
     private final PatientRepository patientRepository;
     private final PatientInsuranceRepository patientInsuranceRepository;
     private final DepartmentRepository departmentRepository;
@@ -97,6 +101,7 @@ public class VisitService {
             VitalMeasurementRepository vitalMeasurementRepository,
             VisitBillingRepository visitBillingRepository,
             com.nexxserve.nexxclinic.repository.VisitPreInstructionRepository visitPreInstructionRepository,
+            DepartmentFormService departmentFormService,
             PatientRepository patientRepository,
             PatientInsuranceRepository patientInsuranceRepository,
             DepartmentRepository departmentRepository,
@@ -113,6 +118,7 @@ public class VisitService {
         this.vitalMeasurementRepository = vitalMeasurementRepository;
         this.visitPreInstructionRepository = visitPreInstructionRepository;
         this.visitBillingRepository = visitBillingRepository;
+        this.departmentFormService = departmentFormService;
         this.patientRepository = patientRepository;
         this.patientInsuranceRepository = patientInsuranceRepository;
         this.departmentRepository = departmentRepository;
@@ -267,6 +273,72 @@ public class VisitService {
         visit.setStatus(VisitStatus.COMPLETED);
         Visit saved = visitRepository.save(visit);
         return ApiResponse.success("Visit completed.", visitToMap(saved));
+    }
+
+    @Transactional
+    public ApiResponse completeVisit(ConsultationAnswersInput input, boolean finalAnswer, AuthenticatedUser authUser) {
+        if (input == null) {
+            return ApiResponse.error("input is required.", "VALIDATION_ERROR");
+        }
+
+        if (input.visitId() == null || input.departmentId() == null) {
+            return ApiResponse.error("visitId and departmentId are required.", "VALIDATION_ERROR");
+        }
+
+        Optional<Visit> visitOptional = visitRepository.findById(input.visitId());
+        if (visitOptional.isEmpty()) {
+            return ApiResponse.error("Visit not found.", "NOT_FOUND");
+        }
+
+        Visit visit = visitOptional.get();
+        if (visit.getStatus() == VisitStatus.CANCELLED) {
+            return ApiResponse.error("Cancelled visit cannot be completed.", "INVALID_VISIT_STATUS_TRANSITION");
+        }
+
+        List<VisitDepartmentProduct> visitProducts = visitDepartmentProductRepository.findByVisitDepartmentVisitId(input.visitId());
+        boolean hasUnbilledProducts = visitProducts.stream()
+                .anyMatch(product -> product.getStatus() == VisitProductStatus.PENDING);
+
+        if (hasUnbilledProducts) {
+            return ApiResponse.error("Cannot complete visit with unbilled products. All products must be billed first.", "VISIT_HAS_UNBILLED_PRODUCTS");
+        }
+
+        ConsultationAnswersInput effectiveInput = input;
+        if (finalAnswer) {
+            effectiveInput = new ConsultationAnswersInput(
+                    input.consultationId(),
+                    input.visitId(),
+                    input.patientId(),
+                    input.departmentId(),
+                    input.formId(),
+                    input.formVersion(),
+                    AnswerStatus.FINAL,
+                    input.answers()
+            );
+        }
+
+        ApiResponse answerResponse = departmentFormService.upsertConsultationAnswers(effectiveInput, authUser);
+        if (answerResponse.status() != ResponseStatus.SUCCESS) {
+            return answerResponse;
+        }
+
+        List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(input.visitId());
+        for (VisitDepartment dept : departments) {
+            if (dept.getStatus() != VisitDepartmentStatus.CANCELLED) {
+                dept.setStatus(VisitDepartmentStatus.COMPLETED);
+                dept.setCompletedAt(LocalDateTime.now());
+                visitDepartmentRepository.save(dept);
+            }
+        }
+
+        visit.setStatus(VisitStatus.COMPLETED);
+        Visit saved = visitRepository.save(visit);
+        return ApiResponse.success("Visit completed.", visitToMap(saved));
+    }
+
+    @Transactional
+    public ApiResponse saveAnswerAndCompleteVisit(ConsultationAnswersInput input, boolean finalAnswer, AuthenticatedUser authUser) {
+        return completeVisit(input, finalAnswer, authUser);
     }
 
     @Transactional

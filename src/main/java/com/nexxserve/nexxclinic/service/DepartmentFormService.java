@@ -354,7 +354,7 @@ public class DepartmentFormService {
         }
 
         ConsultationAnswer saved = consultationAnswerRepository.save(answer);
-        return ApiResponse.success("Consultation answers upserted.", consultationAnswerToMap(saved));
+        return ApiResponse.success("Consultation answers upserted.", consultationAnswersToMap(saved));
     }
 
     @Transactional(readOnly = true)
@@ -375,7 +375,7 @@ public class DepartmentFormService {
             return ApiResponse.error("Consultation answers not found for this department.", "NOT_FOUND");
         }
 
-        return ApiResponse.success("Consultation answers fetched.", consultationAnswerToMap(answer));
+        return ApiResponse.success("Consultation answers fetched.", consultationAnswersToMap(answer));
     }
 
     private String resolveLatestUsableFormVersion(DepartmentForm form) {
@@ -430,17 +430,17 @@ public class DepartmentFormService {
 
     private Map<String, Object> consultationAnswerToMap(ConsultationAnswer answer) {
         Map<String, Object> data = new HashMap<>();
-        data.put("id", answer.getId());
-        data.put("consultationId", answer.getConsultationId());
-        data.put("visitId", answer.getVisitId());
-        data.put("patientId", answer.getPatientId());
-        data.put("departmentId", answer.getDepartment().getId());
-        data.put("formId", answer.getForm().getId());
-        data.put("formVersion", answer.getFormVersion());
         data.put("status", answer.getStatus());
         data.put("answers", answer.getAnswers());
         data.put("submittedAt", answer.getSubmittedAt());
         data.put("updatedAt", answer.getUpdatedAt());
+        return data;
+    }
+
+    private Map<String, Object> consultationAnswersToMap(ConsultationAnswer answer) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("answer", consultationAnswerToMap(answer));
+        data.put("form", formToMap(answer.getForm()));
         return data;
     }
 
