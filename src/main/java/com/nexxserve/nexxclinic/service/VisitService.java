@@ -265,7 +265,6 @@ public class VisitService {
         for (VisitDepartment dept : departments) {
             if (dept.getStatus() != VisitDepartmentStatus.CANCELLED) {
                 dept.setStatus(VisitDepartmentStatus.COMPLETED);
-                dept.setCompletedAt(java.time.LocalDateTime.now());
                 visitDepartmentRepository.save(dept);
             }
         }

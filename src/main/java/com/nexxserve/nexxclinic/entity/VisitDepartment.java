@@ -107,6 +107,9 @@ public class VisitDepartment {
 
     public void setStatus(VisitDepartmentStatus status) {
         this.status = status;
+        if (status == VisitDepartmentStatus.COMPLETED && this.completedAt == null) {
+            this.completedAt = LocalDateTime.now();
+        }
     }
 
     public LocalDateTime getCompletedAt() {
