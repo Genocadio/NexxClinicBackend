@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 public record SelfRegisterInput(
@@ -36,7 +37,7 @@ public record SelfRegisterInput(
         @Size(max = 80, message = "username must not exceed 80 characters")
         String username,
 
-        UUID departmentId,
+        List<UUID> departmentIds,
 
         @NotBlank(message = "password is required")
         @Size(min = 8, message = "password must be at least 8 characters")

@@ -10,6 +10,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -39,7 +40,7 @@ public record AdminCreateUserInput(
         @Size(max = 80, message = "username must not exceed 80 characters")
         String username,
 
-        UUID departmentId,
+        List<UUID> departmentIds,
 
         @NotEmpty(message = "roles is required")
         Set<RoleName> roles,

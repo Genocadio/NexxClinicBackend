@@ -10,6 +10,7 @@ import com.nexxserve.nexxclinic.entity.Worker;
 import com.nexxserve.nexxclinic.entity.WorkerDocument;
 import com.nexxserve.nexxclinic.graphql.input.ActivateUserInput;
 import com.nexxserve.nexxclinic.graphql.input.AdminCreateUserInput;
+import com.nexxserve.nexxclinic.graphql.input.AdminUpdateUserInput;
 import com.nexxserve.nexxclinic.graphql.input.AdminSetUserSessionLimitInput;
 import com.nexxserve.nexxclinic.graphql.input.AdminTriggerPasswordResetInput;
 import com.nexxserve.nexxclinic.graphql.input.ChangeMyPasswordInput;
@@ -99,7 +100,7 @@ public class WorkerService {
                 input.profilePhotoUrl(), input.email(), input.phoneNumber(), input.username(),
                 mapDocument(input.workerDocProfile()));
 
-        ApiResponse departmentValidationError = assignDepartment(worker, input.departmentId());
+        ApiResponse departmentValidationError = assignDepartments(worker, input.departmentIds());
         if (departmentValidationError != null) {
             return departmentValidationError;
         }
@@ -161,7 +162,7 @@ public class WorkerService {
                 input.profilePhotoUrl(), input.email(), input.phoneNumber(), input.username(),
                 mapDocument(input.workerDocProfile()));
 
-        ApiResponse departmentValidationError = assignDepartment(worker, input.departmentId());
+        ApiResponse departmentValidationError = assignDepartments(worker, input.departmentIds());
         if (departmentValidationError != null) {
             return departmentValidationError;
         }
@@ -499,8 +500,8 @@ public class WorkerService {
             worker.setUsername(normalizedUsername);
         }
 
-        if (input.departmentId() != null) {
-            ApiResponse departmentValidationError = assignDepartment(worker, input.departmentId());
+        if (input.departmentIds() != null) {
+            ApiResponse departmentValidationError = assignDepartments(worker, input.departmentIds());
             if (departmentValidationError != null) {
                 return departmentValidationError;
             }
@@ -517,6 +518,112 @@ public class WorkerService {
 
         Worker saved = workerRepository.save(worker);
         return ApiResponse.success("Profile updated successfully.", workerToMap(saved));
+    }
+
+    @Transactional
+    public ApiResponse adminUpdateUser(UUID userId, AdminUpdateUserInput input, AuthenticatedUser adminUser) {
+        if (userId == null || input == null) {
+            return ApiResponse.error("userId and input are required.", "VALIDATION_ERROR");
+        }
+
+        Optional<Worker> workerOptional = workerRepository.findById(userId);
+        if (workerOptional.isEmpty()) {
+            return ApiResponse.error("User not found.", "NOT_FOUND");
+        }
+
+        Worker worker = workerOptional.get();
+
+        if (input.firstName() != null) {
+            if (input.firstName().isBlank()) {
+                return ApiResponse.error("firstName cannot be blank.", "VALIDATION_ERROR");
+            }
+            worker.setFirstName(input.firstName().trim());
+        }
+
+        if (input.lastName() != null) {
+            if (input.lastName().isBlank()) {
+                return ApiResponse.error("lastName cannot be blank.", "VALIDATION_ERROR");
+            }
+            worker.setLastName(input.lastName().trim());
+        }
+
+        if (input.gender() != null) {
+            worker.setGender(input.gender());
+        }
+
+        if (input.dateOfBirth() != null) {
+            worker.setDateOfBirth(input.dateOfBirth());
+        }
+
+        if (input.profilePhotoUrl() != null) {
+            worker.setProfilePhotoUrl(blankToNull(input.profilePhotoUrl()));
+        }
+
+        if (input.email() != null) {
+            String normalizedEmail = blankToNull(input.email());
+            if (normalizedEmail != null
+                    && workerRepository.existsByEmailIgnoreCaseAndIdNot(normalizedEmail, worker.getId())) {
+                return ApiResponse.error("Email already exists.", "DUPLICATE_EMAIL");
+            }
+            worker.setEmail(normalizedEmail);
+        }
+
+        if (input.phoneNumber() != null) {
+            String normalizedPhone = blankToNull(input.phoneNumber());
+            if (normalizedPhone != null
+                    && workerRepository.existsByPhoneNumberAndIdNot(normalizedPhone, worker.getId())) {
+                return ApiResponse.error("Phone number already exists.", "DUPLICATE_PHONE");
+            }
+            worker.setPhoneNumber(normalizedPhone);
+        }
+
+        if (input.username() != null) {
+            String normalizedUsername = blankToNull(input.username());
+            if (normalizedUsername != null
+                    && workerRepository.existsByUsernameIgnoreCaseAndIdNot(normalizedUsername, worker.getId())) {
+                return ApiResponse.error("Username already exists.", "DUPLICATE_USERNAME");
+            }
+            worker.setUsername(normalizedUsername);
+        }
+
+        if (input.departmentIds() != null) {
+            ApiResponse departmentValidationError = assignDepartments(worker, input.departmentIds());
+            if (departmentValidationError != null) {
+                return departmentValidationError;
+            }
+        }
+
+        if (input.roles() != null) {
+            if (input.roles().isEmpty()) {
+                return ApiResponse.error("roles cannot be empty.", "VALIDATION_ERROR");
+            }
+            worker.setRoles(input.roles());
+        }
+
+        if ((worker.getEmail() == null || worker.getEmail().isBlank())
+                && (worker.getPhoneNumber() == null || worker.getPhoneNumber().isBlank())) {
+            return ApiResponse.error("At least one contact method is required: email or phoneNumber.", "VALIDATION_ERROR");
+        }
+
+        if (input.workerDocProfile() != null) {
+            worker.setWorkerDocProfile(mapDocument(input.workerDocProfile()));
+        }
+
+        Worker saved;
+        try {
+            saved = workerRepository.save(worker);
+        } catch (DataIntegrityViolationException ex) {
+            return mapPersistenceError(ex, "Unable to update user due to invalid or duplicate data.");
+        }
+
+        adminAuditService.logAdminAction(
+                adminUser,
+                saved.getId(),
+                "ADMIN_UPDATE_USER",
+                "{\"roles\":\"" + saved.getRoles() + "\",\"departmentCount\":" + saved.getDepartments().size() + "}"
+        );
+
+        return ApiResponse.success("User updated successfully.", workerToMap(saved));
     }
 
     @Transactional
@@ -771,17 +878,38 @@ public class WorkerService {
         return doc;
     }
 
-    private ApiResponse assignDepartment(Worker worker, UUID departmentId) {
-        if (departmentId == null) {
+    private WorkerDocument mapDocument(AdminUpdateUserInput.WorkerDocumentInput input) {
+        if (input == null) {
             return null;
         }
 
-        Optional<Department> departmentOptional = departmentRepository.findById(departmentId);
-        if (departmentOptional.isEmpty()) {
-            return ApiResponse.error("Department not found.", "NOT_FOUND");
-        }
+        WorkerDocument doc = new WorkerDocument();
+        doc.setType(input.type());
+        doc.setTitle(input.title());
+        doc.setRequired(Boolean.TRUE.equals(input.isRequired()));
+        doc.setDocumentUrl(input.documentUrl());
+        doc.setDocumentNumber(input.documentNumber());
+        doc.setHasExpiration(Boolean.TRUE.equals(input.hasExpiration()));
+        doc.setExpirationDate(input.expirationDate());
+        doc.setIssuedBy(input.issuedBy());
+        doc.setIssuedDate(input.issuedDate());
+        doc.setNotes(input.notes());
+        return doc;
+    }
 
-        worker.setDepartment(departmentOptional.get());
+    private ApiResponse assignDepartments(Worker worker, List<UUID> departmentIds) {
+        if (departmentIds == null) {
+            return null;
+        }
+        Set<Department> departments = new java.util.LinkedHashSet<>();
+        for (UUID id : departmentIds) {
+            Optional<Department> deptOpt = departmentRepository.findById(id);
+            if (deptOpt.isEmpty()) {
+                return ApiResponse.error("Department not found.", "NOT_FOUND");
+            }
+            departments.add(deptOpt.get());
+        }
+        worker.setDepartments(departments);
         return null;
     }
 
@@ -804,6 +932,7 @@ public class WorkerService {
         data.put("lastPasswordChange", worker.getLastPasswordChange());
         data.put("nextResetDate", worker.getNextResetDate());
         data.put("mustChangeOnNextLogin", worker.isMustChangeOnNextLogin());
+        data.put("departments", worker.getDepartments().stream().map(this::departmentToMap).toList());
         data.put("department", departmentToMap(worker.getDepartment()));
         data.put("maxActiveSessions", sessionTokenService.resolveEffectiveMaxSessions(worker));
         data.put("activeSessions", sessionTokenService.countActiveRefreshSessionsForUser(worker.getId()));
@@ -835,6 +964,9 @@ public class WorkerService {
                         .map(link -> productToMap(link.getProduct()))
                         .toList()
         );
+        data.put("nursing", department.isNursing());
+        data.put("supportRequests", department.isSupportRequests());
+        data.put("requestsProducts", department.isRequestsProducts());
         data.put("createdAt", department.getCreatedAt());
         data.put("updatedAt", department.getUpdatedAt());
         return data;

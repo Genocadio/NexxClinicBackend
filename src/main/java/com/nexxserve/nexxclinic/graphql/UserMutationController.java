@@ -5,6 +5,7 @@ import com.nexxserve.nexxclinic.auth.AccessTokenInfo;
 import com.nexxserve.nexxclinic.graphql.input.ActivateUserInput;
 import com.nexxserve.nexxclinic.graphql.input.AdminCreateUserInput;
 import com.nexxserve.nexxclinic.graphql.input.AdminSetUserSessionLimitInput;
+import com.nexxserve.nexxclinic.graphql.input.AdminUpdateUserInput;
 import com.nexxserve.nexxclinic.graphql.input.AdminTriggerPasswordResetInput;
 import com.nexxserve.nexxclinic.graphql.input.ChangeMyPasswordInput;
 import com.nexxserve.nexxclinic.graphql.input.DeactivateUserInput;
@@ -24,6 +25,7 @@ import org.springframework.graphql.data.method.annotation.Argument;
 import org.springframework.graphql.data.method.annotation.ContextValue;
 import org.springframework.graphql.data.method.annotation.MutationMapping;
 import org.springframework.stereotype.Controller;
+import java.util.UUID;
 
 @Controller
 public class UserMutationController {
@@ -92,6 +94,16 @@ public class UserMutationController {
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         return workerService.adminCreateUser(input, authUser);
+    }
+
+    @HasRole(RoleName.ADMIN)
+    @MutationMapping
+    public ApiResponse adminUpdateUser(
+            @Argument UUID userId,
+            @Argument @Valid AdminUpdateUserInput input,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return workerService.adminUpdateUser(userId, input, authUser);
     }
 
     @HasRole(RoleName.ADMIN)

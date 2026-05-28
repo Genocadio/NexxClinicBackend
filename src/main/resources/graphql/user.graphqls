@@ -218,7 +218,7 @@ type Worker {
   username: String
   accountStatus: AccountStatus!
   roles: [RoleName!]!
-  department: Department
+  departments: [Department!]!
   createdAt: String!
   updatedAt: String!
 }
@@ -736,7 +736,7 @@ input SelfRegisterInput {
   email: String
   phoneNumber: String
   username: String
-  departmentId: ID
+  departmentIds: [ID!]
   password: String!
   workerDocProfile: WorkerDocumentInput
 }
@@ -750,7 +750,7 @@ input AdminCreateUserInput {
   email: String
   phoneNumber: String
   username: String
-  departmentId: ID
+  departmentIds: [ID!]
   roles: [RoleName!]!
   workerDocProfile: WorkerDocumentInput
 }
@@ -764,7 +764,7 @@ input AdminUpdateUserInput {
   email: String
   phoneNumber: String
   username: String
-  departmentId: ID
+  departmentIds: [ID!]
   roles: [RoleName!]
   workerDocProfile: WorkerDocumentInput
 }
@@ -806,7 +806,7 @@ input UpdateMyProfileInput {
   email: String
   phoneNumber: String
   username: String
-  departmentId: ID
+  departmentIds: [ID!]
   workerDocProfile: WorkerDocumentInput
 }
 

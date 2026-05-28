@@ -2,23 +2,24 @@ package com.nexxserve.nexxclinic.graphql.input;
 
 import com.nexxserve.nexxclinic.model.DocumentType;
 import com.nexxserve.nexxclinic.model.Gender;
-import com.nexxserve.nexxclinic.validation.NotFutureDate;
+import com.nexxserve.nexxclinic.model.RoleName;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
-public record UpdateMyProfileInput(
+public record AdminUpdateUserInput(
         @Size(max = 120, message = "firstName must not exceed 120 characters")
         String firstName,
 
         @Size(max = 120, message = "lastName must not exceed 120 characters")
         String lastName,
+
         Gender gender,
 
-        @NotFutureDate(message = "dateOfBirth must be in the past or present")
         LocalDate dateOfBirth,
 
         @Size(max = 500, message = "profilePhotoUrl must not exceed 500 characters")
@@ -35,6 +36,8 @@ public record UpdateMyProfileInput(
         String username,
 
         List<UUID> departmentIds,
+
+        Set<RoleName> roles,
 
         @Valid
         WorkerDocumentInput workerDocProfile
