@@ -301,9 +301,8 @@ public class DepartmentFormService {
                 || input.visitId() == null
                 || input.patientId() == null
                 || input.departmentId() == null
-                || input.formId() == null
-                || input.status() == null) {
-            return ApiResponse.error("consultationId, visitId, patientId, departmentId, formId and status are required.", "VALIDATION_ERROR");
+                || input.formId() == null) {
+            return ApiResponse.error("consultationId, visitId, patientId, departmentId and formId are required.", "VALIDATION_ERROR");
         }
 
         Optional<DepartmentForm> formOptional = departmentFormRepository.findByIdAndDepartmentId(input.formId(), input.departmentId());
@@ -331,9 +330,22 @@ public class DepartmentFormService {
             return ApiResponse.error("answers must be valid JSON.", "VALIDATION_ERROR");
         }
 
-        ConsultationAnswer answer = consultationAnswerRepository
-            .findByConsultationIdAndFormIdAndFormVersion(input.consultationId(), input.formId(), targetVersion)
-            .orElseGet(ConsultationAnswer::new);
+        Optional<ConsultationAnswer> existingAnswerOptional = consultationAnswerRepository
+            .findByConsultationIdAndFormIdAndFormVersion(input.consultationId(), input.formId(), targetVersion);
+        ConsultationAnswer answer = existingAnswerOptional.orElseGet(ConsultationAnswer::new);
+
+        AnswerStatus resolvedStatus = input.status();
+        if (resolvedStatus == null) {
+            resolvedStatus = existingAnswerOptional.map(ConsultationAnswer::getStatus).orElse(AnswerStatus.DRAFT);
+        }
+
+        String resolvedAnswers = input.answers();
+        if (resolvedAnswers == null || resolvedAnswers.isBlank()) {
+            if (existingAnswerOptional.isEmpty()) {
+                return ApiResponse.error("answers is required when creating a new consultation answer.", "VALIDATION_ERROR");
+            }
+            resolvedAnswers = existingAnswerOptional.get().getAnswers();
+        }
 
         answer.setConsultationId(input.consultationId());
         answer.setVisitId(input.visitId());
@@ -341,10 +353,10 @@ public class DepartmentFormService {
         answer.setDepartment(form.getDepartment());
         answer.setForm(form);
         answer.setFormVersion(targetVersion);
-        answer.setStatus(input.status());
-        answer.setAnswers(input.answers().trim());
+        answer.setStatus(resolvedStatus);
+        answer.setAnswers(resolvedAnswers.trim());
 
-        if (input.status() == AnswerStatus.FINAL && answer.getSubmittedAt() == null) {
+        if (resolvedStatus == AnswerStatus.FINAL && answer.getSubmittedAt() == null) {
             answer.setSubmittedAt(LocalDateTime.now());
         }
 
@@ -438,7 +450,18 @@ public class DepartmentFormService {
     }
 
     private Map<String, Object> consultationAnswersToMap(ConsultationAnswer answer) {
-        Map<String, Object> data = new HashMap<>();
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("id", answer.getId());
+        data.put("consultationId", answer.getConsultationId());
+        data.put("visitId", answer.getVisitId());
+        data.put("patientId", answer.getPatientId());
+        data.put("departmentId", answer.getDepartment().getId());
+        data.put("formId", answer.getForm().getId());
+        data.put("formVersion", answer.getFormVersion());
+        data.put("status", answer.getStatus());
+        data.put("answers", answer.getAnswers());
+        data.put("submittedAt", answer.getSubmittedAt());
+        data.put("updatedAt", answer.getUpdatedAt());
         data.put("answer", consultationAnswerToMap(answer));
         data.put("form", formToMap(answer.getForm()));
         return data;

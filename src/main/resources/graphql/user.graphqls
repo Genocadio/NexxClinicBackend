@@ -704,6 +704,17 @@ type ConsultationAnswer {
 }
 
 type ConsultationAnswers {
+  id: ID!
+  consultationId: ID!
+  visitId: ID!
+  patientId: ID!
+  departmentId: ID!
+  formId: ID!
+  formVersion: String!
+  status: AnswerStatus!
+  answers: String!
+  submittedAt: String
+  updatedAt: String!
   answer: ConsultationAnswer!
   form: Form!
 }
@@ -1168,8 +1179,8 @@ input ConsultationAnswersInput {
   departmentId: ID!
   formId: ID!
   formVersion: String
-  status: AnswerStatus!
-  answers: String!
+  status: AnswerStatus
+  answers: String
 }
 
 type Query {
