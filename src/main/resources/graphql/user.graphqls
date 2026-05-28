@@ -117,6 +117,7 @@ enum VisitDepartmentStatus {
   ACTIVE
   PENDING
   ON_HOLD
+  BILLING
   COMPLETED
 }
 
@@ -1232,7 +1233,8 @@ type Mutation {
   updateVisitDepartmentProductStatus(input: UpdateVisitDepartmentProductStatusInput!): VisitDepartmentResponse!
   updateVisitDepartmentStatus(input: UpdateVisitDepartmentStatusInput!): VisitDepartmentResponse!
   updateVisitDepartmentProductQuantity(input: UpdateVisitDepartmentProductQuantityInput!): VisitDepartmentResponse!
-  completeVisit(input: ConsultationAnswersInput!, final: Boolean!): VisitResponse!
+  completeConsultationVisit(input: ConsultationAnswersInput!, final: Boolean!): VisitResponse!
+  completeVisit(visitId: ID!): VisitResponse!
   removeVisitDepartmentProduct(visitDepartmentProductId: ID!): VisitDepartmentResponse!
   billVisit(input: BillVisitInput!): VisitBillingResponse!
   recordVisitBillingPayment(input: RecordVisitBillingPaymentInput!): VisitBillingResponse!

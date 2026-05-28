@@ -108,12 +108,21 @@ public class VisitMutationController {
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
     @MutationMapping
-    public ApiResponse completeVisit(
+    public ApiResponse completeConsultationVisit(
             @Argument @Valid ConsultationAnswersInput input,
             @Argument("final") boolean finalAnswer,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         return visitService.completeVisit(input, finalAnswer, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
+    public ApiResponse completeVisit(
+            @Argument UUID visitId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.completeVisit(visitId);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})

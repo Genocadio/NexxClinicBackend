@@ -295,14 +295,6 @@ public class VisitService {
             return ApiResponse.error("Cancelled visit cannot be completed.", "INVALID_VISIT_STATUS_TRANSITION");
         }
 
-        List<VisitDepartmentProduct> visitProducts = visitDepartmentProductRepository.findByVisitDepartmentVisitId(input.visitId());
-        boolean hasUnbilledProducts = visitProducts.stream()
-                .anyMatch(product -> product.getStatus() == VisitProductStatus.PENDING);
-
-        if (hasUnbilledProducts) {
-            return ApiResponse.error("Cannot complete visit with unbilled products. All products must be billed first.", "VISIT_HAS_UNBILLED_PRODUCTS");
-        }
-
         ConsultationAnswersInput effectiveInput = input;
         if (finalAnswer) {
             effectiveInput = new ConsultationAnswersInput(
@@ -322,18 +314,17 @@ public class VisitService {
             return answerResponse;
         }
 
+        // Always set department status to BILLING
         List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(input.visitId());
         for (VisitDepartment dept : departments) {
             if (dept.getStatus() != VisitDepartmentStatus.CANCELLED) {
-                dept.setStatus(VisitDepartmentStatus.COMPLETED);
-                dept.setCompletedAt(LocalDateTime.now());
+                dept.setStatus(VisitDepartmentStatus.BILLING);
                 visitDepartmentRepository.save(dept);
             }
         }
 
-        visit.setStatus(VisitStatus.COMPLETED);
         Visit saved = visitRepository.save(visit);
-        return ApiResponse.success("Visit completed.", visitToMap(saved));
+        return ApiResponse.success("Visit submitted for billing.", visitToMap(saved));
     }
 
     @Transactional
