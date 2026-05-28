@@ -755,6 +755,20 @@ input AdminCreateUserInput {
   workerDocProfile: WorkerDocumentInput
 }
 
+input AdminUpdateUserInput {
+  firstName: String
+  lastName: String
+  gender: Gender
+  dateOfBirth: String
+  profilePhotoUrl: String
+  email: String
+  phoneNumber: String
+  username: String
+  departmentId: ID
+  roles: [RoleName!]
+  workerDocProfile: WorkerDocumentInput
+}
+
 input ActivateUserInput {
   userId: ID!
   roles: [RoleName!]!
@@ -1183,6 +1197,7 @@ type Query {
 type Mutation {
   selfRegister(input: SelfRegisterInput!): WorkerResponse!
   adminCreateUser(input: AdminCreateUserInput!): WorkerResponse!
+  adminUpdateUser(userId: ID!, input: AdminUpdateUserInput!): WorkerResponse!
   activateUser(input: ActivateUserInput!): WorkerResponse!
   deactivateUser(input: DeactivateUserInput!): WorkerResponse!
   login(input: LoginInput!): AuthResponse!

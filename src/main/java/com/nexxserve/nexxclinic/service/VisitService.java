@@ -921,6 +921,7 @@ public class VisitService {
         data.put("updatedAt", department.getUpdatedAt());
         data.put("nursing", department.isNursing());
         data.put("supportRequests", department.isSupportRequests());
+        data.put("requestsProducts", department.isRequestsProducts());
         return data;
     }
 
