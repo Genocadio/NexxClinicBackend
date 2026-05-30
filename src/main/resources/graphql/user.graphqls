@@ -697,32 +697,22 @@ type FormVersionListResponse implements ApiResponse {
 }
 
 type ConsultationAnswer {
-  status: AnswerStatus!
-  answers: String!
-  submittedAt: String
-  updatedAt: String!
-}
-
-type ConsultationAnswers {
   id: ID!
   consultationId: ID!
   visitId: ID!
   patientId: ID!
   departmentId: ID!
-  formId: ID!
-  formVersion: String!
   status: AnswerStatus!
   answers: String!
   submittedAt: String
   updatedAt: String!
-  answer: ConsultationAnswer!
-  form: Form!
+  dedicatedForm: Form!
 }
 
 type ConsultationAnswersResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: ConsultationAnswers
+  data: [ConsultationAnswer!]!
 }
 
 input WorkerDocumentInput {

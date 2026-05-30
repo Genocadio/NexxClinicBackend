@@ -29,7 +29,6 @@ import com.nexxserve.nexxclinic.repository.WorkerRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -366,7 +365,7 @@ public class DepartmentFormService {
         }
 
         ConsultationAnswer saved = consultationAnswerRepository.save(answer);
-        return ApiResponse.success("Consultation answers upserted.", consultationAnswersToMap(saved));
+        return ApiResponse.success("Consultation answers upserted.", List.of(consultationAnswerToMap(saved)));
     }
 
     @Transactional(readOnly = true)
@@ -375,19 +374,18 @@ public class DepartmentFormService {
             return ApiResponse.error("consultationId, departmentId and formId are required.", "VALIDATION_ERROR");
         }
 
-        Optional<ConsultationAnswer> answerOptional = consultationAnswerRepository
-                .findTopByConsultationIdAndFormIdOrderByUpdatedAtDesc(consultationId, formId);
+        List<ConsultationAnswer> answers = consultationAnswerRepository
+                .findByConsultationIdAndDepartmentIdAndFormIdOrderByUpdatedAtDesc(consultationId, departmentId, formId);
 
-        if (answerOptional.isEmpty()) {
+        if (answers.isEmpty()) {
             return ApiResponse.error("Consultation answers not found.", "NOT_FOUND");
         }
 
-        ConsultationAnswer answer = answerOptional.get();
-        if (!answer.getDepartment().getId().equals(departmentId)) {
-            return ApiResponse.error("Consultation answers not found for this department.", "NOT_FOUND");
-        }
+        List<Map<String, Object>> payload = answers.stream()
+                .map(this::consultationAnswerToMap)
+                .toList();
 
-        return ApiResponse.success("Consultation answers fetched.", consultationAnswersToMap(answer));
+        return ApiResponse.success("Consultation answers fetched.", payload);
     }
 
     private String resolveLatestUsableFormVersion(DepartmentForm form) {
@@ -441,30 +439,44 @@ public class DepartmentFormService {
     }
 
     private Map<String, Object> consultationAnswerToMap(ConsultationAnswer answer) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("status", answer.getStatus());
-        data.put("answers", answer.getAnswers());
-        data.put("submittedAt", answer.getSubmittedAt());
-        data.put("updatedAt", answer.getUpdatedAt());
-        return data;
-    }
-
-    private Map<String, Object> consultationAnswersToMap(ConsultationAnswer answer) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("id", answer.getId());
         data.put("consultationId", answer.getConsultationId());
         data.put("visitId", answer.getVisitId());
         data.put("patientId", answer.getPatientId());
         data.put("departmentId", answer.getDepartment().getId());
-        data.put("formId", answer.getForm().getId());
-        data.put("formVersion", answer.getFormVersion());
         data.put("status", answer.getStatus());
         data.put("answers", answer.getAnswers());
         data.put("submittedAt", answer.getSubmittedAt());
         data.put("updatedAt", answer.getUpdatedAt());
-        data.put("answer", consultationAnswerToMap(answer));
-        data.put("form", formToMap(answer.getForm()));
+        data.put("dedicatedForm", dedicatedFormToMap(answer));
         return data;
+    }
+
+    private Map<String, Object> dedicatedFormToMap(ConsultationAnswer answer) {
+        Optional<DepartmentFormVersion> answerVersionOptional = departmentFormVersionRepository
+                .findByFormIdAndVersionNumber(answer.getForm().getId(), answer.getFormVersion());
+
+        if (answerVersionOptional.isPresent()) {
+            DepartmentFormVersion version = answerVersionOptional.get();
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("id", version.getForm().getId());
+            data.put("departmentId", version.getForm().getDepartment().getId());
+            data.put("title", version.getTitle());
+            data.put("description", version.getDescription());
+            data.put("status", version.getStatus());
+            data.put("version", version.getVersionNumber());
+            data.put("createdAt", version.getCreatedAt());
+            data.put("updatedAt", version.getUpdatedAt());
+
+            Map<String, Object> formData = parseJsonMap(version.getFormData());
+            data.put("sections", mapList(formData.get("sections")));
+            data.put("fields", mapList(formData.get("fields")));
+            data.put("actions", mapList(formData.get("actions")));
+            return data;
+        }
+
+        return formToMap(answer.getForm());
     }
 
     private String serializeFormData(FormInput input) {
