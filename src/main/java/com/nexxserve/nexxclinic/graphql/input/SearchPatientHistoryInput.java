@@ -4,6 +4,8 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.List;
+import java.util.UUID;
 
 public record SearchPatientHistoryInput(
         Integer year,
@@ -27,6 +29,8 @@ public record SearchPatientHistoryInput(
         Integer startYear,
 
         Integer endYear,
+
+        List<UUID> departmentIds,
 
         @Min(value = 0, message = "page must be 0 or greater")
         Integer page,

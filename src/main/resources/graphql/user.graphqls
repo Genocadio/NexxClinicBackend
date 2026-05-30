@@ -1094,6 +1094,7 @@ input SearchPatientHistoryInput {
   endMonth: String
   startYear: Int
   endYear: Int
+  departmentIds: [ID!]
   page: Int
   size: Int
 }

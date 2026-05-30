@@ -259,6 +259,8 @@ public class VisitService {
             return ApiResponse.error(ex.getMessage(), "VALIDATION_ERROR");
         }
 
+        Set<UUID> departmentIds = normalizeDepartmentIds(input == null ? null : input.departmentIds());
+
         Specification<Visit> spec = (root, queryDef, builder) -> builder.equal(root.join("patient").get("id"), patientId);
 
         if (dateWindow.start() != null) {
@@ -269,8 +271,24 @@ public class VisitService {
             spec = spec.and((root, queryDef, builder) -> builder.lessThan(root.get("visitDate"), dateWindow.endExclusive()));
         }
 
+        if (!departmentIds.isEmpty()) {
+            Set<UUID> matchingVisitIds = new LinkedHashSet<>();
+            for (VisitDepartment visitDepartment : visitDepartmentRepository.findByDepartmentIdIn(departmentIds)) {
+                matchingVisitIds.add(visitDepartment.getVisit().getId());
+            }
+
+            if (matchingVisitIds.isEmpty()) {
+                Page<Visit> emptyPage = Page.empty(pageable);
+                return ApiResponse.success("Patient history fetched.", List.of(), paginationToMap(emptyPage));
+            }
+
+            spec = spec.and((root, queryDef, builder) -> root.get("id").in(matchingVisitIds));
+        }
+
         Page<Visit> visitPage = visitRepository.findAll(spec, pageable);
-        List<Map<String, Object>> visits = visitPage.getContent().stream().map(this::visitToMap).toList();
+        List<Map<String, Object>> visits = visitPage.getContent().stream()
+                .map(visit -> visitToMap(visit, departmentIds))
+                .toList();
 
         return ApiResponse.success("Patient history fetched.", visits, paginationToMap(visitPage));
     }
@@ -846,6 +864,10 @@ public class VisitService {
     }
 
     private Map<String, Object> visitToMap(Visit visit) {
+        return visitToMap(visit, Set.of());
+    }
+
+    private Map<String, Object> visitToMap(Visit visit, Set<UUID> departmentIds) {
         Map<String, Object> data = new HashMap<>();
         data.put("id", visit.getId());
         data.put("patient", patientToMap(visit.getPatient()));
@@ -860,10 +882,10 @@ public class VisitService {
         );
         data.put(
                 "departments",
-                visitDepartmentRepository.findByVisitId(visit.getId())
-                        .stream()
-                        .map(this::visitDepartmentToMap)
-                        .toList()
+            resolveVisitDepartmentsForResponse(visit.getId(), departmentIds)
+                .stream()
+                .map(this::visitDepartmentToMap)
+                .toList()
         );
         data.put(
                 "vitalSigns",
@@ -1126,6 +1148,34 @@ public class VisitService {
             return 20;
         }
         return Math.min(size, 100);
+    }
+
+    private Set<UUID> normalizeDepartmentIds(List<UUID> departmentIds) {
+        if (departmentIds == null || departmentIds.isEmpty()) {
+            return Set.of();
+        }
+
+        Set<UUID> normalized = new LinkedHashSet<>();
+        for (UUID departmentId : departmentIds) {
+            if (departmentId != null) {
+                normalized.add(departmentId);
+            }
+        }
+
+        return normalized;
+    }
+
+    private List<VisitDepartment> resolveVisitDepartmentsForResponse(UUID visitId, Set<UUID> departmentIds) {
+        if (departmentIds == null || departmentIds.isEmpty()) {
+            return visitDepartmentRepository.findByVisitId(visitId);
+        }
+
+        List<VisitDepartment> visitDepartments = new ArrayList<>();
+        for (UUID departmentId : departmentIds) {
+            visitDepartmentRepository.findByVisitIdAndDepartmentId(visitId, departmentId)
+                    .ifPresent(visitDepartments::add);
+        }
+        return visitDepartments;
     }
 
     private DateWindow resolvePatientHistoryDateWindow(SearchPatientHistoryInput input) {

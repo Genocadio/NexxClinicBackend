@@ -149,11 +149,34 @@ class VisitServiceTest {
 
     @Test
     void testGetPatientHistoryFiltersByYearAndPatient() {
-        Visit archivedVisit = new Visit();
-        archivedVisit.setPatient(visitDepartment.getVisit().getPatient());
-        archivedVisit.setStatus(VisitStatus.COMPLETED);
-        archivedVisit.setVisitDate(LocalDateTime.now().minusYears(1));
-        visitRepository.save(archivedVisit);
+        UUID requestedPatientId = visitDepartment.getVisit().getPatient().getId();
+        UUID requestedDepartmentId = visitDepartment.getDepartment().getId();
+
+        Department specialtyDepartment = new Department();
+        specialtyDepartment.setName("Specialty");
+        specialtyDepartment = departmentRepository.save(specialtyDepartment);
+
+        Department extraDepartment = new Department();
+        extraDepartment.setName("Extra");
+        extraDepartment = departmentRepository.save(extraDepartment);
+
+        Visit secondVisit = new Visit();
+        secondVisit.setPatient(visitDepartment.getVisit().getPatient());
+        secondVisit.setStatus(VisitStatus.IN_PROGRESS);
+        secondVisit.setVisitDate(LocalDateTime.now().minusDays(2));
+        secondVisit = visitRepository.save(secondVisit);
+
+        VisitDepartment extraVisitDepartment = new VisitDepartment();
+        extraVisitDepartment.setVisit(visitDepartment.getVisit());
+        extraVisitDepartment.setDepartment(extraDepartment);
+        extraVisitDepartment.setStatus(VisitDepartmentStatus.PENDING);
+        visitDepartmentRepository.save(extraVisitDepartment);
+
+        VisitDepartment nonMatchingDepartment = new VisitDepartment();
+        nonMatchingDepartment.setVisit(secondVisit);
+        nonMatchingDepartment.setDepartment(specialtyDepartment);
+        nonMatchingDepartment.setStatus(VisitDepartmentStatus.PENDING);
+        visitDepartmentRepository.save(nonMatchingDepartment);
 
         SearchPatientHistoryInput input = new SearchPatientHistoryInput(
                 LocalDate.now().getYear(),
@@ -165,11 +188,12 @@ class VisitServiceTest {
                 null,
                 null,
                 null,
+                java.util.List.of(requestedDepartmentId),
                 0,
                 20
         );
 
-        ApiResponse response = visitService.getPatientHistory(visitDepartment.getVisit().getPatient().getId(), input);
+            ApiResponse response = visitService.getPatientHistory(requestedPatientId, input);
         assertEquals(ResponseStatus.SUCCESS, response.status());
         assertNotNull(response.data());
 
@@ -179,6 +203,11 @@ class VisitServiceTest {
         Map<String, Object> visit = (Map<String, Object>) visits.get(0);
         Map<String, Object> patient = (Map<String, Object>) visit.get("patient");
         assertEquals(visitDepartment.getVisit().getPatient().getId(), UUID.fromString(patient.get("id").toString()));
+
+        java.util.List<?> departments = (java.util.List<?>) visit.get("departments");
+        assertEquals(1, departments.size());
+        Map<String, Object> department = (Map<String, Object>) departments.get(0);
+        assertNotNull(department.get("id"));
 
         Map<String, Object> pagination = (Map<String, Object>) response.pagination();
         assertEquals(1L, pagination.get("total"));

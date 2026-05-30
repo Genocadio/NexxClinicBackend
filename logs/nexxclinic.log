@@ -41139,3 +41139,227 @@ This generated password is for development use only. Your security configuration
 2026-05-30 23:21:36 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
 2026-05-30 23:21:36 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Started NexxclinicApplication in 1.381 seconds (process running for 10846.257)
 2026-05-30 23:21:36 [restartedMain] INFO  o.s.b.d.a.ConditionEvaluationDeltaLoggingListener - Condition evaluation unchanged
+2026-05-30 23:41:57 [File Watcher] INFO  o.s.b.d.a.LocalDevToolsAutoConfiguration$RestartingClassPathChangeChangedEventListener - Restarting due to 13 class path changes (0 additions, 0 deletions, 13 modifications)
+2026-05-30 23:41:57 [Thread-9] INFO  o.s.boot.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2026-05-30 23:41:57 [tomcat-shutdown] INFO  o.s.boot.tomcat.GracefulShutdown - Graceful shutdown complete
+2026-05-30 23:41:57 [Thread-9] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-05-30 23:41:57 [Thread-9] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-3 - Shutdown initiated...
+2026-05-30 23:41:57 [Thread-9] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-3 - Shutdown completed.
+2026-05-30 23:41:57 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Starting NexxclinicApplication using Java 21.0.11 with PID 63826 (/Users/nex/workspace/nexxserve/nexxclinic/build/classes/java/main started by nex in /Users/nex/workspace/nexxserve/nexxclinic)
+2026-05-30 23:41:57 [restartedMain] DEBUG c.n.nexxclinic.NexxclinicApplication - Running with Spring Boot v4.0.5, Spring v7.0.6
+2026-05-30 23:41:57 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - No active profile set, falling back to 1 default profile: "default"
+2026-05-30 23:41:57 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-05-30 23:41:57 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 22 ms. Found 28 JPA repository interfaces.
+2026-05-30 23:41:58 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-05-30 23:41:58 [restartedMain] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-05-30 23:41:58 [restartedMain] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.20]
+2026-05-30 23:41:58 [restartedMain] INFO  o.s.b.w.c.s.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 291 ms
+2026-05-30 23:41:58 [restartedMain] INFO  org.hibernate.orm.jpa - HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-05-30 23:41:58 [restartedMain] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-05-30 23:41:58 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-4 - Starting...
+2026-05-30 23:41:58 [restartedMain] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-4 - Added connection org.postgresql.jdbc.PgConnection@4fff7430
+2026-05-30 23:41:58 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-4 - Start completed.
+2026-05-30 23:41:58 [restartedMain] INFO  o.hibernate.orm.connections.pooling - HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/nexxclinic]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 17.9
+	Default catalog/schema: nexxclinic/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-05-30 23:41:58 [restartedMain] INFO  org.hibernate.orm.core - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-05-30 23:41:58 [restartedMain] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-05-30 23:41:58 [restartedMain] INFO  c.n.nexxclinic.auth.JwtService - JwtService initialized with expiration: 120 minutes
+2026-05-30 23:41:58 [restartedMain] WARN  o.s.b.s.a.UserDetailsServiceAutoConfiguration - 
+
+Using generated security password: 71178042-1596-496d-9bd8-e723a08fa34b
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+2026-05-30 23:41:58 [restartedMain] INFO  o.s.s.c.a.a.c.InitializeUserDetailsBeanManagerConfigurer$InitializeUserDetailsManagerConfigurer - Global AuthenticationManager configured with UserDetailsService bean with name inMemoryUserDetailsManager
+2026-05-30 23:41:58 [restartedMain] INFO  c.n.n.config.WebSecurityConfig - Configuring security filter chain
+2026-05-30 23:41:58 [restartedMain] INFO  o.s.g.e.DefaultSchemaResourceGraphQlSourceBuilder - Loaded 3 resource(s) in the GraphQL schema.
+2026-05-30 23:41:59 [restartedMain] INFO  o.s.b.g.a.GraphQlAutoConfiguration - GraphQL schema inspection:
+	Unmapped fields: {Mutation=[completeVisitDepartment, generateConsultationPdf]}
+	Unmapped registrations: {Mutation.saveAnswerAndCompleteVisit=VisitMutationController#saveAnswerAndCompleteVisit[3 args]}
+	Unmapped arguments: {}
+	Field nullness errors: {}
+	Argument nullness errors: {}
+	Skipped types: [Worker, Worker, AuditLog, InsuranceProvider, InsuranceProvider, PaginationInfo, Patient, Patient, PaginationInfo, PatientInsurance, PaginationInfo, Product, Product, PaginationInfo, ProductInsuranceCoverage, Department, Department, PaginationInfo, Visit, Visit, PaginationInfo, VisitBilling, VisitBilling, Invoice, Form, Form, FormVersion, FormVersion, ConsultationAnswer, AuthTokens, PatientInsurance, VisitDepartment]
+2026-05-30 23:41:59 [restartedMain] INFO  o.s.b.g.a.s.GraphQlWebMvcAutoConfiguration - GraphQL endpoint HTTP POST /graphql
+2026-05-30 23:41:59 [restartedMain] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 1 endpoint beneath base path '/actuator'
+2026-05-30 23:41:59 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
+2026-05-30 23:41:59 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Started NexxclinicApplication in 1.32 seconds (process running for 12068.551)
+2026-05-30 23:41:59 [restartedMain] INFO  o.s.b.d.a.ConditionEvaluationDeltaLoggingListener - Condition evaluation unchanged
+2026-05-30 23:46:04 [File Watcher] INFO  o.s.b.d.a.LocalDevToolsAutoConfiguration$RestartingClassPathChangeChangedEventListener - Restarting due to 15 class path changes (0 additions, 15 deletions, 0 modifications)
+2026-05-30 23:46:04 [Thread-13] INFO  o.s.boot.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2026-05-30 23:46:04 [tomcat-shutdown] INFO  o.s.boot.tomcat.GracefulShutdown - Graceful shutdown complete
+2026-05-30 23:46:04 [Thread-13] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-05-30 23:46:04 [Thread-13] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-4 - Shutdown initiated...
+2026-05-30 23:46:04 [Thread-13] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-4 - Shutdown completed.
+2026-05-30 23:46:04 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Starting NexxclinicApplication using Java 21.0.11 with PID 63826 (/Users/nex/workspace/nexxserve/nexxclinic/build/classes/java/main started by nex in /Users/nex/workspace/nexxserve/nexxclinic)
+2026-05-30 23:46:04 [restartedMain] DEBUG c.n.nexxclinic.NexxclinicApplication - Running with Spring Boot v4.0.5, Spring v7.0.6
+2026-05-30 23:46:04 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - No active profile set, falling back to 1 default profile: "default"
+2026-05-30 23:46:04 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-05-30 23:46:04 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 25 ms. Found 28 JPA repository interfaces.
+2026-05-30 23:46:04 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-05-30 23:46:04 [restartedMain] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-05-30 23:46:04 [restartedMain] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.20]
+2026-05-30 23:46:04 [restartedMain] INFO  o.s.b.w.c.s.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 331 ms
+2026-05-30 23:46:04 [restartedMain] INFO  org.hibernate.orm.jpa - HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-05-30 23:46:04 [restartedMain] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-05-30 23:46:04 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-5 - Starting...
+2026-05-30 23:46:04 [restartedMain] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-5 - Added connection org.postgresql.jdbc.PgConnection@14528a65
+2026-05-30 23:46:04 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-5 - Start completed.
+2026-05-30 23:46:04 [restartedMain] INFO  o.hibernate.orm.connections.pooling - HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/nexxclinic]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 17.9
+	Default catalog/schema: nexxclinic/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-05-30 23:46:05 [restartedMain] INFO  org.hibernate.orm.core - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-05-30 23:46:05 [restartedMain] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-05-30 23:46:05 [restartedMain] INFO  c.n.nexxclinic.auth.JwtService - JwtService initialized with expiration: 120 minutes
+2026-05-30 23:46:05 [restartedMain] WARN  o.s.b.s.a.UserDetailsServiceAutoConfiguration - 
+
+Using generated security password: 857e21f0-f8d5-42e5-9fd6-61190a825a23
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+2026-05-30 23:46:05 [restartedMain] INFO  o.s.s.c.a.a.c.InitializeUserDetailsBeanManagerConfigurer$InitializeUserDetailsManagerConfigurer - Global AuthenticationManager configured with UserDetailsService bean with name inMemoryUserDetailsManager
+2026-05-30 23:46:05 [restartedMain] INFO  c.n.n.config.WebSecurityConfig - Configuring security filter chain
+2026-05-30 23:46:05 [restartedMain] INFO  o.s.g.e.DefaultSchemaResourceGraphQlSourceBuilder - Loaded 3 resource(s) in the GraphQL schema.
+2026-05-30 23:46:05 [restartedMain] INFO  o.s.b.g.a.GraphQlAutoConfiguration - GraphQL schema inspection:
+	Unmapped fields: {Mutation=[completeVisitDepartment, generateConsultationPdf]}
+	Unmapped registrations: {Mutation.saveAnswerAndCompleteVisit=VisitMutationController#saveAnswerAndCompleteVisit[3 args]}
+	Unmapped arguments: {}
+	Field nullness errors: {}
+	Argument nullness errors: {}
+	Skipped types: [Worker, Worker, AuditLog, InsuranceProvider, InsuranceProvider, PaginationInfo, Patient, Patient, PaginationInfo, PatientInsurance, PaginationInfo, Product, Product, PaginationInfo, ProductInsuranceCoverage, Department, Department, PaginationInfo, Visit, Visit, PaginationInfo, VisitBilling, VisitBilling, Invoice, Form, Form, FormVersion, FormVersion, ConsultationAnswer, AuthTokens, PatientInsurance, VisitDepartment]
+2026-05-30 23:46:05 [restartedMain] INFO  o.s.b.g.a.s.GraphQlWebMvcAutoConfiguration - GraphQL endpoint HTTP POST /graphql
+2026-05-30 23:46:05 [restartedMain] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 1 endpoint beneath base path '/actuator'
+2026-05-30 23:46:05 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
+2026-05-30 23:46:05 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Started NexxclinicApplication in 1.708 seconds (process running for 12315.372)
+2026-05-30 23:46:05 [restartedMain] INFO  o.s.b.d.a.ConditionEvaluationDeltaLoggingListener - Condition evaluation unchanged
+2026-05-30 23:46:07 [File Watcher] INFO  o.s.b.d.a.LocalDevToolsAutoConfiguration$RestartingClassPathChangeChangedEventListener - Restarting due to 15 class path changes (15 additions, 0 deletions, 0 modifications)
+2026-05-30 23:46:07 [Thread-17] INFO  o.s.boot.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2026-05-30 23:46:07 [tomcat-shutdown] INFO  o.s.boot.tomcat.GracefulShutdown - Graceful shutdown complete
+2026-05-30 23:46:07 [Thread-17] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-05-30 23:46:07 [Thread-17] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-5 - Shutdown initiated...
+2026-05-30 23:46:07 [Thread-17] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-5 - Shutdown completed.
+2026-05-30 23:46:07 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Starting NexxclinicApplication using Java 21.0.11 with PID 63826 (/Users/nex/workspace/nexxserve/nexxclinic/build/classes/java/main started by nex in /Users/nex/workspace/nexxserve/nexxclinic)
+2026-05-30 23:46:07 [restartedMain] DEBUG c.n.nexxclinic.NexxclinicApplication - Running with Spring Boot v4.0.5, Spring v7.0.6
+2026-05-30 23:46:07 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - No active profile set, falling back to 1 default profile: "default"
+2026-05-30 23:46:07 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-05-30 23:46:07 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 19 ms. Found 28 JPA repository interfaces.
+2026-05-30 23:46:07 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-05-30 23:46:07 [restartedMain] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-05-30 23:46:07 [restartedMain] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.20]
+2026-05-30 23:46:07 [restartedMain] INFO  o.s.b.w.c.s.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 244 ms
+2026-05-30 23:46:07 [restartedMain] INFO  org.hibernate.orm.jpa - HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-05-30 23:46:07 [restartedMain] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-05-30 23:46:07 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-6 - Starting...
+2026-05-30 23:46:07 [restartedMain] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-6 - Added connection org.postgresql.jdbc.PgConnection@27cbc8f6
+2026-05-30 23:46:07 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-6 - Start completed.
+2026-05-30 23:46:07 [restartedMain] INFO  o.hibernate.orm.connections.pooling - HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/nexxclinic]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 17.9
+	Default catalog/schema: nexxclinic/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-05-30 23:46:07 [restartedMain] INFO  org.hibernate.orm.core - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-05-30 23:46:08 [restartedMain] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-05-30 23:46:08 [restartedMain] INFO  c.n.nexxclinic.auth.JwtService - JwtService initialized with expiration: 120 minutes
+2026-05-30 23:46:08 [restartedMain] WARN  o.s.b.s.a.UserDetailsServiceAutoConfiguration - 
+
+Using generated security password: 8ee935d7-083f-4b0c-bf54-c75b4c70c0f9
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+2026-05-30 23:46:08 [restartedMain] INFO  o.s.s.c.a.a.c.InitializeUserDetailsBeanManagerConfigurer$InitializeUserDetailsManagerConfigurer - Global AuthenticationManager configured with UserDetailsService bean with name inMemoryUserDetailsManager
+2026-05-30 23:46:08 [restartedMain] INFO  c.n.n.config.WebSecurityConfig - Configuring security filter chain
+2026-05-30 23:46:08 [restartedMain] INFO  o.s.g.e.DefaultSchemaResourceGraphQlSourceBuilder - Loaded 3 resource(s) in the GraphQL schema.
+2026-05-30 23:46:08 [restartedMain] INFO  o.s.b.g.a.GraphQlAutoConfiguration - GraphQL schema inspection:
+	Unmapped fields: {Mutation=[completeVisitDepartment, generateConsultationPdf]}
+	Unmapped registrations: {Mutation.saveAnswerAndCompleteVisit=VisitMutationController#saveAnswerAndCompleteVisit[3 args]}
+	Unmapped arguments: {}
+	Field nullness errors: {}
+	Argument nullness errors: {}
+	Skipped types: [Worker, Worker, AuditLog, InsuranceProvider, InsuranceProvider, PaginationInfo, Patient, Patient, PaginationInfo, PatientInsurance, PaginationInfo, Product, Product, PaginationInfo, ProductInsuranceCoverage, Department, Department, PaginationInfo, Visit, Visit, PaginationInfo, VisitBilling, VisitBilling, Invoice, Form, Form, FormVersion, FormVersion, ConsultationAnswer, AuthTokens, PatientInsurance, VisitDepartment]
+2026-05-30 23:46:08 [restartedMain] INFO  o.s.b.g.a.s.GraphQlWebMvcAutoConfiguration - GraphQL endpoint HTTP POST /graphql
+2026-05-30 23:46:08 [restartedMain] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 1 endpoint beneath base path '/actuator'
+2026-05-30 23:46:08 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
+2026-05-30 23:46:08 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Started NexxclinicApplication in 1.196 seconds (process running for 12318.038)
+2026-05-30 23:46:08 [restartedMain] INFO  o.s.b.d.a.ConditionEvaluationDeltaLoggingListener - Condition evaluation unchanged
+2026-05-30 23:48:18 [File Watcher] INFO  o.s.b.d.a.LocalDevToolsAutoConfiguration$RestartingClassPathChangeChangedEventListener - Restarting due to 7 class path changes (0 additions, 0 deletions, 7 modifications)
+2026-05-30 23:48:18 [Thread-21] INFO  o.s.boot.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2026-05-30 23:48:19 [tomcat-shutdown] INFO  o.s.boot.tomcat.GracefulShutdown - Graceful shutdown complete
+2026-05-30 23:48:19 [Thread-21] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-05-30 23:48:19 [Thread-21] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-6 - Shutdown initiated...
+2026-05-30 23:48:19 [Thread-21] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-6 - Shutdown completed.
+2026-05-30 23:48:19 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Starting NexxclinicApplication using Java 21.0.11 with PID 63826 (/Users/nex/workspace/nexxserve/nexxclinic/build/classes/java/main started by nex in /Users/nex/workspace/nexxserve/nexxclinic)
+2026-05-30 23:48:19 [restartedMain] DEBUG c.n.nexxclinic.NexxclinicApplication - Running with Spring Boot v4.0.5, Spring v7.0.6
+2026-05-30 23:48:19 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - No active profile set, falling back to 1 default profile: "default"
+2026-05-30 23:48:20 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-05-30 23:48:20 [restartedMain] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 25 ms. Found 28 JPA repository interfaces.
+2026-05-30 23:48:20 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-05-30 23:48:20 [restartedMain] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-05-30 23:48:20 [restartedMain] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.20]
+2026-05-30 23:48:20 [restartedMain] INFO  o.s.b.w.c.s.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 277 ms
+2026-05-30 23:48:20 [restartedMain] INFO  org.hibernate.orm.jpa - HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-05-30 23:48:20 [restartedMain] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-05-30 23:48:20 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-7 - Starting...
+2026-05-30 23:48:20 [restartedMain] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-7 - Added connection org.postgresql.jdbc.PgConnection@2c13621a
+2026-05-30 23:48:20 [restartedMain] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-7 - Start completed.
+2026-05-30 23:48:20 [restartedMain] INFO  o.hibernate.orm.connections.pooling - HHH10001005: Database info:
+	Database JDBC URL [jdbc:postgresql://localhost:5432/nexxclinic]
+	Database driver: PostgreSQL JDBC Driver
+	Database dialect: PostgreSQLDialect
+	Database version: 17.9
+	Default catalog/schema: nexxclinic/public
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: none
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-05-30 23:48:20 [restartedMain] INFO  org.hibernate.orm.core - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-05-30 23:48:20 [restartedMain] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-05-30 23:48:20 [restartedMain] INFO  c.n.nexxclinic.auth.JwtService - JwtService initialized with expiration: 120 minutes
+2026-05-30 23:48:20 [restartedMain] WARN  o.s.b.s.a.UserDetailsServiceAutoConfiguration - 
+
+Using generated security password: 33842812-abba-4340-91ad-29a089d3b1ad
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+2026-05-30 23:48:20 [restartedMain] INFO  o.s.s.c.a.a.c.InitializeUserDetailsBeanManagerConfigurer$InitializeUserDetailsManagerConfigurer - Global AuthenticationManager configured with UserDetailsService bean with name inMemoryUserDetailsManager
+2026-05-30 23:48:20 [restartedMain] INFO  c.n.n.config.WebSecurityConfig - Configuring security filter chain
+2026-05-30 23:48:21 [restartedMain] INFO  o.s.g.e.DefaultSchemaResourceGraphQlSourceBuilder - Loaded 3 resource(s) in the GraphQL schema.
+2026-05-30 23:48:21 [restartedMain] INFO  o.s.b.g.a.GraphQlAutoConfiguration - GraphQL schema inspection:
+	Unmapped fields: {Mutation=[completeVisitDepartment, generateConsultationPdf]}
+	Unmapped registrations: {Mutation.saveAnswerAndCompleteVisit=VisitMutationController#saveAnswerAndCompleteVisit[3 args]}
+	Unmapped arguments: {}
+	Field nullness errors: {}
+	Argument nullness errors: {}
+	Skipped types: [Worker, Worker, AuditLog, InsuranceProvider, InsuranceProvider, PaginationInfo, Patient, Patient, PaginationInfo, PatientInsurance, PaginationInfo, Product, Product, PaginationInfo, ProductInsuranceCoverage, Department, Department, PaginationInfo, Visit, Visit, PaginationInfo, VisitBilling, VisitBilling, Invoice, Form, Form, FormVersion, FormVersion, ConsultationAnswer, AuthTokens, PatientInsurance, VisitDepartment]
+2026-05-30 23:48:21 [restartedMain] INFO  o.s.b.g.a.s.GraphQlWebMvcAutoConfiguration - GraphQL endpoint HTTP POST /graphql
+2026-05-30 23:48:21 [restartedMain] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 1 endpoint beneath base path '/actuator'
+2026-05-30 23:48:21 [restartedMain] INFO  o.s.boot.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path '/'
+2026-05-30 23:48:21 [restartedMain] INFO  c.n.nexxclinic.NexxclinicApplication - Started NexxclinicApplication in 1.226 seconds (process running for 12450.612)
+2026-05-30 23:48:21 [restartedMain] INFO  o.s.b.d.a.ConditionEvaluationDeltaLoggingListener - Condition evaluation unchanged
