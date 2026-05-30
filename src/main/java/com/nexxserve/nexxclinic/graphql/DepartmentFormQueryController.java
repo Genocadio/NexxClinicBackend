@@ -74,9 +74,8 @@ public class DepartmentFormQueryController {
     public ApiResponse getConsultationAnswers(
             @Argument UUID visitDepartmentId,
             @Argument UUID visitId,
-            @Argument UUID departmentId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return departmentFormService.getConsultationAnswers(visitDepartmentId, visitId, departmentId);
+        return departmentFormService.getConsultationAnswers(visitDepartmentId, visitId);
     }
 }

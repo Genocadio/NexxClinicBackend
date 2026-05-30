@@ -374,7 +374,7 @@ public class DepartmentFormService {
     }
 
     @Transactional(readOnly = true)
-    public ApiResponse getConsultationAnswers(UUID visitDepartmentId, UUID visitId, UUID departmentId) {
+    public ApiResponse getConsultationAnswers(UUID visitDepartmentId, UUID visitId) {
         UUID resolvedVisitId = null;
         UUID resolvedDepartmentId = null;
 
@@ -387,15 +387,19 @@ public class DepartmentFormService {
             resolvedVisitId = visitDepartment.getVisit().getId();
             resolvedDepartmentId = visitDepartment.getDepartment().getId();
         } else {
-            if (visitId == null || departmentId == null) {
-                return ApiResponse.error("Either visitDepartmentId or both visitId and departmentId are required.", "VALIDATION_ERROR");
+            if (visitId == null) {
+                return ApiResponse.error("Either visitDepartmentId or visitId is required.", "VALIDATION_ERROR");
             }
-            resolvedVisitId = visitId;
-            resolvedDepartmentId = departmentId;
-        }
-
-        if (!departmentRepository.existsById(resolvedDepartmentId)) {
-            return ApiResponse.error("Department not found.", "NOT_FOUND");
+            List<VisitDepartment> visitDepartments = visitDepartmentRepository.findByVisitId(visitId);
+            if (visitDepartments.isEmpty()) {
+                return ApiResponse.error("No departments found for the given visit.", "NOT_FOUND");
+            }
+            if (visitDepartments.size() > 1) {
+                return ApiResponse.error("Multiple visit departments found for the given visit. Please provide visitDepartmentId.", "VALIDATION_ERROR");
+            }
+            VisitDepartment visitDepartment = visitDepartments.get(0);
+            resolvedVisitId = visitDepartment.getVisit().getId();
+            resolvedDepartmentId = visitDepartment.getDepartment().getId();
         }
 
         List<ConsultationAnswer> answers = consultationAnswerRepository

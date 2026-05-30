@@ -8,7 +8,7 @@ extend type Query {
   getLatestForm(departmentId: ID!): FormResponse!
   getFormVersionHistory(departmentId: ID!, formId: ID!): FormVersionListResponse!
   getFormVersion(departmentId: ID!, formId: ID!, version: String!): FormVersionResponse!
-  getConsultationAnswers(visitDepartmentId: ID, visitId: ID, departmentId: ID): ConsultationAnswersResponse!
+  getConsultationAnswers(visitDepartmentId: ID, visitId: ID): ConsultationAnswersResponse!
 }
 
 extend type Mutation {
