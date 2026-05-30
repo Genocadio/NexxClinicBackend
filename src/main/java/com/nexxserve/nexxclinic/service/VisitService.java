@@ -22,6 +22,7 @@ import com.nexxserve.nexxclinic.graphql.input.CreateVisitDepartmentInput;
 import com.nexxserve.nexxclinic.graphql.input.CreateVisitDepartmentProductInput;
 import com.nexxserve.nexxclinic.graphql.input.ChangeVisitDateInput;
 import com.nexxserve.nexxclinic.graphql.input.CreateVisitInput;
+import com.nexxserve.nexxclinic.graphql.input.SearchPatientHistoryInput;
 import com.nexxserve.nexxclinic.graphql.input.SearchVisitsInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentProductStatusInput;
 import com.nexxserve.nexxclinic.graphql.input.AddDiagnosisInput;
@@ -54,6 +55,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Period;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -233,6 +235,44 @@ public class VisitService {
         List<Map<String, Object>> visits = visitPage.getContent().stream().map(this::visitToMap).toList();
 
         return ApiResponse.success("Visits fetched.", visits, paginationToMap(visitPage));
+    }
+
+    @Transactional(readOnly = true)
+    public ApiResponse getPatientHistory(UUID patientId, SearchPatientHistoryInput input) {
+        if (patientId == null) {
+            return ApiResponse.error("patientId is required.", "VALIDATION_ERROR");
+        }
+
+        Optional<Patient> patientOptional = patientRepository.findById(patientId);
+        if (patientOptional.isEmpty()) {
+            return ApiResponse.error("Patient not found.", "NOT_FOUND");
+        }
+
+        int page = normalizePage(input == null ? null : input.page());
+        int size = normalizeSize(input == null ? null : input.size());
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "visitDate").and(Sort.by(Sort.Direction.DESC, "createdAt")));
+
+        DateWindow dateWindow;
+        try {
+            dateWindow = resolvePatientHistoryDateWindow(input);
+        } catch (IllegalArgumentException ex) {
+            return ApiResponse.error(ex.getMessage(), "VALIDATION_ERROR");
+        }
+
+        Specification<Visit> spec = (root, queryDef, builder) -> builder.equal(root.join("patient").get("id"), patientId);
+
+        if (dateWindow.start() != null) {
+            spec = spec.and((root, queryDef, builder) -> builder.greaterThanOrEqualTo(root.get("visitDate"), dateWindow.start()));
+        }
+
+        if (dateWindow.endExclusive() != null) {
+            spec = spec.and((root, queryDef, builder) -> builder.lessThan(root.get("visitDate"), dateWindow.endExclusive()));
+        }
+
+        Page<Visit> visitPage = visitRepository.findAll(spec, pageable);
+        List<Map<String, Object>> visits = visitPage.getContent().stream().map(this::visitToMap).toList();
+
+        return ApiResponse.success("Patient history fetched.", visits, paginationToMap(visitPage));
     }
 
     @Transactional
@@ -1088,6 +1128,66 @@ public class VisitService {
         return Math.min(size, 100);
     }
 
+    private DateWindow resolvePatientHistoryDateWindow(SearchPatientHistoryInput input) {
+        if (input == null) {
+            return new DateWindow(null, null);
+        }
+
+        if (input.startDate() != null || input.endDate() != null) {
+            LocalDateTime start = input.startDate() == null ? null : input.startDate().atStartOfDay();
+            LocalDateTime endExclusive = input.endDate() == null ? null : input.endDate().plusDays(1).atStartOfDay();
+            if (start != null && endExclusive != null && endExclusive.isBefore(start)) {
+                throw new IllegalArgumentException("endDate must be on or after startDate.");
+            }
+            return new DateWindow(start, endExclusive);
+        }
+
+        if (input.startMonth() != null || input.endMonth() != null) {
+            YearMonth startMonth = input.startMonth();
+            YearMonth endMonth = input.endMonth();
+            LocalDateTime start = startMonth == null ? null : startMonth.atDay(1).atStartOfDay();
+            LocalDateTime endExclusive = endMonth == null ? null : endMonth.plusMonths(1).atDay(1).atStartOfDay();
+            if (start != null && endExclusive != null && endExclusive.isBefore(start)) {
+                throw new IllegalArgumentException("endMonth must be on or after startMonth.");
+            }
+            return new DateWindow(start, endExclusive);
+        }
+
+        if (input.startYear() != null || input.endYear() != null) {
+            Integer startYear = input.startYear();
+            Integer endYear = input.endYear();
+            LocalDateTime start = startYear == null ? null : LocalDate.of(startYear, 1, 1).atStartOfDay();
+            LocalDateTime endExclusive = endYear == null ? null : LocalDate.of(endYear + 1, 1, 1).atStartOfDay();
+            if (start != null && endExclusive != null && endExclusive.isBefore(start)) {
+                throw new IllegalArgumentException("endYear must be on or after startYear.");
+            }
+            return new DateWindow(start, endExclusive);
+        }
+
+        if (input.day() != null) {
+            if (input.year() == null || input.month() == null) {
+                throw new IllegalArgumentException("year and month are required when day is provided.");
+            }
+            LocalDateTime start = LocalDate.of(input.year(), input.month(), input.day()).atStartOfDay();
+            return new DateWindow(start, start.plusDays(1));
+        }
+
+        if (input.month() != null) {
+            if (input.year() == null) {
+                throw new IllegalArgumentException("year is required when month is provided.");
+            }
+            LocalDateTime start = LocalDate.of(input.year(), input.month(), 1).atStartOfDay();
+            return new DateWindow(start, start.plusMonths(1));
+        }
+
+        if (input.year() != null) {
+            LocalDateTime start = LocalDate.of(input.year(), 1, 1).atStartOfDay();
+            return new DateWindow(start, start.plusYears(1));
+        }
+
+        return new DateWindow(null, null);
+    }
+
     private Map<String, Object> paginationToMap(Page<?> page) {
         Map<String, Object> pagination = new HashMap<>();
         pagination.put("total", page.getTotalElements());
@@ -1102,6 +1202,9 @@ public class VisitService {
             return null;
         }
         return value.trim();
+    }
+
+    private record DateWindow(LocalDateTime start, LocalDateTime endExclusive) {
     }
 
     private void reopenVisitIfCompleted(Visit visit) {

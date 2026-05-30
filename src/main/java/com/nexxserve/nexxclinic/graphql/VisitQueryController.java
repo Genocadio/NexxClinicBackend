@@ -1,6 +1,7 @@
 package com.nexxserve.nexxclinic.graphql;
 
 import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
+import com.nexxserve.nexxclinic.graphql.input.SearchPatientHistoryInput;
 import com.nexxserve.nexxclinic.graphql.input.SearchVisitsInput;
 import com.nexxserve.nexxclinic.model.ApiResponse;
 import com.nexxserve.nexxclinic.model.RoleName;
@@ -38,5 +39,15 @@ public class VisitQueryController {
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         return visitService.visits(input);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
+    @QueryMapping
+    public ApiResponse getPatientHistory(
+            @Argument UUID patientId,
+            @Argument @Valid SearchPatientHistoryInput input,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.getPatientHistory(patientId, input);
     }
 }

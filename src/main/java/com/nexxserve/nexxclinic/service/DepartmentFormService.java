@@ -21,6 +21,7 @@ import com.nexxserve.nexxclinic.graphql.input.TableConfigInput;
 import com.nexxserve.nexxclinic.model.AnswerStatus;
 import com.nexxserve.nexxclinic.model.ApiResponse;
 import com.nexxserve.nexxclinic.model.FormStatus;
+import com.nexxserve.nexxclinic.model.ResponseStatus;
 import com.nexxserve.nexxclinic.repository.ConsultationAnswerRepository;
 import com.nexxserve.nexxclinic.repository.DepartmentFormRepository;
 import com.nexxserve.nexxclinic.repository.DepartmentFormVersionRepository;
@@ -381,21 +382,29 @@ public class DepartmentFormService {
         if (visitDepartmentId != null) {
             Optional<VisitDepartment> visitDepartmentOptional = visitDepartmentRepository.findById(visitDepartmentId);
             if (visitDepartmentOptional.isEmpty()) {
-                return ApiResponse.error("Visit department not found.", "NOT_FOUND");
+                return new ApiResponse(ResponseStatus.ERROR, "Visit department not found.", List.of());
             }
             VisitDepartment visitDepartment = visitDepartmentOptional.get();
             resolvedVisitId = visitDepartment.getVisit().getId();
             resolvedDepartmentId = visitDepartment.getDepartment().getId();
         } else {
             if (visitId == null) {
-                return ApiResponse.error("Either visitDepartmentId or visitId is required.", "VALIDATION_ERROR");
+                return new ApiResponse(
+                        ResponseStatus.ERROR,
+                        "Either visitDepartmentId or visitId is required.",
+                        List.of()
+                );
             }
             List<VisitDepartment> visitDepartments = visitDepartmentRepository.findByVisitId(visitId);
             if (visitDepartments.isEmpty()) {
-                return ApiResponse.error("No departments found for the given visit.", "NOT_FOUND");
+                return new ApiResponse(ResponseStatus.ERROR, "No departments found for the given visit.", List.of());
             }
             if (visitDepartments.size() > 1) {
-                return ApiResponse.error("Multiple visit departments found for the given visit. Please provide visitDepartmentId.", "VALIDATION_ERROR");
+                return new ApiResponse(
+                        ResponseStatus.ERROR,
+                        "Multiple visit departments found for the given visit. Please provide visitDepartmentId.",
+                        List.of()
+                );
             }
             VisitDepartment visitDepartment = visitDepartments.get(0);
             resolvedVisitId = visitDepartment.getVisit().getId();
@@ -409,14 +418,14 @@ public class DepartmentFormService {
             // No answers found, get the latest form for this department and return it with null answers
             Optional<DepartmentForm> latestForm = departmentFormRepository.findTopByDepartmentIdOrderByUpdatedAtDesc(resolvedDepartmentId);
             if (latestForm.isEmpty()) {
-                return ApiResponse.success("No consultation answers found. No forms available for this department.", null);
+                return ApiResponse.success("No consultation answers found. No forms available for this department.", List.of());
             }
             // Return latest form as dedicated form with null answers
             Map<String, Object> dedicatedForm = formToMap(latestForm.get());
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("dedicatedForm", dedicatedForm);
             payload.put("answers", null);
-            return ApiResponse.success("No consultation answers found. Returning latest form.", payload);
+            return ApiResponse.success("No consultation answers found. Returning latest form.", List.of(payload));
         }
 
         List<Map<String, Object>> payload = answers.stream()

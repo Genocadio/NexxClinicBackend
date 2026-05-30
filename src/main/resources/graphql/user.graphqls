@@ -1084,6 +1084,20 @@ input SearchVisitsInput {
   size: Int
 }
 
+input SearchPatientHistoryInput {
+  year: Int
+  month: Int
+  day: Int
+  startDate: String
+  endDate: String
+  startMonth: String
+  endMonth: String
+  startYear: Int
+  endYear: Int
+  page: Int
+  size: Int
+}
+
 input ConditionalRenderingInput {
   dependsOn: String!
   condition: ConditionalCondition!
@@ -1190,6 +1204,7 @@ type Query {
   departments(input: SearchDepartmentsInput): PaginatedDepartmentResponse!
   visit(visitId: ID!): VisitResponse!
   visits(input: SearchVisitsInput): PaginatedVisitResponse!
+  getPatientHistory(patientId: ID!, input: SearchPatientHistoryInput): PaginatedVisitResponse!
   visitBilling(visitBillingId: ID!): VisitBillingResponse!
   visitBillings(visitId: ID!): VisitBillingListResponse!
   getInvoice(billId: ID!): InvoiceResponse!

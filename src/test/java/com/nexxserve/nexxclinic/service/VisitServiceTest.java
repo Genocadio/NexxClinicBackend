@@ -4,6 +4,7 @@ import com.nexxserve.nexxclinic.entity.Department;
 import com.nexxserve.nexxclinic.entity.Patient;
 import com.nexxserve.nexxclinic.entity.Visit;
 import com.nexxserve.nexxclinic.entity.VisitDepartment;
+import com.nexxserve.nexxclinic.graphql.input.SearchPatientHistoryInput;
 import com.nexxserve.nexxclinic.graphql.input.AddVisitVitalSignItemInput;
 import com.nexxserve.nexxclinic.graphql.input.AddVisitVitalSignsInput;
 import com.nexxserve.nexxclinic.graphql.input.AddDiagnosisInput;
@@ -22,6 +23,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.UUID;
 
@@ -29,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
 @Transactional
+@SuppressWarnings("unchecked")
 class VisitServiceTest {
 
     @Autowired
@@ -141,5 +145,42 @@ class VisitServiceTest {
         assertEquals("Weight", first.get("measurementName"));
         assertEquals("58", first.get("value"));
         assertEquals("kg", first.get("unit"));
+    }
+
+    @Test
+    void testGetPatientHistoryFiltersByYearAndPatient() {
+        Visit archivedVisit = new Visit();
+        archivedVisit.setPatient(visitDepartment.getVisit().getPatient());
+        archivedVisit.setStatus(VisitStatus.COMPLETED);
+        archivedVisit.setVisitDate(LocalDateTime.now().minusYears(1));
+        visitRepository.save(archivedVisit);
+
+        SearchPatientHistoryInput input = new SearchPatientHistoryInput(
+                LocalDate.now().getYear(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                0,
+                20
+        );
+
+        ApiResponse response = visitService.getPatientHistory(visitDepartment.getVisit().getPatient().getId(), input);
+        assertEquals(ResponseStatus.SUCCESS, response.status());
+        assertNotNull(response.data());
+
+        java.util.List<?> visits = (java.util.List<?>) response.data();
+        assertEquals(1, visits.size());
+
+        Map<String, Object> visit = (Map<String, Object>) visits.get(0);
+        Map<String, Object> patient = (Map<String, Object>) visit.get("patient");
+        assertEquals(visitDepartment.getVisit().getPatient().getId(), UUID.fromString(patient.get("id").toString()));
+
+        Map<String, Object> pagination = (Map<String, Object>) response.pagination();
+        assertEquals(1L, pagination.get("total"));
     }
 }
