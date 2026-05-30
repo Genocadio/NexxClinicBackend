@@ -697,15 +697,15 @@ type FormVersionListResponse implements ApiResponse {
 }
 
 type ConsultationAnswer {
-  id: ID!
-  consultationId: ID!
-  visitId: ID!
-  patientId: ID!
-  departmentId: ID!
-  status: AnswerStatus!
-  answers: String!
+  id: ID
+  consultationId: ID
+  visitId: ID
+  patientId: ID
+  departmentId: ID
+  status: AnswerStatus
+  answers: String
   submittedAt: String
-  updatedAt: String!
+  updatedAt: String
   dedicatedForm: Form!
 }
 

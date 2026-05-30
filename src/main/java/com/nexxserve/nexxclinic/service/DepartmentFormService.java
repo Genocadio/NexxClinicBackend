@@ -26,6 +26,8 @@ import com.nexxserve.nexxclinic.repository.DepartmentFormRepository;
 import com.nexxserve.nexxclinic.repository.DepartmentFormVersionRepository;
 import com.nexxserve.nexxclinic.repository.DepartmentRepository;
 import com.nexxserve.nexxclinic.repository.WorkerRepository;
+import com.nexxserve.nexxclinic.entity.VisitDepartment;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -48,6 +50,7 @@ public class DepartmentFormService {
     private final DepartmentFormVersionRepository departmentFormVersionRepository;
     private final ConsultationAnswerRepository consultationAnswerRepository;
     private final WorkerRepository workerRepository;
+    private final VisitDepartmentRepository visitDepartmentRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public DepartmentFormService(
@@ -55,13 +58,15 @@ public class DepartmentFormService {
             DepartmentFormRepository departmentFormRepository,
             DepartmentFormVersionRepository departmentFormVersionRepository,
             ConsultationAnswerRepository consultationAnswerRepository,
-            WorkerRepository workerRepository
+            WorkerRepository workerRepository,
+            VisitDepartmentRepository visitDepartmentRepository
     ) {
         this.departmentRepository = departmentRepository;
         this.departmentFormRepository = departmentFormRepository;
         this.departmentFormVersionRepository = departmentFormVersionRepository;
         this.consultationAnswerRepository = consultationAnswerRepository;
         this.workerRepository = workerRepository;
+        this.visitDepartmentRepository = visitDepartmentRepository;
     }
 
     @Transactional
@@ -369,16 +374,45 @@ public class DepartmentFormService {
     }
 
     @Transactional(readOnly = true)
-    public ApiResponse getConsultationAnswers(UUID consultationId, UUID departmentId, UUID formId) {
-        if (consultationId == null || departmentId == null || formId == null) {
-            return ApiResponse.error("consultationId, departmentId and formId are required.", "VALIDATION_ERROR");
+    public ApiResponse getConsultationAnswers(UUID visitDepartmentId, UUID visitId, UUID departmentId) {
+        UUID resolvedVisitId = null;
+        UUID resolvedDepartmentId = null;
+
+        if (visitDepartmentId != null) {
+            Optional<VisitDepartment> visitDepartmentOptional = visitDepartmentRepository.findById(visitDepartmentId);
+            if (visitDepartmentOptional.isEmpty()) {
+                return ApiResponse.error("Visit department not found.", "NOT_FOUND");
+            }
+            VisitDepartment visitDepartment = visitDepartmentOptional.get();
+            resolvedVisitId = visitDepartment.getVisit().getId();
+            resolvedDepartmentId = visitDepartment.getDepartment().getId();
+        } else {
+            if (visitId == null || departmentId == null) {
+                return ApiResponse.error("Either visitDepartmentId or both visitId and departmentId are required.", "VALIDATION_ERROR");
+            }
+            resolvedVisitId = visitId;
+            resolvedDepartmentId = departmentId;
+        }
+
+        if (!departmentRepository.existsById(resolvedDepartmentId)) {
+            return ApiResponse.error("Department not found.", "NOT_FOUND");
         }
 
         List<ConsultationAnswer> answers = consultationAnswerRepository
-                .findByConsultationIdAndDepartmentIdAndFormIdOrderByUpdatedAtDesc(consultationId, departmentId, formId);
+                .findByVisitIdAndDepartmentIdOrderByUpdatedAtDesc(resolvedVisitId, resolvedDepartmentId);
 
         if (answers.isEmpty()) {
-            return ApiResponse.error("Consultation answers not found.", "NOT_FOUND");
+            // No answers found, get the latest form for this department and return it with null answers
+            Optional<DepartmentForm> latestForm = departmentFormRepository.findTopByDepartmentIdOrderByUpdatedAtDesc(resolvedDepartmentId);
+            if (latestForm.isEmpty()) {
+                return ApiResponse.success("No consultation answers found. No forms available for this department.", null);
+            }
+            // Return latest form as dedicated form with null answers
+            Map<String, Object> dedicatedForm = formToMap(latestForm.get());
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("dedicatedForm", dedicatedForm);
+            payload.put("answers", null);
+            return ApiResponse.success("No consultation answers found. Returning latest form.", payload);
         }
 
         List<Map<String, Object>> payload = answers.stream()

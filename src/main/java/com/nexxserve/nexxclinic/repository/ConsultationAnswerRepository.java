@@ -21,4 +21,9 @@ public interface ConsultationAnswerRepository extends JpaRepository<Consultation
             UUID departmentId,
             UUID formId
     );
+
+    List<ConsultationAnswer> findByVisitIdAndDepartmentIdOrderByUpdatedAtDesc(
+            UUID visitId,
+            UUID departmentId
+    );
 }

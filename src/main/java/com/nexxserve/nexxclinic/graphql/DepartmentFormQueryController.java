@@ -72,11 +72,11 @@ public class DepartmentFormQueryController {
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
     @QueryMapping
     public ApiResponse getConsultationAnswers(
-            @Argument UUID consultationId,
+            @Argument UUID visitDepartmentId,
+            @Argument UUID visitId,
             @Argument UUID departmentId,
-            @Argument UUID formId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return departmentFormService.getConsultationAnswers(consultationId, departmentId, formId);
+        return departmentFormService.getConsultationAnswers(visitDepartmentId, visitId, departmentId);
     }
 }
