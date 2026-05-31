@@ -294,13 +294,13 @@ public class VisitBillingService {
         return ApiResponse.success("Visit billings fetched.", billings);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public ApiResponse generateInvoice(UUID billId, AuthenticatedUser authUser) {
         if (billId == null) {
             return ApiResponse.error("billId is required.", "VALIDATION_ERROR");
         }
 
-        Optional<VisitBilling> billingOptional = visitBillingRepository.findById(billId);
+        Optional<VisitBilling> billingOptional = visitBillingRepository.findByIdWithVisitAndPatient(billId);
         if (billingOptional.isEmpty()) {
             return ApiResponse.error("Visit billing not found.", "NOT_FOUND");
         }
@@ -325,7 +325,7 @@ public class VisitBillingService {
                 visitRepository.save(billing.getVisit());
             }
 
-            List<Map<String, Object>> items = visitBillingItemRepository.findByVisitBillingId(billing.getId())
+            List<Map<String, Object>> items = visitBillingItemRepository.findByVisitBillingIdWithProduct(billing.getId())
                     .stream()
                     .map(this::visitBillingItemToMap)
                     .toList();
