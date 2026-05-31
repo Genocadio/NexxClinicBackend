@@ -6,6 +6,7 @@ import com.nexxserve.nexxclinic.entity.InsuranceProvider;
 import com.nexxserve.nexxclinic.entity.Patient;
 import com.nexxserve.nexxclinic.entity.PatientInsurance;
 import com.nexxserve.nexxclinic.entity.Product;
+import com.nexxserve.nexxclinic.entity.ProductInsuranceCoverage;
 import com.nexxserve.nexxclinic.entity.Visit;
 import com.nexxserve.nexxclinic.entity.VisitDepartment;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
@@ -40,6 +41,7 @@ import com.nexxserve.nexxclinic.model.VisitStatus;
 import com.nexxserve.nexxclinic.repository.DepartmentRepository;
 import com.nexxserve.nexxclinic.repository.PatientInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.PatientRepository;
+import com.nexxserve.nexxclinic.repository.ProductInsuranceCoverageRepository;
 import com.nexxserve.nexxclinic.repository.ProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
@@ -64,6 +66,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -90,6 +93,7 @@ public class VisitService {
     private final PatientInsuranceRepository patientInsuranceRepository;
     private final DepartmentRepository departmentRepository;
     private final ProductRepository productRepository;
+    private final ProductInsuranceCoverageRepository productInsuranceCoverageRepository;
     private final WorkerRepository workerRepository;
 
     public VisitService(
@@ -108,6 +112,7 @@ public class VisitService {
             PatientInsuranceRepository patientInsuranceRepository,
             DepartmentRepository departmentRepository,
             ProductRepository productRepository,
+            ProductInsuranceCoverageRepository productInsuranceCoverageRepository,
             WorkerRepository workerRepository
     ) {
         this.visitRepository = visitRepository;
@@ -125,6 +130,7 @@ public class VisitService {
         this.patientInsuranceRepository = patientInsuranceRepository;
         this.departmentRepository = departmentRepository;
         this.productRepository = productRepository;
+        this.productInsuranceCoverageRepository = productInsuranceCoverageRepository;
         this.workerRepository = workerRepository;
     }
 
@@ -459,6 +465,97 @@ public class VisitService {
         visitDepartmentRepository.save(visitDepartment);
 
         return ApiResponse.success("Department added to visit.", visitToMap(visit));
+    }
+
+    @Transactional
+    public ApiResponse linkVisitInsurances(UUID visitId, List<UUID> insuranceIds, AuthenticatedUser authUser) {
+        if (visitId == null || insuranceIds == null) {
+            return ApiResponse.error("visitId and insuranceIds are required.", "VALIDATION_ERROR");
+        }
+
+        Optional<Visit> visitOptional = visitRepository.findById(visitId);
+        if (visitOptional.isEmpty()) {
+            return ApiResponse.error("Visit not found.", "NOT_FOUND");
+        }
+
+        Visit visit = visitOptional.get();
+        if (visit.getStatus() == VisitStatus.COMPLETED) {
+            return ApiResponse.error("Cannot add insurances to a completed visit.", "VISIT_IS_COMPLETED");
+        }
+
+        if (visit.getStatus() == VisitStatus.CANCELLED) {
+            return ApiResponse.error("Cannot add insurances to a cancelled visit.", "VISIT_IS_CANCELLED");
+        }
+
+        List<UUID> uniqueIds = normalizeUniqueIds(insuranceIds);
+        if (uniqueIds.isEmpty()) {
+            return ApiResponse.error("insuranceIds must not be empty.", "VALIDATION_ERROR");
+        }
+
+        List<PatientInsurance> patientInsurances = resolveLinkedInsurances(visit.getPatient().getId(), uniqueIds);
+        if (patientInsurances == null) {
+            return ApiResponse.error("Each insurance must exist and belong to the selected patient.", "INVALID_VISIT_INSURANCE_LINKS");
+        }
+
+        for (PatientInsurance patientInsurance : patientInsurances) {
+            if (visitInsuranceRepository.existsByVisitIdAndPatientInsuranceId(visitId, patientInsurance.getId())) {
+                return ApiResponse.error("One or more insurances are already linked to this visit.", "DUPLICATE_VISIT_INSURANCE");
+            }
+        }
+
+        List<VisitInsurance> links = new ArrayList<>();
+        for (PatientInsurance patientInsurance : patientInsurances) {
+            VisitInsurance link = new VisitInsurance();
+            link.setVisit(visit);
+            link.setPatientInsurance(patientInsurance);
+            links.add(link);
+        }
+
+        visitInsuranceRepository.saveAll(links);
+        Visit refreshedVisit = visitRepository.findById(visitId).orElse(visit);
+        return ApiResponse.success("Insurance linked to visit.", visitToMap(refreshedVisit));
+    }
+
+    @Transactional
+    public ApiResponse unlinkVisitInsurances(UUID visitId, List<UUID> insuranceIds, AuthenticatedUser authUser) {
+        if (visitId == null || insuranceIds == null) {
+            return ApiResponse.error("visitId and insuranceIds are required.", "VALIDATION_ERROR");
+        }
+
+        Optional<Visit> visitOptional = visitRepository.findById(visitId);
+        if (visitOptional.isEmpty()) {
+            return ApiResponse.error("Visit not found.", "NOT_FOUND");
+        }
+
+        Visit visit = visitOptional.get();
+        if (visit.getStatus() == VisitStatus.COMPLETED) {
+            return ApiResponse.error("Cannot remove insurances from a completed visit.", "VISIT_IS_COMPLETED");
+        }
+
+        if (visit.getStatus() == VisitStatus.CANCELLED) {
+            return ApiResponse.error("Cannot remove insurances from a cancelled visit.", "VISIT_IS_CANCELLED");
+        }
+
+        List<UUID> uniqueIds = normalizeUniqueIds(insuranceIds);
+        if (uniqueIds.isEmpty()) {
+            return ApiResponse.error("insuranceIds must not be empty.", "VALIDATION_ERROR");
+        }
+
+        List<VisitInsurance> visitInsurances = visitInsuranceRepository.findByVisitId(visitId);
+        List<VisitInsurance> linksToRemove = new ArrayList<>();
+        for (VisitInsurance visitInsurance : visitInsurances) {
+            if (visitInsurance.getPatientInsurance() != null && uniqueIds.contains(visitInsurance.getPatientInsurance().getId())) {
+                linksToRemove.add(visitInsurance);
+            }
+        }
+
+        if (linksToRemove.size() != uniqueIds.size()) {
+            return ApiResponse.error("One or more insurances are not linked to this visit.", "VISIT_INSURANCE_NOT_FOUND");
+        }
+
+        visitInsuranceRepository.deleteAll(linksToRemove);
+        Visit refreshedVisit = visitRepository.findById(visitId).orElse(visit);
+        return ApiResponse.success("Insurance unlinked from visit.", visitToMap(refreshedVisit));
     }
 
     @Transactional
@@ -863,11 +960,27 @@ public class VisitService {
         return linkedInsurances;
     }
 
+    private List<UUID> normalizeUniqueIds(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+
+        Set<UUID> uniqueIds = new LinkedHashSet<>();
+        for (UUID id : ids) {
+            if (id != null) {
+                uniqueIds.add(id);
+            }
+        }
+
+        return new ArrayList<>(uniqueIds);
+    }
+
     private Map<String, Object> visitToMap(Visit visit) {
         return visitToMap(visit, Set.of());
     }
 
     private Map<String, Object> visitToMap(Visit visit, Set<UUID> departmentIds) {
+        Set<UUID> visitInsuranceProviderIds = resolveVisitInsuranceProviderIds(visit.getId());
         Map<String, Object> data = new HashMap<>();
         data.put("id", visit.getId());
         data.put("patient", patientToMap(visit.getPatient()));
@@ -884,7 +997,7 @@ public class VisitService {
                 "departments",
             resolveVisitDepartmentsForResponse(visit.getId(), departmentIds)
                 .stream()
-                .map(this::visitDepartmentToMap)
+                .map(visitDepartment -> visitDepartmentToMap(visitDepartment, visitInsuranceProviderIds))
                 .toList()
         );
         data.put(
@@ -922,12 +1035,24 @@ public class VisitService {
         );
                 data.put(
                     "products",
-                    pre.getProducts().stream().map(this::visitPreInstructionProductToMap).toList()
+                    pre.getProducts().stream()
+                            .map(item -> visitPreInstructionProductToMap(
+                                    item,
+                                    resolveVisitInsuranceProviderIds(pre.getVisit().getId())
+                            ))
+                            .toList()
                 );
         return data;
     }
 
     private Map<String, Object> visitDepartmentToMap(VisitDepartment visitDepartment) {
+        return visitDepartmentToMap(
+                visitDepartment,
+                resolveVisitInsuranceProviderIds(visitDepartment.getVisit().getId())
+        );
+    }
+
+    private Map<String, Object> visitDepartmentToMap(VisitDepartment visitDepartment, Set<UUID> visitInsuranceProviderIds) {
         Map<String, Object> data = new HashMap<>();
         data.put("id", visitDepartment.getId());
         data.put("department", departmentToMap(visitDepartment.getDepartment()));
@@ -937,7 +1062,7 @@ public class VisitService {
                 "products",
                 visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartment.getId())
                         .stream()
-                        .map(this::visitDepartmentProductToMap)
+                        .map(item -> visitDepartmentProductToMap(item, visitInsuranceProviderIds))
                         .toList()
         );
         data.put(
@@ -966,10 +1091,13 @@ public class VisitService {
         return data;
     }
 
-    private Map<String, Object> visitPreInstructionProductToMap(VisitPreInstructionProductRequest item) {
+    private Map<String, Object> visitPreInstructionProductToMap(
+            VisitPreInstructionProductRequest item,
+            Set<UUID> visitInsuranceProviderIds
+    ) {
         Map<String, Object> data = new HashMap<>();
         data.put("id", item.getId());
-        data.put("product", productToMap(item.getProduct()));
+        data.put("product", productToMap(item.getProduct(), visitInsuranceProviderIds));
         data.put("quantity", item.getQuantity());
         data.put("requestedBy", workerToMap(item.getRequestedBy()));
         data.put("status", item.getStatus());
@@ -997,10 +1125,13 @@ public class VisitService {
         return data;
     }
 
-    private Map<String, Object> visitDepartmentProductToMap(VisitDepartmentProduct item) {
+    private Map<String, Object> visitDepartmentProductToMap(
+            VisitDepartmentProduct item,
+            Set<UUID> visitInsuranceProviderIds
+    ) {
         Map<String, Object> data = new HashMap<>();
         data.put("id", item.getId());
-        data.put("product", productToMap(item.getProduct()));
+        data.put("product", productToMap(item.getProduct(), visitInsuranceProviderIds));
         data.put("quantity", item.getQuantity());
         data.put("price", item.getPrice());
         data.put("status", item.getStatus());
@@ -1049,7 +1180,7 @@ public class VisitService {
         return data;
     }
 
-    private Map<String, Object> productToMap(Product product) {
+    private Map<String, Object> productToMap(Product product, Set<UUID> visitInsuranceProviderIds) {
         Map<String, Object> data = new HashMap<>();
         data.put("id", product.getId());
         data.put("name", product.getName());
@@ -1061,8 +1192,41 @@ public class VisitService {
         data.put("metadata", product.getMetadata());
         data.put("privateRhicPrice", product.getPrivateRhicPrice());
         data.put("clinicPrice", product.getClinicPrice());
+        data.put("insuranceCoverages", resolveProductInsuranceCoverages(product, visitInsuranceProviderIds));
         data.put("createdAt", product.getCreatedAt());
         data.put("updatedAt", product.getUpdatedAt());
+        return data;
+    }
+
+    private Set<UUID> resolveVisitInsuranceProviderIds(UUID visitId) {
+        return visitInsuranceRepository.findByVisitId(visitId).stream()
+                .map(link -> link.getPatientInsurance().getInsuranceProvider().getId())
+                .collect(Collectors.toSet());
+    }
+
+    private List<Map<String, Object>> resolveProductInsuranceCoverages(Product product, Set<UUID> visitInsuranceProviderIds) {
+        if (visitInsuranceProviderIds == null || visitInsuranceProviderIds.isEmpty()) {
+            return List.of();
+        }
+
+        return productInsuranceCoverageRepository.findByProductId(product.getId()).stream()
+                .filter(coverage -> visitInsuranceProviderIds.contains(coverage.getInsuranceProvider().getId()))
+                .map(this::productCoverageToMap)
+                .toList();
+    }
+
+    private Map<String, Object> productCoverageToMap(ProductInsuranceCoverage coverage) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", coverage.getId());
+        data.put("insuranceProvider", insuranceProviderToMap(coverage.getInsuranceProvider()));
+        data.put("cost", coverage.getCost());
+        data.put("covered", coverage.isCovered());
+        data.put("requireMedicalAdvisor", coverage.isRequireMedicalAdvisor());
+        data.put("mustPrescribedBy", coverage.getMustPrescribedBy());
+        data.put("drugAdministrationFrequency", coverage.getDrugAdministrationFrequency());
+        data.put("authorizationRequestReasons", new ArrayList<>(coverage.getAuthorizationRequestReasons()));
+        data.put("createdAt", coverage.getCreatedAt());
+        data.put("updatedAt", coverage.getUpdatedAt());
         return data;
     }
 
@@ -1081,6 +1245,14 @@ public class VisitService {
     }
 
     private Map<String, Object> patientToMap(Patient patient) {
+        return patientToMap(patient, true);
+    }
+
+    private Map<String, Object> patientSummaryToMap(Patient patient) {
+        return patientToMap(patient, false);
+    }
+
+    private Map<String, Object> patientToMap(Patient patient, boolean includePatientInsurances) {
         Map<String, Object> data = new HashMap<>();
         data.put("id", patient.getId());
         data.put("firstName", patient.getFirstName());
@@ -1101,6 +1273,12 @@ public class VisitService {
         data.put("emergencyContactName", patient.getEmergencyContactName());
         data.put("emergencyContactRelationship", patient.getEmergencyContactRelationship());
         data.put("emergencyContactPhoneNumber", patient.getEmergencyContactPhoneNumber());
+        data.put(
+            "patientInsurances",
+            includePatientInsurances
+                ? patientInsuranceRepository.findByPatientId(patient.getId()).stream().map(this::patientInsuranceToMap).toList()
+                : List.of()
+        );
         data.put("createdAt", patient.getCreatedAt());
         data.put("updatedAt", patient.getUpdatedAt());
         return data;
@@ -1109,7 +1287,7 @@ public class VisitService {
     private Map<String, Object> patientInsuranceToMap(PatientInsurance patientInsurance) {
         Map<String, Object> data = new HashMap<>();
         data.put("id", patientInsurance.getId());
-        data.put("patient", patientToMap(patientInsurance.getPatient()));
+        data.put("patient", patientSummaryToMap(patientInsurance.getPatient()));
         data.put("insuranceProvider", insuranceProviderToMap(patientInsurance.getInsuranceProvider()));
         data.put("insuranceCardNumber", patientInsurance.getInsuranceCardNumber());
         data.put("providingCompanyOrEmployer", patientInsurance.getProvidingCompanyOrEmployer());

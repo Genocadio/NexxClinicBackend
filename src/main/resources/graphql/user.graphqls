@@ -1245,6 +1245,8 @@ type Mutation {
   createVisit(input: CreateVisitInput!): VisitResponse!
   changeVisitDate(input: ChangeVisitDateInput!): VisitResponse!
   addVisitDepartment(visitId: ID!, departmentId: ID!): VisitResponse!
+  linkVisitInsurances(visitId: ID!, insuranceIds: [ID!]!): VisitResponse!
+  unlinkVisitInsurances(visitId: ID!, insuranceIds: [ID!]!): VisitResponse!
   completeVisitDepartment(visitDepartmentId: ID!): VisitDepartmentResponse!
   addVisitDepartmentProduct(input: CreateVisitDepartmentProductInput!): VisitDepartmentResponse!
   updateVisitDepartmentProductStatus(input: UpdateVisitDepartmentProductStatusInput!): VisitDepartmentResponse!

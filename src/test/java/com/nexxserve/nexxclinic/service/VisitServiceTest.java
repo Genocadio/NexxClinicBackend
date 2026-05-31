@@ -1,7 +1,9 @@
 package com.nexxserve.nexxclinic.service;
 
 import com.nexxserve.nexxclinic.entity.Department;
+import com.nexxserve.nexxclinic.entity.InsuranceProvider;
 import com.nexxserve.nexxclinic.entity.Patient;
+import com.nexxserve.nexxclinic.entity.PatientInsurance;
 import com.nexxserve.nexxclinic.entity.Visit;
 import com.nexxserve.nexxclinic.entity.VisitDepartment;
 import com.nexxserve.nexxclinic.graphql.input.SearchPatientHistoryInput;
@@ -14,9 +16,12 @@ import com.nexxserve.nexxclinic.model.ResponseStatus;
 import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
 import com.nexxserve.nexxclinic.model.VisitStatus;
 import com.nexxserve.nexxclinic.repository.DepartmentRepository;
+import com.nexxserve.nexxclinic.repository.InsuranceProviderRepository;
 import com.nexxserve.nexxclinic.repository.PatientRepository;
+import com.nexxserve.nexxclinic.repository.PatientInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
 import com.nexxserve.nexxclinic.repository.VisitRepository;
+import com.nexxserve.nexxclinic.repository.VisitInsuranceRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,7 +50,16 @@ class VisitServiceTest {
     private DepartmentRepository departmentRepository;
 
     @Autowired
+    private InsuranceProviderRepository insuranceProviderRepository;
+
+    @Autowired
+    private PatientInsuranceRepository patientInsuranceRepository;
+
+    @Autowired
     private VisitDepartmentRepository visitDepartmentRepository;
+
+    @Autowired
+    private VisitInsuranceRepository visitInsuranceRepository;
 
     @Autowired
     private PatientRepository patientRepository;
@@ -145,6 +159,86 @@ class VisitServiceTest {
         assertEquals("Weight", first.get("measurementName"));
         assertEquals("58", first.get("value"));
         assertEquals("kg", first.get("unit"));
+    }
+
+    @Test
+    void testLinkAndUnlinkVisitInsurances() {
+        InsuranceProvider provider = new InsuranceProvider();
+        provider.setInsuranceName("Test Insurance");
+        provider.setDefaultCoveragePercentage(80);
+        provider.setSupportedByClinic(true);
+        provider = insuranceProviderRepository.save(provider);
+
+        PatientInsurance patientInsurance = new PatientInsurance();
+        patientInsurance.setPatient(visitDepartment.getVisit().getPatient());
+        patientInsurance.setInsuranceProvider(provider);
+        patientInsurance.setInsuranceCardNumber("CARD-001");
+        patientInsurance.setPrincipalMember(true);
+        patientInsurance.setValidFrom(LocalDate.now().minusDays(1));
+        patientInsurance.setValidUntil(LocalDate.now().plusYears(1));
+        patientInsurance = patientInsuranceRepository.save(patientInsurance);
+
+        ApiResponse linkResponse = visitService.linkVisitInsurances(
+                visitDepartment.getVisit().getId(),
+                java.util.List.of(patientInsurance.getId()),
+                null
+        );
+
+        assertEquals(ResponseStatus.SUCCESS, linkResponse.status());
+        Map<String, Object> linkedVisit = (Map<String, Object>) linkResponse.data();
+        java.util.List<?> linkedInsurances = (java.util.List<?>) linkedVisit.get("linkedInsurances");
+        assertEquals(1, linkedInsurances.size());
+
+        Map<String, Object> linkedInsurance = (Map<String, Object>) linkedInsurances.get(0);
+        assertEquals(patientInsurance.getId(), UUID.fromString(linkedInsurance.get("id").toString()));
+
+        ApiResponse unlinkResponse = visitService.unlinkVisitInsurances(
+                visitDepartment.getVisit().getId(),
+                java.util.List.of(patientInsurance.getId()),
+                null
+        );
+
+        assertEquals(ResponseStatus.SUCCESS, unlinkResponse.status());
+        Map<String, Object> unlinkedVisit = (Map<String, Object>) unlinkResponse.data();
+        java.util.List<?> remainingInsurances = (java.util.List<?>) unlinkedVisit.get("linkedInsurances");
+        assertTrue(remainingInsurances.isEmpty());
+        assertTrue(visitInsuranceRepository.findByVisitId(visitDepartment.getVisit().getId()).isEmpty());
+    }
+
+    @Test
+    void testLinkVisitInsurancesRejectsInsuranceOutsidePatientCoverage() {
+        InsuranceProvider provider = new InsuranceProvider();
+        provider.setInsuranceName("Other Insurance");
+        provider.setDefaultCoveragePercentage(70);
+        provider.setSupportedByClinic(true);
+        provider = insuranceProviderRepository.save(provider);
+
+        Patient otherPatient = new Patient();
+        otherPatient.setFirstName("Jane");
+        otherPatient.setLastName("Roe");
+        otherPatient.setFullName("Jane Roe");
+        otherPatient.setDateOfBirth(LocalDate.now().minusYears(28));
+        otherPatient.setGender(com.nexxserve.nexxclinic.model.Gender.FEMALE);
+        otherPatient = patientRepository.save(otherPatient);
+
+        PatientInsurance otherPatientInsurance = new PatientInsurance();
+        otherPatientInsurance.setPatient(otherPatient);
+        otherPatientInsurance.setInsuranceProvider(provider);
+        otherPatientInsurance.setInsuranceCardNumber("CARD-002");
+        otherPatientInsurance.setPrincipalMember(true);
+        otherPatientInsurance.setValidFrom(LocalDate.now().minusDays(1));
+        otherPatientInsurance.setValidUntil(LocalDate.now().plusYears(1));
+        otherPatientInsurance = patientInsuranceRepository.save(otherPatientInsurance);
+
+        ApiResponse response = visitService.linkVisitInsurances(
+                visitDepartment.getVisit().getId(),
+                java.util.List.of(otherPatientInsurance.getId()),
+                null
+        );
+
+        assertEquals(ResponseStatus.ERROR, response.status());
+        assertEquals("Each insurance must exist and belong to the selected patient.", response.message());
+        assertTrue(visitInsuranceRepository.findByVisitId(visitDepartment.getVisit().getId()).isEmpty());
     }
 
     @Test

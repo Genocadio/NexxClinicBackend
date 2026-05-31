@@ -17,6 +17,7 @@ import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.security.HasRole;
 import com.nexxserve.nexxclinic.service.VisitService;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.graphql.data.method.annotation.Argument;
 import org.springframework.graphql.data.method.annotation.ContextValue;
@@ -60,6 +61,26 @@ public class VisitMutationController {
         return visitService.addVisitDepartment(visitId, departmentId, authUser);
     }
 
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.FINANCE})
+    @MutationMapping
+    public ApiResponse linkVisitInsurances(
+            @Argument UUID visitId,
+            @Argument List<UUID> insuranceIds,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.linkVisitInsurances(visitId, insuranceIds, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.FINANCE})
+    @MutationMapping
+    public ApiResponse unlinkVisitInsurances(
+            @Argument UUID visitId,
+            @Argument List<UUID> insuranceIds,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.unlinkVisitInsurances(visitId, insuranceIds, authUser);
+    }
+
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
     @MutationMapping
     public ApiResponse updateVisitDepartmentStatus(
@@ -79,7 +100,7 @@ public class VisitMutationController {
         return visitService.saveAnswerAndCompleteVisit(input, finalAnswer, authUser);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.FINANCE, RoleName.NURSE, RoleName.CLINICIAN})
     @MutationMapping
     public ApiResponse addVisitDepartmentProduct(
             @Argument @Valid CreateVisitDepartmentProductInput input,
@@ -97,7 +118,7 @@ public class VisitMutationController {
         return visitService.updateVisitDepartmentProductStatus(input, authUser);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.FINANCE, RoleName.NURSE, RoleName.CLINICIAN})
     @MutationMapping
     public ApiResponse updateVisitDepartmentProductQuantity(
             @Argument @Valid UpdateVisitDepartmentProductQuantityInput input,
@@ -134,7 +155,7 @@ public class VisitMutationController {
         return visitService.cancelVisit(visitId);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.FINANCE, RoleName.NURSE, RoleName.CLINICIAN})
     @MutationMapping
     public ApiResponse removeVisitDepartmentProduct(
             @Argument UUID visitDepartmentProductId,

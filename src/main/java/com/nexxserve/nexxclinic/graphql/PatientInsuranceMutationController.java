@@ -89,7 +89,7 @@ public class PatientInsuranceMutationController {
         return patientService.deletePatient(patientId);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE})
     @MutationMapping
     public ApiResponse createPatientInsurance(
             @Argument @Valid CreatePatientInsuranceInput input,
