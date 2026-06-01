@@ -31,6 +31,7 @@ import com.nexxserve.nexxclinic.graphql.input.AddMedicationInput;
 import com.nexxserve.nexxclinic.graphql.input.AddVisitVitalSignItemInput;
 import com.nexxserve.nexxclinic.graphql.input.AddVisitVitalSignsInput;
 import com.nexxserve.nexxclinic.graphql.input.AddVisitPreInstructionsInput;
+import com.nexxserve.nexxclinic.graphql.input.AddChildVisitDepartmentInput;
 import com.nexxserve.nexxclinic.entity.VisitPreInstructionProductRequest;
 import com.nexxserve.nexxclinic.model.AnswerStatus;
 import com.nexxserve.nexxclinic.model.ApiResponse;
@@ -468,12 +469,13 @@ public class VisitService {
     }
 
     @Transactional
-    public ApiResponse addChildVisitDepartment(UUID parentVisitDepartmentId, UUID departmentId, List<UUID> productIds, UUID processorId, AuthenticatedUser authUser) {
-        if (parentVisitDepartmentId == null || departmentId == null || productIds == null || productIds.isEmpty()) {
-            return ApiResponse.error("parentVisitDepartmentId, departmentId and productIds are required.", "VALIDATION_ERROR");
+    public ApiResponse addChildVisitDepartment(AddChildVisitDepartmentInput input, AuthenticatedUser authUser) {
+        if (input == null || input.parentVisitDepartmentId() == null || input.departmentId() == null || 
+            input.products() == null || input.products().isEmpty()) {
+            return ApiResponse.error("parentVisitDepartmentId, departmentId and products are required.", "VALIDATION_ERROR");
         }
 
-        Optional<VisitDepartment> parentOptional = visitDepartmentRepository.findById(parentVisitDepartmentId);
+        Optional<VisitDepartment> parentOptional = visitDepartmentRepository.findById(input.parentVisitDepartmentId());
         if (parentOptional.isEmpty()) {
             return ApiResponse.error("Parent visit department not found.", "NOT_FOUND");
         }
@@ -486,11 +488,11 @@ public class VisitService {
             return ApiResponse.error("Cannot add child departments to a cancelled department.", "DEPARTMENT_IS_CANCELLED");
         }
 
-        if (parent.getDepartment() != null && parent.getDepartment().getId() != null && parent.getDepartment().getId().equals(departmentId)) {
+        if (parent.getDepartment() != null && parent.getDepartment().getId() != null && parent.getDepartment().getId().equals(input.departmentId())) {
             return ApiResponse.error("A department cannot be added as a child of itself.", "INVALID_CHILD_DEPARTMENT");
         }
 
-        Optional<Department> departmentOptional = departmentRepository.findById(departmentId);
+        Optional<Department> departmentOptional = departmentRepository.findById(input.departmentId());
         if (departmentOptional.isEmpty()) {
             return ApiResponse.error("Department not found.", "NOT_FOUND");
         }
@@ -505,11 +507,50 @@ public class VisitService {
             return ApiResponse.error("Visit not found.", "NOT_FOUND");
         }
 
-        if (visitDepartmentRepository.existsByVisitIdAndDepartmentId(visit.getId(), departmentId)
-            || visitDepartmentRepository.existsByVisitIdAndDepartmentIdAndParentVisitDepartmentId(visit.getId(), departmentId, parentVisitDepartmentId)) {
+        if (visitDepartmentRepository.existsByVisitIdAndDepartmentId(visit.getId(), input.departmentId())
+            || visitDepartmentRepository.existsByVisitIdAndDepartmentIdAndParentVisitDepartmentId(visit.getId(), input.departmentId(), input.parentVisitDepartmentId())) {
             return ApiResponse.error("Child department already exists for this parent.", "DUPLICATE_VISIT_DEPARTMENT");
         }
 
+        // Validate all products before creating the child department
+        Worker actingUser = resolveWorker(authUser);
+        Set<UUID> seenProducts = new LinkedHashSet<>();
+        
+        for (var productInput : input.products()) {
+            if (productInput == null || productInput.productId() == null) {
+                return ApiResponse.error("productId is required for each product.", "VALIDATION_ERROR");
+            }
+            
+            if (productInput.quantity() == null) {
+                return ApiResponse.error("quantity is required for each product.", "VALIDATION_ERROR");
+            }
+            
+            if (!seenProducts.add(productInput.productId())) {
+                return ApiResponse.error("Duplicate productId found in products.", "DUPLICATE_VISIT_DEPARTMENT_PRODUCT");
+            }
+            
+            Optional<Product> productOptional = productRepository.findById(productInput.productId());
+            if (productOptional.isEmpty()) {
+                return ApiResponse.error("Product not found.", "NOT_FOUND");
+            }
+        }
+
+        // Validate provided processorId if present; child departments may be created without processor assigned.
+        if (input.processorId() != null) {
+            VisitDepartment tempChild = new VisitDepartment();
+            tempChild.setVisit(visit);
+            tempChild.setDepartment(childDepartment);
+            tempChild.setParentVisitDepartment(parent);
+            tempChild.setStatus(VisitDepartmentStatus.PENDING);
+
+            List<Worker> processors = resolveAvailableProcessorsForProductAssignment(tempChild);
+            Worker requestedProcessor = findProcessorById(processors, input.processorId());
+            if (requestedProcessor == null) {
+                return ApiResponse.error("processorId must belong to the visit department processors.", "INVALID_PROCESSOR");
+            }
+        }
+
+        // All validations passed, now create the child department
         VisitDepartment child = new VisitDepartment();
         child.setVisit(visit);
         child.setDepartment(childDepartment);
@@ -517,9 +558,29 @@ public class VisitService {
         child.setStatus(VisitDepartmentStatus.PENDING);
 
         VisitDepartment savedChild = visitDepartmentRepository.save(child);
-        ApiResponse productsError = addProductsToVisitDepartment(savedChild, productIds, processorId, resolveWorker(authUser));
-        if (productsError != null) {
-            return productsError;
+        
+        // Add all products to the child department
+        for (var productInput : input.products()) {
+            Optional<Product> productOptional = productRepository.findById(productInput.productId());
+            if (productOptional.isEmpty()) {
+                // This shouldn't happen as we already validated above, but safe to check
+                return ApiResponse.error("Product not found.", "NOT_FOUND");
+            }
+            
+            VisitDepartmentProduct item = new VisitDepartmentProduct();
+            item.setVisitDepartment(savedChild);
+            item.setProduct(productOptional.get());
+            item.setQuantity(normalizeQuantity(BigDecimal.valueOf(productInput.quantity())));
+            item.setPrice(resolveUnitPriceSnapshot(productOptional.get(), null));
+            item.setStatus(VisitProductStatus.PENDING);
+            
+            ApiResponse processorError = assignVisitDepartmentProductProcessor(savedChild, item, actingUser, input.processorId());
+            if (processorError != null) {
+                return processorError;
+            }
+            
+            item.setAddedBy(actingUser);
+            visitDepartmentProductRepository.save(item);
         }
 
         return ApiResponse.success("Child visit department added.", visitDepartmentToMap(parent));
@@ -1085,58 +1146,6 @@ public class VisitService {
             if (item.getStatus() != VisitProductStatus.PENDING) {
                 item.setBilledBy(actingUser);
             }
-            visitDepartmentProductRepository.save(item);
-        }
-
-        return null;
-    }
-
-    private ApiResponse addProductsToVisitDepartment(
-            VisitDepartment visitDepartment,
-            List<UUID> productIds,
-            UUID processorId,
-            Worker actingUser
-    ) {
-        if (visitDepartment == null) {
-            return ApiResponse.error("visitDepartment is required.", "VALIDATION_ERROR");
-        }
-
-        if (productIds == null || productIds.isEmpty()) {
-            return ApiResponse.error("productIds are required.", "VALIDATION_ERROR");
-        }
-
-        Set<UUID> seenProducts = new LinkedHashSet<>();
-        for (UUID productId : productIds) {
-            if (productId == null) {
-                return ApiResponse.error("productId is required for each department product.", "VALIDATION_ERROR");
-            }
-
-            if (!seenProducts.add(productId)) {
-                return ApiResponse.error("Duplicate productId found in visit department products.", "DUPLICATE_VISIT_DEPARTMENT_PRODUCT");
-            }
-
-            Optional<Product> productOptional = productRepository.findById(productId);
-            if (productOptional.isEmpty()) {
-                return ApiResponse.error("Product not found.", "NOT_FOUND");
-            }
-
-            if (visitDepartmentProductRepository.findByVisitDepartmentIdAndProductId(visitDepartment.getId(), productId).isPresent()) {
-                return ApiResponse.error("Product already exists for this visit department.", "DUPLICATE_VISIT_DEPARTMENT_PRODUCT");
-            }
-
-            VisitDepartmentProduct item = new VisitDepartmentProduct();
-            item.setVisitDepartment(visitDepartment);
-            item.setProduct(productOptional.get());
-            item.setQuantity(BigDecimal.ONE);
-            item.setPrice(resolveUnitPriceSnapshot(productOptional.get(), null));
-            item.setStatus(VisitProductStatus.PENDING);
-
-            ApiResponse processorError = assignVisitDepartmentProductProcessor(visitDepartment, item, actingUser, processorId);
-            if (processorError != null) {
-                return processorError;
-            }
-
-            item.setAddedBy(actingUser);
             visitDepartmentProductRepository.save(item);
         }
 
@@ -1715,6 +1724,15 @@ public class VisitService {
                 return ApiResponse.error("processorId must belong to the visit department processors.", "INVALID_PROCESSOR");
             }
             item.setProcessor(requestedProcessor);
+            return null;
+        }
+
+        if (visitDepartment.getParentVisitDepartment() != null) {
+            if (actingUser != null && isProcessor(processors, actingUser.getId())) {
+                item.setProcessor(actingUser);
+                return null;
+            }
+            item.setProcessor(null);
             return null;
         }
 

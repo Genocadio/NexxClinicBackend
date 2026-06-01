@@ -12,6 +12,7 @@ import com.nexxserve.nexxclinic.graphql.input.AddDiagnosisInput;
 import com.nexxserve.nexxclinic.graphql.input.AddMedicationInput;
 import com.nexxserve.nexxclinic.graphql.input.AddVisitVitalSignsInput;
 import com.nexxserve.nexxclinic.graphql.input.AddVisitPreInstructionsInput;
+import com.nexxserve.nexxclinic.graphql.input.AddChildVisitDepartmentInput;
 import com.nexxserve.nexxclinic.model.ApiResponse;
 import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.security.HasRole;
@@ -64,13 +65,10 @@ public class VisitMutationController {
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
     @MutationMapping
     public ApiResponse addChildVisitDepartment(
-            @Argument UUID parentVisitDepartmentId,
-            @Argument UUID departmentId,
-            @Argument List<UUID> productIds,
-            @Argument UUID processorId,
+            @Argument @Valid AddChildVisitDepartmentInput input,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.addChildVisitDepartment(parentVisitDepartmentId, departmentId, productIds, processorId, authUser);
+        return visitService.addChildVisitDepartment(input, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})

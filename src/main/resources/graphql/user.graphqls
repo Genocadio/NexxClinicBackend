@@ -1048,10 +1048,23 @@ input CreateVisitDepartmentProductInput {
   status: VisitProductStatus
 }
 
+input AddChildVisitDepartmentProductInput {
+  productId: ID!
+  quantity: Float!
+}
+
+"""
+Input for adding a child visit department with products.
+All validations occur before the child department is created:
+- All products must exist and be valid
+- processorId is required if the department has multiple processors or supportRequests is enabled
+- If any product cannot be added, the child department is NOT created
+- A child department with 0 products will never exist; it is deleted if the last product is removed
+"""
 input AddChildVisitDepartmentInput {
   parentVisitDepartmentId: ID!
   departmentId: ID!
-  productIds: [ID!]!
+  products: [AddChildVisitDepartmentProductInput!]!
   processorId: ID
 }
 
@@ -1259,6 +1272,12 @@ type Mutation {
   createVisit(input: CreateVisitInput!): VisitResponse!
   changeVisitDate(input: ChangeVisitDateInput!): VisitResponse!
   addVisitDepartment(visitId: ID!, departmentId: ID!): VisitResponse!
+  """
+  Add a child visit department with products. Validations occur before creation:
+  - If any product validation fails, the child department is NOT created
+  - Child departments can be created without processorId and assigned later
+  - Child departments can never exist with zero products
+  """
   addChildVisitDepartment(input: AddChildVisitDepartmentInput!): VisitDepartmentResponse!
   removeChildVisitDepartment(visitDepartmentId: ID!): VisitDepartmentResponse!
   addVisitDepartmentProcessor(visitDepartmentId: ID!, processorId: ID!): VisitDepartmentResponse!

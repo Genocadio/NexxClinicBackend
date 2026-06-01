@@ -16,6 +16,8 @@ import com.nexxserve.nexxclinic.graphql.input.AddDiagnosisInput;
 import com.nexxserve.nexxclinic.graphql.input.AddMedicationInput;
 import com.nexxserve.nexxclinic.graphql.input.CreateVisitDepartmentProductInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentStatusInput;
+import com.nexxserve.nexxclinic.graphql.input.AddChildVisitDepartmentInput;
+import com.nexxserve.nexxclinic.graphql.input.AddChildVisitDepartmentProductInput;
 import com.nexxserve.nexxclinic.model.ApiResponse;
 import com.nexxserve.nexxclinic.model.AccountStatus;
 import com.nexxserve.nexxclinic.model.ResponseStatus;
@@ -448,10 +450,12 @@ class VisitServiceTest {
         );
 
         ApiResponse addChildResponse = visitService.addChildVisitDepartment(
-            visitDepartment.getId(),
-            childDepartment.getId(),
-            java.util.List.of(product.getId()),
-            null,
+            new AddChildVisitDepartmentInput(
+                visitDepartment.getId(),
+                childDepartment.getId(),
+                java.util.List.of(new AddChildVisitDepartmentProductInput(product.getId(), 1.0)),
+                null
+            ),
             new AuthenticatedUser(processorOne.getId(), processorOne.getUsername(), Set.of(), null, null)
         );
         assertEquals(ResponseStatus.SUCCESS, addChildResponse.status());
@@ -469,5 +473,56 @@ class VisitServiceTest {
         assertEquals(ResponseStatus.SUCCESS, removeProductResponse.status());
 
         assertTrue(visitDepartmentRepository.findByParentVisitDepartmentId(visitDepartment.getId()).isEmpty());
+        }
+
+        @Test
+        void testAddChildVisitDepartmentRequiresProcessorIdWhenMultipleProcessors() {
+        Department childDepartment = new Department();
+        childDepartment.setName("Laboratory");
+        childDepartment.setSupportRequests(true);
+        childDepartment = departmentRepository.save(childDepartment);
+
+        visitService.updateVisitDepartmentStatus(
+            new UpdateVisitDepartmentStatusInput(visitDepartment.getId(), VisitDepartmentStatus.ACTIVE),
+            new AuthenticatedUser(processorOne.getId(), processorOne.getUsername(), Set.of(), null, null)
+        );
+
+        // Add multiple processors to parent visit department
+        java.util.List<Worker> processors = new java.util.ArrayList<>();
+        processors.add(processorOne);
+        processors.add(processorTwo);
+        visitDepartment.setProcessors(processors);
+        visitDepartmentRepository.save(visitDepartment);
+
+        // Should succeed without processorId even when parent has multiple processors
+        ApiResponse addChildNoProcessorResponse = visitService.addChildVisitDepartment(
+            new AddChildVisitDepartmentInput(
+                visitDepartment.getId(),
+                childDepartment.getId(),
+                java.util.List.of(new AddChildVisitDepartmentProductInput(product.getId(), 1.0)),
+                null
+            ),
+            new AuthenticatedUser(processorOne.getId(), processorOne.getUsername(), Set.of(), null, null)
+        );
+        assertEquals(ResponseStatus.SUCCESS, addChildNoProcessorResponse.status());
+
+        // Child department should have been created with products
+        java.util.List<VisitDepartment> children = visitDepartmentRepository.findByParentVisitDepartmentId(visitDepartment.getId());
+        assertEquals(1, children.size());
+        assertEquals(1, visitDepartmentProductRepository.findByVisitDepartmentId(children.get(0).getId()).size());
+
+        // Should also succeed with valid processorId
+        ApiResponse addChildWithProcessorResponse = visitService.addChildVisitDepartment(
+            new AddChildVisitDepartmentInput(
+                visitDepartment.getId(),
+                childDepartment.getId(),
+                java.util.List.of(new AddChildVisitDepartmentProductInput(product.getId(), 1.0)),
+                processorTwo.getId()
+            ),
+            new AuthenticatedUser(processorOne.getId(), processorOne.getUsername(), Set.of(), null, null)
+        );
+        assertEquals(ResponseStatus.SUCCESS, addChildWithProcessorResponse.status());
+        assertEquals(2, visitDepartmentRepository.findByParentVisitDepartmentId(visitDepartment.getId()).size());
+        assertEquals(1, visitDepartmentProductRepository.findByVisitDepartmentId(children.get(0).getId()).size());
         }
 }
