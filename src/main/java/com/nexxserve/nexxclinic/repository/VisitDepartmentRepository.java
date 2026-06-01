@@ -11,9 +11,17 @@ public interface VisitDepartmentRepository extends JpaRepository<VisitDepartment
 
     List<VisitDepartment> findByVisitId(UUID visitId);
 
+    List<VisitDepartment> findByVisitIdAndParentVisitDepartmentIsNull(UUID visitId);
+
+    List<VisitDepartment> findByParentVisitDepartmentId(UUID parentVisitDepartmentId);
+
     List<VisitDepartment> findByDepartmentIdIn(Collection<UUID> departmentIds);
 
     Optional<VisitDepartment> findByVisitIdAndDepartmentId(UUID visitId, UUID departmentId);
 
+    Optional<VisitDepartment> findByVisitIdAndDepartmentIdAndParentVisitDepartmentId(UUID visitId, UUID departmentId, UUID parentVisitDepartmentId);
+
     boolean existsByVisitIdAndDepartmentId(UUID visitId, UUID departmentId);
+
+    boolean existsByVisitIdAndDepartmentIdAndParentVisitDepartmentId(UUID visitId, UUID departmentId, UUID parentVisitDepartmentId);
 }

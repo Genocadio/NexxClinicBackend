@@ -4,33 +4,46 @@ import com.nexxserve.nexxclinic.entity.Department;
 import com.nexxserve.nexxclinic.entity.InsuranceProvider;
 import com.nexxserve.nexxclinic.entity.Patient;
 import com.nexxserve.nexxclinic.entity.PatientInsurance;
+import com.nexxserve.nexxclinic.entity.Product;
+import com.nexxserve.nexxclinic.entity.Worker;
 import com.nexxserve.nexxclinic.entity.Visit;
 import com.nexxserve.nexxclinic.entity.VisitDepartment;
+import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
 import com.nexxserve.nexxclinic.graphql.input.SearchPatientHistoryInput;
 import com.nexxserve.nexxclinic.graphql.input.AddVisitVitalSignItemInput;
 import com.nexxserve.nexxclinic.graphql.input.AddVisitVitalSignsInput;
 import com.nexxserve.nexxclinic.graphql.input.AddDiagnosisInput;
 import com.nexxserve.nexxclinic.graphql.input.AddMedicationInput;
+import com.nexxserve.nexxclinic.graphql.input.CreateVisitDepartmentProductInput;
+import com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentStatusInput;
 import com.nexxserve.nexxclinic.model.ApiResponse;
+import com.nexxserve.nexxclinic.model.AccountStatus;
 import com.nexxserve.nexxclinic.model.ResponseStatus;
+import com.nexxserve.nexxclinic.model.ProductType;
+import com.nexxserve.nexxclinic.model.ProductUnit;
 import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
 import com.nexxserve.nexxclinic.model.VisitStatus;
 import com.nexxserve.nexxclinic.repository.DepartmentRepository;
 import com.nexxserve.nexxclinic.repository.InsuranceProviderRepository;
 import com.nexxserve.nexxclinic.repository.PatientRepository;
 import com.nexxserve.nexxclinic.repository.PatientInsuranceRepository;
+import com.nexxserve.nexxclinic.repository.ProductRepository;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
 import com.nexxserve.nexxclinic.repository.VisitRepository;
 import com.nexxserve.nexxclinic.repository.VisitInsuranceRepository;
+import com.nexxserve.nexxclinic.repository.WorkerRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -59,12 +72,24 @@ class VisitServiceTest {
     private VisitDepartmentRepository visitDepartmentRepository;
 
     @Autowired
+    private VisitDepartmentProductRepository visitDepartmentProductRepository;
+
+    @Autowired
     private VisitInsuranceRepository visitInsuranceRepository;
 
     @Autowired
     private PatientRepository patientRepository;
 
+    @Autowired
+    private ProductRepository productRepository;
+
+    @Autowired
+    private WorkerRepository workerRepository;
+
     private VisitDepartment visitDepartment;
+    private Worker processorOne;
+    private Worker processorTwo;
+    private Product product;
 
     @BeforeEach
     void setUp() {
@@ -91,6 +116,33 @@ class VisitServiceTest {
         visitDepartment.setDepartment(department);
         visitDepartment.setStatus(VisitDepartmentStatus.PENDING);
         visitDepartment = visitDepartmentRepository.save(visitDepartment);
+
+        processorOne = new Worker();
+        processorOne.setFirstName("Proc");
+        processorOne.setLastName("One");
+        processorOne.setUsername("proc-one");
+        processorOne.setAccountStatus(AccountStatus.ACTIVE);
+        processorOne.setActive(true);
+        processorOne.setMaxActiveSessions(1);
+        processorOne = workerRepository.save(processorOne);
+
+        processorTwo = new Worker();
+        processorTwo.setFirstName("Proc");
+        processorTwo.setLastName("Two");
+        processorTwo.setUsername("proc-two");
+        processorTwo.setAccountStatus(AccountStatus.ACTIVE);
+        processorTwo.setActive(true);
+        processorTwo.setMaxActiveSessions(1);
+        processorTwo = workerRepository.save(processorTwo);
+
+        product = new Product();
+        product.setName("Test Product");
+        product.setCode("TP-001");
+        product.setDescription("Test product");
+        product.setType(ProductType.DRUG);
+        product.setUnit(ProductUnit.TABLET);
+        product.setClinicPrice(BigDecimal.valueOf(25));
+        product = productRepository.save(product);
     }
 
     @Test
@@ -306,4 +358,116 @@ class VisitServiceTest {
         Map<String, Object> pagination = (Map<String, Object>) response.pagination();
         assertEquals(1L, pagination.get("total"));
     }
+
+        @Test
+        void testActivatingDepartmentAddsCurrentUserAsProcessor() {
+        AuthenticatedUser authUser = new AuthenticatedUser(
+            processorOne.getId(),
+            processorOne.getUsername(),
+            Set.of(),
+            null,
+            null
+        );
+
+        UpdateVisitDepartmentStatusInput input = new UpdateVisitDepartmentStatusInput(
+            visitDepartment.getId(),
+            VisitDepartmentStatus.ACTIVE
+        );
+
+        ApiResponse response = visitService.updateVisitDepartmentStatus(input, authUser);
+        assertEquals(ResponseStatus.SUCCESS, response.status());
+
+        VisitDepartment refreshed = visitDepartmentRepository.findById(visitDepartment.getId()).orElseThrow();
+        assertEquals(1, refreshed.getProcessors().size());
+        assertEquals(processorOne.getId(), refreshed.getProcessors().get(0).getId());
+        }
+
+        @Test
+        void testAddVisitDepartmentProductUsesExplicitProcessorWhenManyAreAvailable() {
+        AuthenticatedUser authUser = new AuthenticatedUser(
+            processorOne.getId(),
+            processorOne.getUsername(),
+            Set.of(),
+            null,
+            null
+        );
+
+        visitService.updateVisitDepartmentStatus(
+            new UpdateVisitDepartmentStatusInput(visitDepartment.getId(), VisitDepartmentStatus.ACTIVE),
+            authUser
+        );
+        visitService.addVisitDepartmentProcessor(visitDepartment.getId(), processorTwo.getId(), authUser);
+
+        ApiResponse missingProcessorResponse = visitService.addVisitDepartmentProduct(
+            new CreateVisitDepartmentProductInput(
+                visitDepartment.getVisit().getId(),
+                visitDepartment.getDepartment().getId(),
+                product.getId(),
+                null,
+                BigDecimal.valueOf(3),
+                null,
+                null
+            ),
+            null
+        );
+        assertEquals(ResponseStatus.ERROR, missingProcessorResponse.status());
+
+        ApiResponse explicitProcessorResponse = visitService.addVisitDepartmentProduct(
+            new CreateVisitDepartmentProductInput(
+                visitDepartment.getVisit().getId(),
+                visitDepartment.getDepartment().getId(),
+                product.getId(),
+                processorTwo.getId(),
+                BigDecimal.valueOf(3),
+                null,
+                null
+            ),
+            authUser
+        );
+        assertEquals(ResponseStatus.SUCCESS, explicitProcessorResponse.status());
+
+        Map<String, Object> departmentData = (Map<String, Object>) explicitProcessorResponse.data();
+        java.util.List<?> products = (java.util.List<?>) departmentData.get("products");
+        assertEquals(1, products.size());
+
+        Map<String, Object> addedProduct = (Map<String, Object>) products.get(0);
+        Map<String, Object> processor = (Map<String, Object>) addedProduct.get("processor");
+        assertEquals(processorTwo.getId(), UUID.fromString(processor.get("id").toString()));
+        }
+
+        @Test
+        void testAddAndRemoveChildVisitDepartmentDeletesEmptyChild() {
+        Department childDepartment = new Department();
+        childDepartment.setName("Laboratory");
+        childDepartment.setSupportRequests(true);
+        childDepartment = departmentRepository.save(childDepartment);
+
+        visitService.updateVisitDepartmentStatus(
+            new UpdateVisitDepartmentStatusInput(visitDepartment.getId(), VisitDepartmentStatus.ACTIVE),
+            new AuthenticatedUser(processorOne.getId(), processorOne.getUsername(), Set.of(), null, null)
+        );
+
+        ApiResponse addChildResponse = visitService.addChildVisitDepartment(
+            visitDepartment.getId(),
+            childDepartment.getId(),
+            java.util.List.of(product.getId()),
+            null,
+            new AuthenticatedUser(processorOne.getId(), processorOne.getUsername(), Set.of(), null, null)
+        );
+        assertEquals(ResponseStatus.SUCCESS, addChildResponse.status());
+
+        java.util.List<VisitDepartment> children = visitDepartmentRepository.findByParentVisitDepartmentId(visitDepartment.getId());
+        assertEquals(1, children.size());
+
+        VisitDepartment child = children.get(0);
+        assertEquals(childDepartment.getId(), child.getDepartment().getId());
+
+        assertEquals(1, visitDepartmentProductRepository.findByVisitDepartmentId(child.getId()).size());
+
+        UUID childProductId = visitDepartmentProductRepository.findByVisitDepartmentId(child.getId()).get(0).getId();
+        ApiResponse removeProductResponse = visitService.removeVisitDepartmentProduct(childProductId);
+        assertEquals(ResponseStatus.SUCCESS, removeProductResponse.status());
+
+        assertTrue(visitDepartmentRepository.findByParentVisitDepartmentId(visitDepartment.getId()).isEmpty());
+        }
 }

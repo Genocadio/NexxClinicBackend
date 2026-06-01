@@ -10,7 +10,9 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
@@ -57,6 +59,21 @@ public class VisitDepartment {
 
     @OneToMany(mappedBy = "visitDepartment", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<VisitPreInstruction> preInstructions = new ArrayList<>();
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_visit_department_id")
+    private VisitDepartment parentVisitDepartment;
+
+    @OneToMany(mappedBy = "parentVisitDepartment", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<VisitDepartment> childVisitDepartments = new ArrayList<>();
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "visit_department_processors",
+            joinColumns = @JoinColumn(name = "visit_department_id"),
+            inverseJoinColumns = @JoinColumn(name = "worker_id")
+    )
+    private List<Worker> processors = new ArrayList<>();
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -142,6 +159,30 @@ public class VisitDepartment {
 
     public void setPreInstructions(List<VisitPreInstruction> preInstructions) {
         this.preInstructions = preInstructions;
+    }
+
+    public VisitDepartment getParentVisitDepartment() {
+        return parentVisitDepartment;
+    }
+
+    public void setParentVisitDepartment(VisitDepartment parentVisitDepartment) {
+        this.parentVisitDepartment = parentVisitDepartment;
+    }
+
+    public List<VisitDepartment> getChildVisitDepartments() {
+        return childVisitDepartments;
+    }
+
+    public void setChildVisitDepartments(List<VisitDepartment> childVisitDepartments) {
+        this.childVisitDepartments = childVisitDepartments == null ? new ArrayList<>() : new ArrayList<>(childVisitDepartments);
+    }
+
+    public List<Worker> getProcessors() {
+        return processors;
+    }
+
+    public void setProcessors(List<Worker> processors) {
+        this.processors = processors == null ? new ArrayList<>() : new ArrayList<>(processors);
     }
 
     public LocalDateTime getCreatedAt() {

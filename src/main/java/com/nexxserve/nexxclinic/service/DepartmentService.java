@@ -190,6 +190,16 @@ public class DepartmentService {
             spec = spec.and((root, queryDef, builder) -> builder.like(builder.lower(root.get("name")), "%" + normalized + "%"));
         }
 
+        Boolean supportRequests = input == null ? null : input.supportRequests();
+        if (supportRequests != null) {
+            spec = spec.and((root, queryDef, builder) -> builder.equal(root.get("supportRequests"), supportRequests));
+        }
+
+        Boolean requestsProducts = input == null ? null : input.requestsProducts();
+        if (requestsProducts != null) {
+            spec = spec.and((root, queryDef, builder) -> builder.equal(root.get("requestsProducts"), requestsProducts));
+        }
+
         Page<Department> departmentPage = departmentRepository.findAll(spec, pageable);
         List<Map<String, Object>> departments = departmentPage.getContent().stream().map(this::departmentToMap).toList();
 

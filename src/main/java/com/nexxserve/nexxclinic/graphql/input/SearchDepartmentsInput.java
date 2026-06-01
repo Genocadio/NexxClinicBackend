@@ -7,6 +7,9 @@ public record SearchDepartmentsInput(
         @Size(max = 150, message = "name must not exceed 150 characters")
         String name,
 
+        Boolean supportRequests,
+        Boolean requestsProducts,
+
         @Min(value = 0, message = "page must be 0 or greater")
         Integer page,
 

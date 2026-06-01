@@ -61,6 +61,47 @@ public class VisitMutationController {
         return visitService.addVisitDepartment(visitId, departmentId, authUser);
     }
 
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
+    public ApiResponse addChildVisitDepartment(
+            @Argument UUID parentVisitDepartmentId,
+            @Argument UUID departmentId,
+            @Argument List<UUID> productIds,
+            @Argument UUID processorId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.addChildVisitDepartment(parentVisitDepartmentId, departmentId, productIds, processorId, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
+    public ApiResponse removeChildVisitDepartment(
+            @Argument UUID visitDepartmentId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.removeChildVisitDepartment(visitDepartmentId, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
+    public ApiResponse addVisitDepartmentProcessor(
+            @Argument UUID visitDepartmentId,
+            @Argument UUID processorId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.addVisitDepartmentProcessor(visitDepartmentId, processorId, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
+    public ApiResponse removeVisitDepartmentProcessor(
+            @Argument UUID visitDepartmentId,
+            @Argument UUID processorId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.removeVisitDepartmentProcessor(visitDepartmentId, processorId, authUser);
+    }
+
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.FINANCE})
     @MutationMapping
     public ApiResponse linkVisitInsurances(

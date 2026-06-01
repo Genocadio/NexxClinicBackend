@@ -468,6 +468,85 @@ public class VisitService {
     }
 
     @Transactional
+    public ApiResponse addChildVisitDepartment(UUID parentVisitDepartmentId, UUID departmentId, List<UUID> productIds, UUID processorId, AuthenticatedUser authUser) {
+        if (parentVisitDepartmentId == null || departmentId == null || productIds == null || productIds.isEmpty()) {
+            return ApiResponse.error("parentVisitDepartmentId, departmentId and productIds are required.", "VALIDATION_ERROR");
+        }
+
+        Optional<VisitDepartment> parentOptional = visitDepartmentRepository.findById(parentVisitDepartmentId);
+        if (parentOptional.isEmpty()) {
+            return ApiResponse.error("Parent visit department not found.", "NOT_FOUND");
+        }
+
+        VisitDepartment parent = parentOptional.get();
+        if (parent.getStatus() == VisitDepartmentStatus.COMPLETED) {
+            return ApiResponse.error("Cannot add child departments to a completed department.", "DEPARTMENT_IS_COMPLETED");
+        }
+        if (parent.getStatus() == VisitDepartmentStatus.CANCELLED) {
+            return ApiResponse.error("Cannot add child departments to a cancelled department.", "DEPARTMENT_IS_CANCELLED");
+        }
+
+        if (parent.getDepartment() != null && parent.getDepartment().getId() != null && parent.getDepartment().getId().equals(departmentId)) {
+            return ApiResponse.error("A department cannot be added as a child of itself.", "INVALID_CHILD_DEPARTMENT");
+        }
+
+        Optional<Department> departmentOptional = departmentRepository.findById(departmentId);
+        if (departmentOptional.isEmpty()) {
+            return ApiResponse.error("Department not found.", "NOT_FOUND");
+        }
+
+        Department childDepartment = departmentOptional.get();
+        if (!childDepartment.isSupportRequests()) {
+            return ApiResponse.error("Only support request departments can be added as children.", "INVALID_CHILD_DEPARTMENT");
+        }
+
+        Visit visit = parent.getVisit();
+        if (visit == null) {
+            return ApiResponse.error("Visit not found.", "NOT_FOUND");
+        }
+
+        if (visitDepartmentRepository.existsByVisitIdAndDepartmentId(visit.getId(), departmentId)
+            || visitDepartmentRepository.existsByVisitIdAndDepartmentIdAndParentVisitDepartmentId(visit.getId(), departmentId, parentVisitDepartmentId)) {
+            return ApiResponse.error("Child department already exists for this parent.", "DUPLICATE_VISIT_DEPARTMENT");
+        }
+
+        VisitDepartment child = new VisitDepartment();
+        child.setVisit(visit);
+        child.setDepartment(childDepartment);
+        child.setParentVisitDepartment(parent);
+        child.setStatus(VisitDepartmentStatus.PENDING);
+
+        VisitDepartment savedChild = visitDepartmentRepository.save(child);
+        ApiResponse productsError = addProductsToVisitDepartment(savedChild, productIds, processorId, resolveWorker(authUser));
+        if (productsError != null) {
+            return productsError;
+        }
+
+        return ApiResponse.success("Child visit department added.", visitDepartmentToMap(parent));
+    }
+
+    @Transactional
+    public ApiResponse removeChildVisitDepartment(UUID visitDepartmentId, AuthenticatedUser authUser) {
+        if (visitDepartmentId == null) {
+            return ApiResponse.error("visitDepartmentId is required.", "VALIDATION_ERROR");
+        }
+
+        Optional<VisitDepartment> departmentOptional = visitDepartmentRepository.findById(visitDepartmentId);
+        if (departmentOptional.isEmpty()) {
+            return ApiResponse.error("Visit department not found.", "NOT_FOUND");
+        }
+
+        VisitDepartment child = departmentOptional.get();
+        if (child.getParentVisitDepartment() == null) {
+            return ApiResponse.error("Only child visit departments can be removed with this mutation.", "INVALID_CHILD_DEPARTMENT");
+        }
+
+        VisitDepartment parent = child.getParentVisitDepartment();
+        visitDepartmentRepository.delete(child);
+        return ApiResponse.success("Child visit department removed.", visitDepartmentToMap(parent));
+    }
+
+    @Transactional
     public ApiResponse linkVisitInsurances(UUID visitId, List<UUID> insuranceIds, AuthenticatedUser authUser) {
         if (visitId == null || insuranceIds == null) {
             return ApiResponse.error("visitId and insuranceIds are required.", "VALIDATION_ERROR");
@@ -612,6 +691,10 @@ public class VisitService {
         item.setStatus(input.status() == null ? VisitProductStatus.PENDING : input.status());
 
         Worker actingUser = resolveWorker(authUser);
+        ApiResponse processorError = assignVisitDepartmentProductProcessor(visitDepartment, item, actingUser, input.processorId());
+        if (processorError != null) {
+            return processorError;
+        }
         item.setAddedBy(actingUser);
         if (item.getStatus() != VisitProductStatus.PENDING) {
             item.setBilledBy(actingUser);
@@ -779,6 +862,7 @@ public class VisitService {
         }
 
         VisitDepartmentProduct saved = visitDepartmentProductRepository.save(item);
+        deleteChildVisitDepartmentIfEmpty(saved.getVisitDepartment());
         return ApiResponse.success("Visit department product status updated.", visitDepartmentToMap(saved.getVisitDepartment()));
     }
 
@@ -799,8 +883,76 @@ public class VisitService {
             department.setCompletedAt(java.time.LocalDateTime.now());
         }
 
+        if (input.status() == VisitDepartmentStatus.ACTIVE) {
+            Worker actingUser = resolveWorker(authUser);
+            if (actingUser != null) {
+                addProcessorToVisitDepartment(department, actingUser);
+            }
+        }
+
         VisitDepartment saved = visitDepartmentRepository.save(department);
         return ApiResponse.success("Visit department status updated.", visitDepartmentToMap(saved));
+    }
+
+    @Transactional
+    public ApiResponse addVisitDepartmentProcessor(UUID visitDepartmentId, UUID processorId, AuthenticatedUser authUser) {
+        if (visitDepartmentId == null || processorId == null) {
+            return ApiResponse.error("visitDepartmentId and processorId are required.", "VALIDATION_ERROR");
+        }
+
+        Optional<VisitDepartment> departmentOptional = visitDepartmentRepository.findById(visitDepartmentId);
+        if (departmentOptional.isEmpty()) {
+            return ApiResponse.error("Visit department not found.", "NOT_FOUND");
+        }
+
+        VisitDepartment department = departmentOptional.get();
+        if (department.getStatus() == VisitDepartmentStatus.COMPLETED) {
+            return ApiResponse.error("Cannot modify processors on a completed department.", "DEPARTMENT_IS_COMPLETED");
+        }
+        if (department.getStatus() == VisitDepartmentStatus.CANCELLED) {
+            return ApiResponse.error("Cannot modify processors on a cancelled department.", "DEPARTMENT_IS_CANCELLED");
+        }
+
+        Optional<Worker> processorOptional = workerRepository.findById(processorId);
+        if (processorOptional.isEmpty()) {
+            return ApiResponse.error("Processor not found.", "NOT_FOUND");
+        }
+
+        addProcessorToVisitDepartment(department, processorOptional.get());
+        VisitDepartment saved = visitDepartmentRepository.save(department);
+        return ApiResponse.success("Visit department processor added.", visitDepartmentToMap(saved));
+    }
+
+    @Transactional
+    public ApiResponse removeVisitDepartmentProcessor(UUID visitDepartmentId, UUID processorId, AuthenticatedUser authUser) {
+        if (visitDepartmentId == null || processorId == null) {
+            return ApiResponse.error("visitDepartmentId and processorId are required.", "VALIDATION_ERROR");
+        }
+
+        Optional<VisitDepartment> departmentOptional = visitDepartmentRepository.findById(visitDepartmentId);
+        if (departmentOptional.isEmpty()) {
+            return ApiResponse.error("Visit department not found.", "NOT_FOUND");
+        }
+
+        VisitDepartment department = departmentOptional.get();
+        if (department.getStatus() == VisitDepartmentStatus.COMPLETED) {
+            return ApiResponse.error("Cannot modify processors on a completed department.", "DEPARTMENT_IS_COMPLETED");
+        }
+        if (department.getStatus() == VisitDepartmentStatus.CANCELLED) {
+            return ApiResponse.error("Cannot modify processors on a cancelled department.", "DEPARTMENT_IS_CANCELLED");
+        }
+
+        if (department.getProcessors() == null || department.getProcessors().isEmpty()) {
+            return ApiResponse.error("Visit department has no processors.", "PROCESSOR_NOT_FOUND");
+        }
+
+        boolean removed = department.getProcessors().removeIf(worker -> worker != null && processorId.equals(worker.getId()));
+        if (!removed) {
+            return ApiResponse.error("Processor not found on this visit department.", "PROCESSOR_NOT_FOUND");
+        }
+
+        VisitDepartment saved = visitDepartmentRepository.save(department);
+        return ApiResponse.success("Visit department processor removed.", visitDepartmentToMap(saved));
     }
 
     @Transactional
@@ -819,14 +971,17 @@ public class VisitService {
 
         if (input.quantity().compareTo(java.math.BigDecimal.ZERO) <= 0) {
             // Delete product from visit department when quantity is 0 or less
+            VisitDepartment affectedDepartment = item.getVisitDepartment();
             visitDepartmentProductRepository.delete(item);
             reopenVisitIfCompleted(visit);
-            return ApiResponse.success("Visit department product removed.", visitDepartmentToMap(item.getVisitDepartment()));
+            VisitDepartment mappedDepartment = deleteChildVisitDepartmentIfEmpty(affectedDepartment);
+            return ApiResponse.success("Visit department product removed.", visitDepartmentToMap(mappedDepartment == null ? affectedDepartment : mappedDepartment));
         }
 
         item.setQuantity(input.quantity());
 
         VisitDepartmentProduct saved = visitDepartmentProductRepository.save(item);
+        deleteChildVisitDepartmentIfEmpty(saved.getVisitDepartment());
         return ApiResponse.success("Visit department product quantity updated.", visitDepartmentToMap(saved.getVisitDepartment()));
     }
 
@@ -843,12 +998,14 @@ public class VisitService {
 
         VisitDepartmentProduct item = itemOptional.get();
         Visit visit = item.getVisitDepartment().getVisit();
+        VisitDepartment affectedDepartment = item.getVisitDepartment();
 
         // Delete the product from visit department
         visitDepartmentProductRepository.delete(item);
         reopenVisitIfCompleted(visit);
 
-        return ApiResponse.success("Visit department product removed.", visitDepartmentToMap(item.getVisitDepartment()));
+        VisitDepartment mappedDepartment = deleteChildVisitDepartmentIfEmpty(affectedDepartment);
+        return ApiResponse.success("Visit department product removed.", visitDepartmentToMap(mappedDepartment == null ? affectedDepartment : mappedDepartment));
     }
 
     private ApiResponse addDepartmentsToVisit(
@@ -920,10 +1077,66 @@ public class VisitService {
             item.setQuantity(normalizeQuantity(productInput.quantity()));
             item.setPrice(resolveUnitPriceSnapshot(productOptional.get(), productInput.price()));
             item.setStatus(productInput.status() == null ? VisitProductStatus.PENDING : productInput.status());
+            ApiResponse processorError = assignVisitDepartmentProductProcessor(visitDepartment, item, actingUser, productInput.processorId());
+            if (processorError != null) {
+                return processorError;
+            }
             item.setAddedBy(actingUser);
             if (item.getStatus() != VisitProductStatus.PENDING) {
                 item.setBilledBy(actingUser);
             }
+            visitDepartmentProductRepository.save(item);
+        }
+
+        return null;
+    }
+
+    private ApiResponse addProductsToVisitDepartment(
+            VisitDepartment visitDepartment,
+            List<UUID> productIds,
+            UUID processorId,
+            Worker actingUser
+    ) {
+        if (visitDepartment == null) {
+            return ApiResponse.error("visitDepartment is required.", "VALIDATION_ERROR");
+        }
+
+        if (productIds == null || productIds.isEmpty()) {
+            return ApiResponse.error("productIds are required.", "VALIDATION_ERROR");
+        }
+
+        Set<UUID> seenProducts = new LinkedHashSet<>();
+        for (UUID productId : productIds) {
+            if (productId == null) {
+                return ApiResponse.error("productId is required for each department product.", "VALIDATION_ERROR");
+            }
+
+            if (!seenProducts.add(productId)) {
+                return ApiResponse.error("Duplicate productId found in visit department products.", "DUPLICATE_VISIT_DEPARTMENT_PRODUCT");
+            }
+
+            Optional<Product> productOptional = productRepository.findById(productId);
+            if (productOptional.isEmpty()) {
+                return ApiResponse.error("Product not found.", "NOT_FOUND");
+            }
+
+            if (visitDepartmentProductRepository.findByVisitDepartmentIdAndProductId(visitDepartment.getId(), productId).isPresent()) {
+                return ApiResponse.error("Product already exists for this visit department.", "DUPLICATE_VISIT_DEPARTMENT_PRODUCT");
+            }
+
+            VisitDepartmentProduct item = new VisitDepartmentProduct();
+            item.setVisitDepartment(visitDepartment);
+            item.setProduct(productOptional.get());
+            item.setQuantity(BigDecimal.ONE);
+            item.setPrice(resolveUnitPriceSnapshot(productOptional.get(), null));
+            item.setStatus(VisitProductStatus.PENDING);
+
+            ApiResponse processorError = assignVisitDepartmentProductProcessor(visitDepartment, item, actingUser, processorId);
+            if (processorError != null) {
+                return processorError;
+            }
+
+            item.setAddedBy(actingUser);
             visitDepartmentProductRepository.save(item);
         }
 
@@ -1048,16 +1261,53 @@ public class VisitService {
     private Map<String, Object> visitDepartmentToMap(VisitDepartment visitDepartment) {
         return visitDepartmentToMap(
                 visitDepartment,
-                resolveVisitInsuranceProviderIds(visitDepartment.getVisit().getId())
+                resolveVisitInsuranceProviderIds(visitDepartment.getVisit().getId()),
+                new LinkedHashSet<>()
         );
     }
 
     private Map<String, Object> visitDepartmentToMap(VisitDepartment visitDepartment, Set<UUID> visitInsuranceProviderIds) {
+        return visitDepartmentToMap(visitDepartment, visitInsuranceProviderIds, new LinkedHashSet<>());
+    }
+
+    private Map<String, Object> visitDepartmentToMap(
+            VisitDepartment visitDepartment,
+            Set<UUID> visitInsuranceProviderIds,
+            Set<UUID> visitedDepartmentIds
+    ) {
+        if (visitDepartment == null) {
+            return null;
+        }
+
+        if (visitedDepartmentIds.contains(visitDepartment.getId())) {
+            Map<String, Object> circular = new HashMap<>();
+            circular.put("id", visitDepartment.getId());
+            circular.put("department", departmentToMap(visitDepartment.getDepartment()));
+            circular.put("status", visitDepartment.getStatus());
+            circular.put("completedAt", visitDepartment.getCompletedAt());
+            circular.put("processors", visitDepartment.getProcessors() == null || visitDepartment.getProcessors().isEmpty() ? null : visitDepartment.getProcessors().stream().map(this::workerToMap).toList());
+            circular.put("products", List.of());
+            circular.put("diagnostics", List.of());
+            circular.put("medications", List.of());
+            circular.put("preInstructions", List.of());
+            circular.put("childVisitDepartments", List.of());
+            circular.put("createdAt", visitDepartment.getCreatedAt());
+            circular.put("updatedAt", visitDepartment.getUpdatedAt());
+            return circular;
+        }
+
+        visitedDepartmentIds.add(visitDepartment.getId());
         Map<String, Object> data = new HashMap<>();
         data.put("id", visitDepartment.getId());
         data.put("department", departmentToMap(visitDepartment.getDepartment()));
         data.put("status", visitDepartment.getStatus());
         data.put("completedAt", visitDepartment.getCompletedAt());
+        data.put(
+            "processors",
+            visitDepartment.getProcessors() == null || visitDepartment.getProcessors().isEmpty()
+                ? null
+                : visitDepartment.getProcessors().stream().map(this::workerToMap).toList()
+        );
         data.put(
                 "products",
                 visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartment.getId())
@@ -1085,6 +1335,13 @@ public class VisitService {
                         .stream()
                         .map(this::visitPreInstructionToMap)
                         .toList()
+        );
+        data.put(
+            "childVisitDepartments",
+            visitDepartmentRepository.findByParentVisitDepartmentId(visitDepartment.getId())
+                .stream()
+                .map(child -> visitDepartmentToMap(child, visitInsuranceProviderIds, new LinkedHashSet<>(visitedDepartmentIds)))
+                .toList()
         );
         data.put("createdAt", visitDepartment.getCreatedAt());
         data.put("updatedAt", visitDepartment.getUpdatedAt());
@@ -1137,6 +1394,7 @@ public class VisitService {
         data.put("status", item.getStatus());
         data.put("addedBy", workerToMap(item.getAddedBy()));
         data.put("billedBy", workerToMap(item.getBilledBy()));
+        data.put("processor", workerToMap(item.getProcessor()));
         data.put("createdAt", item.getCreatedAt());
         data.put("updatedAt", item.getUpdatedAt());
         return data;
@@ -1345,7 +1603,7 @@ public class VisitService {
 
     private List<VisitDepartment> resolveVisitDepartmentsForResponse(UUID visitId, Set<UUID> departmentIds) {
         if (departmentIds == null || departmentIds.isEmpty()) {
-            return visitDepartmentRepository.findByVisitId(visitId);
+            return visitDepartmentRepository.findByVisitIdAndParentVisitDepartmentIsNull(visitId);
         }
 
         List<VisitDepartment> visitDepartments = new ArrayList<>();
@@ -1440,6 +1698,121 @@ public class VisitService {
             visit.setStatus(VisitStatus.IN_PROGRESS);
             visitRepository.save(visit);
         }
+    }
+
+    private ApiResponse assignVisitDepartmentProductProcessor(
+            VisitDepartment visitDepartment,
+            VisitDepartmentProduct item,
+            Worker actingUser,
+            UUID requestedProcessorId
+    ) {
+        List<Worker> processors = resolveAvailableProcessorsForProductAssignment(visitDepartment);
+        boolean supportRequests = visitDepartment.getDepartment() != null && visitDepartment.getDepartment().isSupportRequests();
+
+        if (requestedProcessorId != null) {
+            Worker requestedProcessor = findProcessorById(processors, requestedProcessorId);
+            if (requestedProcessor == null) {
+                return ApiResponse.error("processorId must belong to the visit department processors.", "INVALID_PROCESSOR");
+            }
+            item.setProcessor(requestedProcessor);
+            return null;
+        }
+
+        if (actingUser != null && isProcessor(processors, actingUser.getId())) {
+            item.setProcessor(actingUser);
+            return null;
+        }
+
+        if (processors.size() == 1) {
+            item.setProcessor(processors.get(0));
+            return null;
+        }
+
+        if (processors.isEmpty()) {
+            if (supportRequests) {
+                return ApiResponse.error("processorId is required when supportRequests is enabled.", "VALIDATION_ERROR");
+            }
+
+            item.setProcessor(null);
+            return null;
+        }
+
+        return ApiResponse.error("processorId is required when the visit department has multiple processors.", "VALIDATION_ERROR");
+    }
+
+    private List<Worker> resolveAvailableProcessorsForProductAssignment(VisitDepartment visitDepartment) {
+        if (visitDepartment == null) {
+            return List.of();
+        }
+
+        List<Worker> parentProcessors = visitDepartment.getParentVisitDepartment() == null
+                ? List.of()
+                : normalizeVisitDepartmentProcessors(visitDepartment.getParentVisitDepartment());
+        if (!parentProcessors.isEmpty()) {
+            return parentProcessors;
+        }
+
+        return normalizeVisitDepartmentProcessors(visitDepartment);
+    }
+
+    private List<Worker> normalizeVisitDepartmentProcessors(VisitDepartment visitDepartment) {
+        if (visitDepartment == null || visitDepartment.getProcessors() == null || visitDepartment.getProcessors().isEmpty()) {
+            return List.of();
+        }
+        return visitDepartment.getProcessors().stream().filter(worker -> worker != null && worker.getId() != null).toList();
+    }
+
+    private Worker findProcessorById(List<Worker> processors, UUID workerId) {
+        if (processors == null || processors.isEmpty() || workerId == null) {
+            return null;
+        }
+
+        for (Worker worker : processors) {
+            if (workerId.equals(worker.getId())) {
+                return worker;
+            }
+        }
+
+        return null;
+    }
+
+    private boolean isProcessor(List<Worker> processors, UUID workerId) {
+        return findProcessorById(processors, workerId) != null;
+    }
+
+    private void addProcessorToVisitDepartment(VisitDepartment department, Worker worker) {
+        if (department == null || worker == null || worker.getId() == null) {
+            return;
+        }
+
+        if (department.getProcessors() == null) {
+            department.setProcessors(new ArrayList<>());
+        }
+
+        boolean alreadyAssigned = department.getProcessors().stream()
+                .anyMatch(existing -> existing != null && worker.getId().equals(existing.getId()));
+        if (!alreadyAssigned) {
+            department.getProcessors().add(worker);
+        }
+    }
+
+    private VisitDepartment deleteChildVisitDepartmentIfEmpty(VisitDepartment visitDepartment) {
+        if (visitDepartment == null) {
+            return null;
+        }
+
+        if (visitDepartment.getParentVisitDepartment() == null) {
+            return visitDepartment;
+        }
+
+        List<VisitDepartmentProduct> remainingProducts = visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartment.getId());
+        if (!remainingProducts.isEmpty()) {
+            return visitDepartment;
+        }
+
+        VisitDepartment parent = visitDepartment.getParentVisitDepartment();
+        visitDepartmentRepository.delete(visitDepartment);
+        return parent;
     }
 
     private Worker resolveWorker(AuthenticatedUser authUser) {

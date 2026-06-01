@@ -57,6 +57,10 @@ public class VisitDepartmentProduct {
     @JoinColumn(name = "billed_by_worker_id")
     private Worker billedBy;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "processor_worker_id")
+    private Worker processor;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -155,6 +159,14 @@ public class VisitDepartmentProduct {
 
     public void setBilledBy(Worker billedBy) {
         this.billedBy = billedBy;
+    }
+
+    public Worker getProcessor() {
+        return processor;
+    }
+
+    public void setProcessor(Worker processor) {
+        this.processor = processor;
     }
 
     public LocalDateTime getCreatedAt() {

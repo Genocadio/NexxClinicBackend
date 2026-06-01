@@ -15,6 +15,8 @@ public record CreateVisitDepartmentProductInput(
         @NotNull(message = "productId is required")
         UUID productId,
 
+        UUID processorId,
+
         BigDecimal quantity,
 
         BigDecimal price,
