@@ -1,6 +1,7 @@
 package com.nexxserve.nexxclinic.graphql.input;
 
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
+import com.nexxserve.nexxclinic.model.EncounterType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
@@ -10,6 +11,8 @@ import java.util.UUID;
 public record CreateVisitDepartmentInput(
         @NotNull(message = "departmentId is required")
         UUID departmentId,
+
+        EncounterType encounterType,
 
         @Valid
         List<CreateVisitDepartmentProductItemInput> products

@@ -1,6 +1,7 @@
 package com.nexxserve.nexxclinic.entity;
 
 import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
+import com.nexxserve.nexxclinic.model.EncounterType;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -48,6 +49,10 @@ public class VisitDepartment {
     @Column(nullable = false)
     private VisitDepartmentStatus status;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "encounter_type", nullable = false, columnDefinition = "varchar(255) default 'OUTPATIENT'")
+    private EncounterType encounterType;
+
     @Column
     private LocalDateTime completedAt;
 
@@ -87,6 +92,9 @@ public class VisitDepartment {
         LocalDateTime now = LocalDateTime.now();
         this.createdAt = now;
         this.updatedAt = now;
+        if (this.encounterType == null) {
+            this.encounterType = EncounterType.OUTPATIENT;
+        }
     }
 
     @PreUpdate
@@ -183,6 +191,14 @@ public class VisitDepartment {
 
     public void setProcessors(List<Worker> processors) {
         this.processors = processors == null ? new ArrayList<>() : new ArrayList<>(processors);
+    }
+
+    public EncounterType getEncounterType() {
+        return encounterType;
+    }
+
+    public void setEncounterType(EncounterType encounterType) {
+        this.encounterType = encounterType;
     }
 
     public LocalDateTime getCreatedAt() {

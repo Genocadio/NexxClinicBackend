@@ -28,6 +28,7 @@ public record BillVisitInput(
     public record BillVisitDepartmentProductInput(
             @NotNull(message = "visitDepartmentProductId is required")
             UUID visitDepartmentProductId,
+            UUID parentVisitDepartmentId,
             java.math.BigDecimal quantity,
             java.math.BigDecimal unitPrice,
             UUID patientInsuranceId,

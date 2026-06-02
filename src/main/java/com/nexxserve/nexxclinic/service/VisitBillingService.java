@@ -8,6 +8,7 @@ import com.nexxserve.nexxclinic.entity.DepartmentInsuranceBilling;
 import com.nexxserve.nexxclinic.entity.Visit;
 import com.nexxserve.nexxclinic.entity.VisitBilling;
 import com.nexxserve.nexxclinic.entity.VisitBillingItem;
+import com.nexxserve.nexxclinic.entity.VisitBillingPayment;
 import com.nexxserve.nexxclinic.entity.VisitDepartment;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentBilling;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
@@ -16,6 +17,7 @@ import com.nexxserve.nexxclinic.entity.Worker;
 import com.nexxserve.nexxclinic.graphql.input.BillVisitInput;
 import com.nexxserve.nexxclinic.graphql.input.RecordVisitBillingPaymentInput;
 import com.nexxserve.nexxclinic.model.ApiResponse;
+import com.nexxserve.nexxclinic.model.PaymentMethod;
 import com.nexxserve.nexxclinic.model.VisitBillingStatus;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
 import com.nexxserve.nexxclinic.model.VisitStatus;
@@ -120,6 +122,7 @@ public class VisitBillingService {
                 .collect(Collectors.toMap(VisitDepartment::getId, d -> d));
 
         Map<UUID, VisitDepartment> rootDepartments = new LinkedHashMap<>();
+        Map<UUID, List<BillVisitInput.BillingPaymentInput>> rootPaymentsByDepartment = new HashMap<>();
         Map<UUID, BigDecimal> remainingPaidByDepartment = new HashMap<>();
 
         for (BillVisitInput.BillVisitDepartmentInput departmentInput : input.departments()) {
@@ -145,6 +148,7 @@ public class VisitBillingService {
             }
 
             rootDepartments.put(rootVisitDepartment.getId(), rootVisitDepartment);
+            rootPaymentsByDepartment.put(rootVisitDepartment.getId(), departmentInput.payments());
 
             BigDecimal totalPaid = ZERO;
             if (departmentInput.payments() != null) {
@@ -202,6 +206,11 @@ public class VisitBillingService {
                 VisitDepartmentProduct item = allProductsById.get(productInput.visitDepartmentProductId());
                 if (item == null || !requiresBilling(item)) {
                     return ApiResponse.error("Invalid billing selection. Ensure product ids exist and are billable.", "INVALID_BILLING_SELECTION");
+                }
+
+                if (productInput.parentVisitDepartmentId() != null
+                        && !item.getVisitDepartment().getId().equals(productInput.parentVisitDepartmentId())) {
+                    return ApiResponse.error("Selected product does not belong to the provided parent visit department.", "INVALID_BILLING_SELECTION");
                 }
 
                 if (!isProductUnderRootDepartment(item, rootVisitDepartmentId)) {
@@ -282,6 +291,18 @@ public class VisitBillingService {
             insuranceBilling.setPaidAmount(ZERO);
             insuranceBilling.setOutstandingAmount(ZERO);
             departmentBilling.getInsuranceBillings().add(insuranceBilling);
+
+            List<BillVisitInput.BillingPaymentInput> payments = rootPaymentsByDepartment.get(rootVisitDepartment.getId());
+            if (payments != null) {
+                for (BillVisitInput.BillingPaymentInput payment : payments) {
+                    VisitBillingPayment billingPayment = new VisitBillingPayment();
+                    billingPayment.setVisitDepartmentBilling(departmentBilling);
+                    billingPayment.setAmount(toMoney(payment.amount()));
+                    billingPayment.setPaymentMethod(payment.paymentMethod());
+                    billingPayment.setReference(payment.reference());
+                    departmentBilling.getPayments().add(billingPayment);
+                }
+            }
 
             BigDecimal total = ZERO;
             BigDecimal insuranceCovered = ZERO;
@@ -376,8 +397,8 @@ public class VisitBillingService {
 
     @Transactional
     public ApiResponse recordVisitBillingPayment(RecordVisitBillingPaymentInput input, AuthenticatedUser authUser) {
-        if (input == null || input.departmentInsuranceBillingId() == null || input.amount() == null) {
-            return ApiResponse.error("departmentInsuranceBillingId and amount are required.", "VALIDATION_ERROR");
+        if (input == null || input.departmentInsuranceBillingId() == null || input.amount() == null || input.paymentMethod() == null) {
+            return ApiResponse.error("departmentInsuranceBillingId, amount and paymentMethod are required.", "VALIDATION_ERROR");
         }
 
         if (input.amount().compareTo(BigDecimal.ZERO) <= 0) {
@@ -404,9 +425,16 @@ public class VisitBillingService {
         insuranceBilling.setPaidAmount(nextPaid);
         insuranceBilling.setOutstandingAmount(toMoney(insuranceBilling.getPatientPayableAmount().subtract(nextPaid)));
         insuranceBilling.setStatus(resolveBillingStatus(nextPaid, insuranceBilling.getPatientPayableAmount()));
-        departmentInsuranceBillingRepository.save(insuranceBilling);
 
         VisitDepartmentBilling departmentBilling = insuranceBilling.getVisitDepartmentBilling();
+        VisitBillingPayment billingPayment = new VisitBillingPayment();
+        billingPayment.setVisitDepartmentBilling(departmentBilling);
+        billingPayment.setAmount(toMoney(input.amount()));
+        billingPayment.setPaymentMethod(input.paymentMethod());
+        billingPayment.setReference(input.reference());
+        departmentBilling.getPayments().add(billingPayment);
+
+        departmentInsuranceBillingRepository.save(insuranceBilling);
         BigDecimal totalAmount = ZERO;
         BigDecimal insuranceCoveredAmount = ZERO;
         BigDecimal patientPayableAmount = ZERO;
@@ -676,6 +704,12 @@ public class VisitBillingService {
         data.put("paidAmount", billing.getPaidAmount());
         data.put("outstandingAmount", billing.getOutstandingAmount());
         data.put(
+                "payments",
+                billing.getPayments().stream()
+                        .map(this::visitBillingPaymentToMap)
+                        .toList()
+        );
+        data.put(
                 "insuranceBillings",
                 billing.getInsuranceBillings().stream()
                         .map(this::departmentInsuranceBillingToMap)
@@ -756,6 +790,17 @@ public class VisitBillingService {
         data.put("patientPayableAmount", item.getPatientPayableAmount());
         data.put("createdAt", item.getCreatedAt());
         data.put("updatedAt", item.getUpdatedAt());
+        return data;
+    }
+
+    private Map<String, Object> visitBillingPaymentToMap(VisitBillingPayment payment) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", payment.getId());
+        data.put("amount", payment.getAmount());
+        data.put("paymentMethod", payment.getPaymentMethod());
+        data.put("reference", payment.getReference());
+        data.put("createdAt", payment.getCreatedAt());
+        data.put("updatedAt", payment.getUpdatedAt());
         return data;
     }
 

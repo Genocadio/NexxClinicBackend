@@ -16,6 +16,8 @@ public record AddChildVisitDepartmentInput(
         @Valid
         List<AddChildVisitDepartmentProductInput> products,
 
-        UUID processorId
+        UUID processorId,
+
+        com.nexxserve.nexxclinic.model.EncounterType encounterType
 ) {
 }

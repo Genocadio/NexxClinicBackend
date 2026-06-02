@@ -1,5 +1,6 @@
 package com.nexxserve.nexxclinic.entity;
 
+import com.nexxserve.nexxclinic.entity.VisitBillingPayment;
 import com.nexxserve.nexxclinic.model.VisitBillingStatus;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -38,7 +39,7 @@ public class VisitDepartmentBilling {
     private VisitDepartment visitDepartment;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 16)
     private VisitBillingStatus status;
 
     @Column(nullable = false, precision = 19, scale = 2)
@@ -58,6 +59,9 @@ public class VisitDepartmentBilling {
 
     @OneToMany(mappedBy = "visitDepartmentBilling", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<DepartmentInsuranceBilling> insuranceBillings = new ArrayList<>();
+
+    @OneToMany(mappedBy = "visitDepartmentBilling", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<VisitBillingPayment> payments = new ArrayList<>();
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -191,6 +195,14 @@ public class VisitDepartmentBilling {
 
     public void setInsuranceBillings(List<DepartmentInsuranceBilling> insuranceBillings) {
         this.insuranceBillings = insuranceBillings;
+    }
+
+    public List<VisitBillingPayment> getPayments() {
+        return payments;
+    }
+
+    public void setPayments(List<VisitBillingPayment> payments) {
+        this.payments = payments;
     }
 
     public LocalDateTime getCreatedAt() {

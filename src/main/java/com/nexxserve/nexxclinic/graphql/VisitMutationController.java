@@ -57,9 +57,20 @@ public class VisitMutationController {
     public ApiResponse addVisitDepartment(
             @Argument UUID visitId,
             @Argument UUID departmentId,
+            @Argument com.nexxserve.nexxclinic.model.EncounterType encounterType,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.addVisitDepartment(visitId, departmentId, authUser);
+        return visitService.addVisitDepartment(visitId, departmentId, encounterType, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
+    public ApiResponse updateVisitDepartmentEncounterType(
+            @Argument UUID visitDepartmentId,
+            @Argument com.nexxserve.nexxclinic.model.EncounterType encounterType,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.updateVisitDepartmentEncounterType(visitDepartmentId, encounterType, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})

@@ -454,6 +454,7 @@ class VisitServiceTest {
                 visitDepartment.getId(),
                 childDepartment.getId(),
                 java.util.List.of(new AddChildVisitDepartmentProductInput(product.getId(), 1.0)),
+                null,
                 null
             ),
             new AuthenticatedUser(processorOne.getId(), processorOne.getUsername(), Set.of(), null, null)
@@ -500,6 +501,7 @@ class VisitServiceTest {
                 visitDepartment.getId(),
                 childDepartment.getId(),
                 java.util.List.of(new AddChildVisitDepartmentProductInput(product.getId(), 1.0)),
+                null,
                 null
             ),
             new AuthenticatedUser(processorOne.getId(), processorOne.getUsername(), Set.of(), null, null)
@@ -517,7 +519,8 @@ class VisitServiceTest {
                 visitDepartment.getId(),
                 childDepartment.getId(),
                 java.util.List.of(new AddChildVisitDepartmentProductInput(product.getId(), 1.0)),
-                processorTwo.getId()
+                processorTwo.getId(),
+                null
             ),
             new AuthenticatedUser(processorOne.getId(), processorOne.getUsername(), Set.of(), null, null)
         );

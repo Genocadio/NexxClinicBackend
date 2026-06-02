@@ -429,7 +429,7 @@ public class VisitService {
     }
 
     @Transactional
-    public ApiResponse addVisitDepartment(UUID visitId, UUID departmentId, AuthenticatedUser authUser) {
+    public ApiResponse addVisitDepartment(UUID visitId, UUID departmentId, com.nexxserve.nexxclinic.model.EncounterType encounterType, AuthenticatedUser authUser) {
         if (visitId == null || departmentId == null) {
             return ApiResponse.error("visitId and departmentId are required.", "VALIDATION_ERROR");
         }
@@ -460,6 +460,9 @@ public class VisitService {
         VisitDepartment visitDepartment = new VisitDepartment();
         visitDepartment.setVisit(visit);
         visitDepartment.setDepartment(departmentOptional.get());
+        if (encounterType != null) {
+            visitDepartment.setEncounterType(encounterType);
+        }
         visitDepartment.setStatus(VisitDepartmentStatus.PENDING);
         visitDepartmentRepository.save(visitDepartment);
 
@@ -553,6 +556,9 @@ public class VisitService {
         child.setVisit(visit);
         child.setDepartment(childDepartment);
         child.setParentVisitDepartment(parent);
+        if (input.encounterType() != null) {
+            child.setEncounterType(input.encounterType());
+        }
         child.setStatus(VisitDepartmentStatus.PENDING);
 
         VisitDepartment savedChild = visitDepartmentRepository.save(child);
@@ -1045,6 +1051,30 @@ public class VisitService {
     }
 
     @Transactional
+    public ApiResponse updateVisitDepartmentEncounterType(UUID visitDepartmentId, com.nexxserve.nexxclinic.model.EncounterType encounterType, AuthenticatedUser authUser) {
+        if (visitDepartmentId == null || encounterType == null) {
+            return ApiResponse.error("visitDepartmentId and encounterType are required.", "VALIDATION_ERROR");
+        }
+
+        Optional<VisitDepartment> departmentOptional = visitDepartmentRepository.findById(visitDepartmentId);
+        if (departmentOptional.isEmpty()) {
+            return ApiResponse.error("Visit department not found.", "NOT_FOUND");
+        }
+
+        VisitDepartment department = departmentOptional.get();
+        if (department.getStatus() == VisitDepartmentStatus.COMPLETED) {
+            return ApiResponse.error("Cannot modify encounter type on a completed department.", "DEPARTMENT_IS_COMPLETED");
+        }
+        if (department.getStatus() == VisitDepartmentStatus.CANCELLED) {
+            return ApiResponse.error("Cannot modify encounter type on a cancelled department.", "DEPARTMENT_IS_CANCELLED");
+        }
+
+        department.setEncounterType(encounterType);
+        VisitDepartment saved = visitDepartmentRepository.save(department);
+        return ApiResponse.success("Visit department encounter type updated.", visitDepartmentToMap(saved));
+    }
+
+    @Transactional
     public ApiResponse removeVisitDepartmentProduct(UUID visitDepartmentProductId) {
         if (visitDepartmentProductId == null) {
             return ApiResponse.error("visitDepartmentProductId is required.", "VALIDATION_ERROR");
@@ -1094,6 +1124,9 @@ public class VisitService {
             VisitDepartment visitDepartment = new VisitDepartment();
             visitDepartment.setVisit(visit);
             visitDepartment.setDepartment(departmentOptional.get());
+            if (departmentInput.encounterType() != null) {
+                visitDepartment.setEncounterType(departmentInput.encounterType());
+            }
             visitDepartment.setStatus(VisitDepartmentStatus.PENDING);
             VisitDepartment savedVisitDepartment = visitDepartmentRepository.save(visitDepartment);
 
@@ -1292,6 +1325,7 @@ public class VisitService {
             circular.put("department", departmentToMap(visitDepartment.getDepartment()));
             circular.put("status", visitDepartment.getStatus());
             circular.put("completedAt", visitDepartment.getCompletedAt());
+            circular.put("encounterType", visitDepartment.getEncounterType());
             circular.put("processors", visitDepartment.getProcessors() == null || visitDepartment.getProcessors().isEmpty() ? null : visitDepartment.getProcessors().stream().map(this::workerToMap).toList());
             circular.put("products", List.of());
             circular.put("diagnostics", List.of());
@@ -1308,6 +1342,7 @@ public class VisitService {
         data.put("id", visitDepartment.getId());
         data.put("department", departmentToMap(visitDepartment.getDepartment()));
         data.put("status", visitDepartment.getStatus());
+        data.put("encounterType", visitDepartment.getEncounterType());
         data.put("completedAt", visitDepartment.getCompletedAt());
         data.put(
             "processors",

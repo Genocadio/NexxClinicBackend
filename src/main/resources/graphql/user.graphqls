@@ -121,6 +121,12 @@ enum VisitDepartmentStatus {
   COMPLETED
 }
 
+enum EncounterType {
+  OUTPATIENT
+  INPATIENT_OBSERVATION
+  INPATIENT_ADMISSION
+}
+
 enum VisitBillingStatus {
   UNPAID
   PARTIALLY_PAID
@@ -448,6 +454,7 @@ type VisitDepartment {
   id: ID!
   department: Department!
   status: VisitDepartmentStatus!
+  encounterType: EncounterType!
   completedAt: String
   processors: [Worker!]
   childVisitDepartments: [VisitDepartment!]!
@@ -569,7 +576,17 @@ type VisitDepartmentBilling {
   patientPayableAmount: Float!
   paidAmount: Float!
   outstandingAmount: Float!
+  payments: [VisitBillingPayment!]!
   insuranceBillings: [DepartmentInsuranceBilling!]!
+  createdAt: String!
+  updatedAt: String!
+}
+
+type VisitBillingPayment {
+  id: ID!
+  amount: Float!
+  paymentMethod: PaymentMethod!
+  reference: String
   createdAt: String!
   updatedAt: String!
 }
@@ -1041,6 +1058,7 @@ input ChangeVisitDateInput {
 
 input CreateVisitDepartmentInput {
   departmentId: ID!
+  encounterType: EncounterType
   products: [CreateVisitDepartmentProductItemInput!]
 }
 
@@ -1080,6 +1098,7 @@ input AddChildVisitDepartmentInput {
   departmentId: ID!
   products: [AddChildVisitDepartmentProductInput!]!
   processorId: ID
+  encounterType: EncounterType
 }
 
 input UpdateVisitDepartmentProductStatusInput {
@@ -1099,6 +1118,7 @@ input UpdateVisitDepartmentProductQuantityInput {
 
 input BillVisitDepartmentProductInput {
   visitDepartmentProductId: ID!
+  parentVisitDepartmentId: ID
   patientInsuranceId: ID
   quantity: Float
   unitPrice: Float
@@ -1125,6 +1145,8 @@ input BillVisitInput {
 input RecordVisitBillingPaymentInput {
   departmentInsuranceBillingId: ID!
   amount: Float!
+  paymentMethod: PaymentMethod!
+  reference: String
 }
 
 enum PaymentMethod {
@@ -1303,7 +1325,7 @@ type Mutation {
   updateDepartment(departmentId: ID!, input: UpdateDepartmentInput!): DepartmentResponse!
   createVisit(input: CreateVisitInput!): VisitResponse!
   changeVisitDate(input: ChangeVisitDateInput!): VisitResponse!
-  addVisitDepartment(visitId: ID!, departmentId: ID!): VisitResponse!
+  addVisitDepartment(visitId: ID!, departmentId: ID!, encounterType: EncounterType): VisitResponse!
   """
   Add a child visit department with products. Validations occur before creation:
   - If any product validation fails, the child department is NOT created
@@ -1321,6 +1343,7 @@ type Mutation {
   updateVisitDepartmentProductStatus(input: UpdateVisitDepartmentProductStatusInput!): VisitDepartmentResponse!
   updateVisitDepartmentStatus(input: UpdateVisitDepartmentStatusInput!): VisitDepartmentResponse!
   updateVisitDepartmentProductQuantity(input: UpdateVisitDepartmentProductQuantityInput!): VisitDepartmentResponse!
+  updateVisitDepartmentEncounterType(visitDepartmentId: ID!, encounterType: EncounterType!): VisitDepartmentResponse!
   completeConsultationVisit(input: ConsultationAnswersInput!, final: Boolean!): VisitResponse!
   completeVisit(visitId: ID!): VisitResponse!
   removeVisitDepartmentProduct(visitDepartmentProductId: ID!): VisitDepartmentResponse!

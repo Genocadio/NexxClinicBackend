@@ -38,7 +38,7 @@ public class DepartmentInsuranceBilling {
     private PatientInsurance patientInsurance;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 16)
     private VisitBillingStatus status;
 
     @Column(nullable = false, precision = 19, scale = 2)
