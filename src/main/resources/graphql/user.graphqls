@@ -605,6 +605,24 @@ type VisitBillingResponse implements ApiResponse {
     data: VisitBilling
 }
 
+type ClinicProfile {
+  id: ID!
+  name: String
+  address: String
+  contacts: JSON
+  tinNumber: String
+  logoUrl: String
+  metadata: JSON
+  createdAt: String!
+  updatedAt: String!
+}
+
+type ClinicProfileResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+    data: ClinicProfile
+}
+
 type Invoice {
   invoiceUrl: String!
 }
@@ -1270,6 +1288,15 @@ input ConsultationAnswersInput {
   answers: String
 }
 
+input UpdateClinicProfileInput {
+  name: String
+  address: String
+  logoUrl: String
+  tinNumber: String
+  contacts: JSON
+  metadata: JSON
+}
+
 type Query {
   me: WorkerResponse!
   listUsers: WorkerListResponse!
@@ -1290,6 +1317,7 @@ type Query {
   getPatientHistory(patientId: ID!, input: SearchPatientHistoryInput): PaginatedVisitResponse!
   visitBilling(visitId: ID!): VisitBillingResponse!
   getInvoice(departmentInsuranceBillingId: ID!): InvoiceResponse!
+  clinicProfile: ClinicProfileResponse!
 }
 
 type Mutation {
@@ -1351,4 +1379,6 @@ type Mutation {
   recordVisitBillingPayment(input: RecordVisitBillingPaymentInput!): VisitBillingResponse!
   generateInvoice(departmentInsuranceBillingId: ID!): InvoiceResponse!
   cancelVisit(visitId: ID!): VisitResponse!
+  updateClinicProfile(input: UpdateClinicProfileInput!): ClinicProfileResponse!
+  deleteClinicProfile: BooleanResponse!
 }
