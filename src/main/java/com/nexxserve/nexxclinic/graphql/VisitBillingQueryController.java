@@ -23,27 +23,18 @@ public class VisitBillingQueryController {
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
     @QueryMapping
     public ApiResponse visitBilling(
-            @Argument UUID visitBillingId,
+            @Argument("visitId") UUID visitId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitBillingService.visitBilling(visitBillingId);
-    }
-
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
-    @QueryMapping
-    public ApiResponse visitBillings(
-            @Argument UUID visitId,
-            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
-    ) {
-        return visitBillingService.visitBillings(visitId);
+        return visitBillingService.visitBilling(visitId);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
     @QueryMapping
     public ApiResponse getInvoice(
-            @Argument UUID billId,
+            @Argument("departmentInsuranceBillingId") UUID departmentInsuranceBillingId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitBillingService.getInvoice(billId);
+        return visitBillingService.getInvoice(departmentInsuranceBillingId);
     }
 }

@@ -9,13 +9,23 @@ import org.springframework.data.repository.query.Param;
 
 public interface VisitBillingItemRepository extends JpaRepository<VisitBillingItem, UUID> {
 
-    List<VisitBillingItem> findByVisitBillingId(UUID visitBillingId);
+    List<VisitBillingItem> findByDepartmentInsuranceBillingId(UUID departmentInsuranceBillingId);
+
+    List<VisitBillingItem> findByDepartmentInsuranceBillingVisitDepartmentBillingVisitBillingId(UUID visitBillingId);
 
     @Query("""
             SELECT i FROM VisitBillingItem i
             JOIN FETCH i.visitDepartmentProduct vdp
             JOIN FETCH vdp.product
-            WHERE i.visitBilling.id = :billingId
+            WHERE i.departmentInsuranceBilling.id = :billingId
+            """)
+    List<VisitBillingItem> findByDepartmentInsuranceBillingIdWithProduct(@Param("billingId") UUID billingId);
+
+    @Query("""
+            SELECT i FROM VisitBillingItem i
+            JOIN FETCH i.visitDepartmentProduct vdp
+            JOIN FETCH vdp.product
+            WHERE i.departmentInsuranceBilling.visitDepartmentBilling.visitBilling.id = :billingId
             """)
     List<VisitBillingItem> findByVisitBillingIdWithProduct(@Param("billingId") UUID billingId);
 }

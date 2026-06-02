@@ -44,9 +44,9 @@ public class VisitBillingMutationController {
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.CLINICIAN, RoleName.FINANCE})
     @MutationMapping
     public ApiResponse generateInvoice(
-            @Argument UUID billId,
+            @Argument("departmentInsuranceBillingId") UUID departmentInsuranceBillingId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitBillingService.generateInvoice(billId, authUser);
+        return visitBillingService.generateInvoice(departmentInsuranceBillingId, authUser);
     }
 }

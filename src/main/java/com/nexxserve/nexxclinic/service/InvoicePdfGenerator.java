@@ -1,6 +1,6 @@
 package com.nexxserve.nexxclinic.service;
 
-import com.nexxserve.nexxclinic.entity.VisitBilling;
+import com.nexxserve.nexxclinic.entity.DepartmentInsuranceBilling;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -24,7 +24,7 @@ public final class InvoicePdfGenerator {
         // utility class
     }
 
-    public static void createInvoicePdf(Path invoiceFile, VisitBilling billing, List<Map<String, Object>> items)
+    public static void createInvoicePdf(Path invoiceFile, DepartmentInsuranceBilling billing, List<Map<String, Object>> items)
             throws IOException {
         try (PDDocument document = new PDDocument()) {
             PDType0Font regular = loadFont(document, FONT_REGULAR);
@@ -42,11 +42,11 @@ public final class InvoicePdfGenerator {
                 y -= leading;
 
                 y = writeLine(content, regular, 12, margin, y, "Invoice ID: " + billing.getId());
-                y = writeLine(content, regular, 12, margin, y, "Visit ID: " + billing.getVisit().getId());
+                y = writeLine(content, regular, 12, margin, y, "Visit ID: " + billing.getVisitDepartmentBilling().getVisitBilling().getVisit().getId());
 
-                String billingDate = billing.getBillingDate() == null
+                String billingDate = billing.getVisitDepartmentBilling().getVisitBilling().getCreatedAt() == null
                         ? ""
-                        : BILLING_DATE_FORMAT.format(billing.getBillingDate());
+                        : BILLING_DATE_FORMAT.format(billing.getVisitDepartmentBilling().getVisitBilling().getCreatedAt());
                 y = writeLine(content, regular, 12, margin, y, "Billing Date: " + billingDate);
                 y = writeLine(content, regular, 12, margin, y, "Patient: " + formatPatientName(billing));
 
@@ -109,11 +109,14 @@ public final class InvoicePdfGenerator {
         return y - 16;
     }
 
-    private static String formatPatientName(VisitBilling billing) {
-        if (billing.getVisit() == null || billing.getVisit().getPatient() == null) {
+    private static String formatPatientName(DepartmentInsuranceBilling billing) {
+        if (billing.getVisitDepartmentBilling() == null
+                || billing.getVisitDepartmentBilling().getVisitBilling() == null
+                || billing.getVisitDepartmentBilling().getVisitBilling().getVisit() == null
+                || billing.getVisitDepartmentBilling().getVisitBilling().getVisit().getPatient() == null) {
             return "Unknown";
         }
-        var patient = billing.getVisit().getPatient();
+        var patient = billing.getVisitDepartmentBilling().getVisitBilling().getVisit().getPatient();
         String lastName = patient.getLastName() == null ? "" : " " + patient.getLastName();
         return patient.getFirstName() + lastName;
     }

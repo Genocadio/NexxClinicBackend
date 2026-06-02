@@ -539,10 +539,37 @@ type VisitBillingItem {
   productName: String!
   unitPriceSnapshot: Float!
   quantitySnapshot: Float!
-  lineTotal: Float!
   insuranceCoveredAmount: Float!
   patientPayableAmount: Float!
-  appliedPatientInsuranceId: ID
+  createdAt: String!
+  updatedAt: String!
+}
+
+type DepartmentInsuranceBilling {
+  id: ID!
+  patientInsurance: PatientInsurance
+  status: VisitBillingStatus!
+  totalAmount: Float!
+  insuranceCoveredAmount: Float!
+  patientPayableAmount: Float!
+  paidAmount: Float!
+  outstandingAmount: Float!
+  invoiceUrl: String
+  items: [VisitBillingItem!]!
+  createdAt: String!
+  updatedAt: String!
+}
+
+type VisitDepartmentBilling {
+  id: ID!
+  visitDepartment: VisitDepartment!
+  status: VisitBillingStatus!
+  totalAmount: Float!
+  insuranceCoveredAmount: Float!
+  patientPayableAmount: Float!
+  paidAmount: Float!
+  outstandingAmount: Float!
+  insuranceBillings: [DepartmentInsuranceBilling!]!
   createdAt: String!
   updatedAt: String!
 }
@@ -550,16 +577,9 @@ type VisitBillingItem {
 type VisitBilling {
   id: ID!
   visitId: ID!
-  status: VisitBillingStatus!
-  billingDate: String!
-  totalAmount: Float!
-  insuranceCoveredAmount: Float!
-  patientPayableAmount: Float!
-  paidAmount: Float!
-  outstandingAmount: Float!
-  fullyBilledVisit: Boolean!
-  billedBy: Worker
-  items: [VisitBillingItem!]!
+  departments: [VisitDepartmentBilling!]!
+  createdAt: String!
+  updatedAt: String!
 }
 
 type VisitBillingResponse implements ApiResponse {
@@ -576,12 +596,6 @@ type InvoiceResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
     data: Invoice
-}
-
-type VisitBillingListResponse implements ApiResponse {
-  status: ResponseStatus!
-  message: String
-    data: [VisitBilling!]
 }
 
 type PaginatedVisitResponse implements ApiResponse {
@@ -1083,7 +1097,7 @@ input UpdateVisitDepartmentProductQuantityInput {
   quantity: Float!
 }
 
-input BillVisitItemInput {
+input BillVisitDepartmentProductInput {
   visitDepartmentProductId: ID!
   patientInsuranceId: ID
   quantity: Float
@@ -1091,16 +1105,35 @@ input BillVisitItemInput {
   isExempted: Boolean
 }
 
+input BillingPaymentInput {
+  amount: Float!
+  paymentMethod: PaymentMethod!
+  reference: String
+}
+
+input BillVisitDepartmentInput {
+  visitDepartmentId: ID!
+  products: [BillVisitDepartmentProductInput!]!
+  payments: [BillingPaymentInput!]
+}
+
 input BillVisitInput {
   visitId: ID!
-  billAllProducts: Boolean
-  items: [BillVisitItemInput!]
-  paidAmount: Float
+  departments: [BillVisitDepartmentInput!]!
 }
 
 input RecordVisitBillingPaymentInput {
-  visitBillingId: ID!
+  departmentInsuranceBillingId: ID!
   amount: Float!
+}
+
+enum PaymentMethod {
+  CASH
+  MOBILE_MONEY
+  CARD
+  BANK_TRANSFER
+  CHEQUE
+  MIXED
 }
 
 input SearchVisitsInput {
@@ -1233,9 +1266,8 @@ type Query {
   visit(visitId: ID!): VisitResponse!
   visits(input: SearchVisitsInput): PaginatedVisitResponse!
   getPatientHistory(patientId: ID!, input: SearchPatientHistoryInput): PaginatedVisitResponse!
-  visitBilling(visitBillingId: ID!): VisitBillingResponse!
-  visitBillings(visitId: ID!): VisitBillingListResponse!
-  getInvoice(billId: ID!): InvoiceResponse!
+  visitBilling(visitId: ID!): VisitBillingResponse!
+  getInvoice(departmentInsuranceBillingId: ID!): InvoiceResponse!
 }
 
 type Mutation {
@@ -1294,6 +1326,6 @@ type Mutation {
   removeVisitDepartmentProduct(visitDepartmentProductId: ID!): VisitDepartmentResponse!
   billVisit(input: BillVisitInput!): VisitBillingResponse!
   recordVisitBillingPayment(input: RecordVisitBillingPaymentInput!): VisitBillingResponse!
-  generateInvoice(billId: ID!): InvoiceResponse!
+  generateInvoice(departmentInsuranceBillingId: ID!): InvoiceResponse!
   cancelVisit(visitId: ID!): VisitResponse!
 }

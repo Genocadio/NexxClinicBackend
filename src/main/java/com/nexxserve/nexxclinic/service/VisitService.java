@@ -197,8 +197,6 @@ public class VisitService {
             return ApiResponse.error("Visit date could not be updated.", "UPDATE_FAILED");
         }
 
-        visitBillingRepository.updateBillingDateByVisitId(input.visitId(), input.visitDate());
-
         Visit updatedVisit = visitRepository.findById(input.visitId()).orElse(visitOptional.get());
         return ApiResponse.success("Visit date changed.", visitToMap(updatedVisit));
     }

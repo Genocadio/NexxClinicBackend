@@ -22,9 +22,9 @@ public class VisitBillingItem {
     @GeneratedValue
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "visit_billing_id", nullable = false)
-    private VisitBilling visitBilling;
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "department_insurance_billing_id", nullable = true)
+    private DepartmentInsuranceBilling departmentInsuranceBilling;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "visit_department_product_id", nullable = false)
@@ -105,12 +105,12 @@ public class VisitBillingItem {
         this.id = id;
     }
 
-    public VisitBilling getVisitBilling() {
-        return visitBilling;
+    public DepartmentInsuranceBilling getDepartmentInsuranceBilling() {
+        return departmentInsuranceBilling;
     }
 
-    public void setVisitBilling(VisitBilling visitBilling) {
-        this.visitBilling = visitBilling;
+    public void setDepartmentInsuranceBilling(DepartmentInsuranceBilling departmentInsuranceBilling) {
+        this.departmentInsuranceBilling = departmentInsuranceBilling;
     }
 
     public VisitDepartmentProduct getVisitDepartmentProduct() {
