@@ -69,7 +69,6 @@ public class ClinicProfileService {
         ClinicProfile saved = clinicProfileRepository.save(profile);
         return ApiResponse.success("Clinic profile updated.", clinicProfileToMap(saved));
     }
-
     @Transactional
     public ApiResponse deleteClinicProfile() {
         Optional<ClinicProfile> profileOptional = clinicProfileRepository.findFirstByOrderByCreatedAtAsc();

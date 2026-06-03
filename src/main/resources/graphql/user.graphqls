@@ -1300,6 +1300,11 @@ input ConsultationAnswersInput {
   answers: String
 }
 
+input KeyValueInput {
+  key: String!
+  value: String
+}
+
 input UpdateClinicProfileInput {
   name: String
   address: String
