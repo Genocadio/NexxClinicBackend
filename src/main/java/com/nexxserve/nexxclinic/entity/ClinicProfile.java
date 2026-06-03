@@ -1,14 +1,21 @@
 package com.nexxserve.nexxclinic.entity;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Lob;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OrderColumn;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -25,9 +32,13 @@ public class ClinicProfile {
     @Column(length = 1024)
     private String address;
 
-    @Lob
-    @Column(nullable = false)
-    private String contacts;
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "clinic_profile_contacts", joinColumns = @JoinColumn(name = "clinic_profile_id"))
+    @OrderColumn(name = "contact_order")
+    private List<ClinicContact> contacts = new ArrayList<>();
+
+    @Column(name = "contacts", insertable = false, updatable = false)
+    private String legacyContactsJson;
 
     @Column(length = 128)
     private String tinNumber;
@@ -50,8 +61,8 @@ public class ClinicProfile {
         LocalDateTime now = LocalDateTime.now();
         this.createdAt = now;
         this.updatedAt = now;
-        if (this.contacts == null || this.contacts.isBlank()) {
-            this.contacts = "{}";
+        if (this.contacts == null) {
+            this.contacts = new ArrayList<>();
         }
         if (this.metadata == null || this.metadata.isBlank()) {
             this.metadata = "{}";
@@ -61,8 +72,8 @@ public class ClinicProfile {
     @PreUpdate
     void onUpdate() {
         this.updatedAt = LocalDateTime.now();
-        if (this.contacts == null || this.contacts.isBlank()) {
-            this.contacts = "{}";
+        if (this.contacts == null) {
+            this.contacts = new ArrayList<>();
         }
         if (this.metadata == null || this.metadata.isBlank()) {
             this.metadata = "{}";
@@ -93,12 +104,16 @@ public class ClinicProfile {
         this.address = address;
     }
 
-    public String getContacts() {
+    public List<ClinicContact> getContacts() {
         return contacts;
     }
 
-    public void setContacts(String contacts) {
+    public void setContacts(List<ClinicContact> contacts) {
         this.contacts = contacts;
+    }
+
+    public String getLegacyContactsJson() {
+        return legacyContactsJson;
     }
 
     public String getTinNumber() {
