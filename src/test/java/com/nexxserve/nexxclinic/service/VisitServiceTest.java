@@ -18,7 +18,7 @@ import com.nexxserve.nexxclinic.graphql.input.CreateVisitDepartmentProductInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentStatusInput;
 import com.nexxserve.nexxclinic.graphql.input.AddChildVisitDepartmentInput;
 import com.nexxserve.nexxclinic.graphql.input.AddChildVisitDepartmentProductInput;
-import com.nexxserve.nexxclinic.model.ApiResponse;
+import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.AccountStatus;
 import com.nexxserve.nexxclinic.model.ResponseStatus;
 import com.nexxserve.nexxclinic.model.ProductType;

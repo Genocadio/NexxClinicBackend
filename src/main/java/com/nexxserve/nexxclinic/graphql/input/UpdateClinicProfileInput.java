@@ -5,11 +5,13 @@ import java.util.List;
 
 public record UpdateClinicProfileInput(
         String name,
+        String username,
         String address,
         String logoUrl,
         String tinNumber,
         @Valid
         List<ClinicContactInput> contacts,
-        Object metadata
+        List<ClinicMetadataDto> metadata
 ) {
 }
+

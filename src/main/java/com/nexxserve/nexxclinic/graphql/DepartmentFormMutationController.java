@@ -3,7 +3,7 @@ package com.nexxserve.nexxclinic.graphql;
 import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
 import com.nexxserve.nexxclinic.graphql.input.ConsultationAnswersInput;
 import com.nexxserve.nexxclinic.graphql.input.FormInput;
-import com.nexxserve.nexxclinic.model.ApiResponse;
+import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.security.HasRole;
 import com.nexxserve.nexxclinic.service.DepartmentFormService;

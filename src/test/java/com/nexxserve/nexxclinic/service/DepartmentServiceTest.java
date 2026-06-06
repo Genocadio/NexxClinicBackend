@@ -2,7 +2,7 @@ package com.nexxserve.nexxclinic.service;
 
 import com.nexxserve.nexxclinic.entity.Department;
 import com.nexxserve.nexxclinic.graphql.input.SearchDepartmentsInput;
-import com.nexxserve.nexxclinic.model.ApiResponse;
+import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.ResponseStatus;
 import com.nexxserve.nexxclinic.repository.DepartmentRepository;
 import org.junit.jupiter.api.Test;

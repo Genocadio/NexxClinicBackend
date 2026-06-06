@@ -1,7 +1,7 @@
 package com.nexxserve.nexxclinic.security;
 
 import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
-import com.nexxserve.nexxclinic.model.ApiResponse;
+import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.RoleName;
 import java.util.Arrays;
 import java.util.Set;

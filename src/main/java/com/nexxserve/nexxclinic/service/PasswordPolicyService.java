@@ -2,7 +2,7 @@ package com.nexxserve.nexxclinic.service;
 
 import com.nexxserve.nexxclinic.entity.PasswordHistoryEntry;
 import com.nexxserve.nexxclinic.entity.Worker;
-import com.nexxserve.nexxclinic.model.ApiResponse;
+import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.repository.PasswordHistoryRepository;
 import java.util.List;
 import java.util.Locale;

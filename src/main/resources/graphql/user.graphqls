@@ -614,11 +614,12 @@ type VisitBillingResponse implements ApiResponse {
 type ClinicProfile {
   id: ID!
   name: String
+  username: String
   address: String
   contacts: [ClinicContact!]!
   tinNumber: String
   logoUrl: String
-  metadata: JSON
+  metadata: [ClinicMetadata!]!
   createdAt: String!
   updatedAt: String!
 }
@@ -1307,11 +1308,21 @@ input KeyValueInput {
 
 input UpdateClinicProfileInput {
   name: String
+  username: String
   address: String
   logoUrl: String
   tinNumber: String
   contacts: [ClinicContactInput!]
-  metadata: JSON
+  metadata: [ClinicMetadataInput!]
+}
+type ClinicMetadata {
+  key: String!
+  value: String!
+}
+
+input ClinicMetadataInput {
+  key: String!
+  value: String!
 }
 
 input ClinicContactInput {

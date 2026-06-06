@@ -11,7 +11,7 @@ import com.nexxserve.nexxclinic.entity.ProductInsuranceCoverage;
 import com.nexxserve.nexxclinic.graphql.input.CreateDepartmentInput;
 import com.nexxserve.nexxclinic.graphql.input.SearchDepartmentsInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdateDepartmentInput;
-import com.nexxserve.nexxclinic.model.ApiResponse;
+import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.DepartmentInsurancePolicyMode;
 import com.nexxserve.nexxclinic.repository.DepartmentDefaultProductRepository;
 import com.nexxserve.nexxclinic.repository.DepartmentInsurancePolicyRepository;

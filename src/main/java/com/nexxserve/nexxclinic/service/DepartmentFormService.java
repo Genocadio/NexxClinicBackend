@@ -19,7 +19,7 @@ import com.nexxserve.nexxclinic.graphql.input.LabRecordConfigInput;
 import com.nexxserve.nexxclinic.graphql.input.LabRecordRowInput;
 import com.nexxserve.nexxclinic.graphql.input.TableConfigInput;
 import com.nexxserve.nexxclinic.model.AnswerStatus;
-import com.nexxserve.nexxclinic.model.ApiResponse;
+import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.FormStatus;
 import com.nexxserve.nexxclinic.model.ResponseStatus;
 import com.nexxserve.nexxclinic.repository.ConsultationAnswerRepository;

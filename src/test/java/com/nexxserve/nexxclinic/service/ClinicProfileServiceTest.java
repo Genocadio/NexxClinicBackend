@@ -1,25 +1,25 @@
 package com.nexxserve.nexxclinic.service;
 
+import com.nexxserve.nexxclinic.dto.out.ClinicProfileDto;
+import com.nexxserve.nexxclinic.dto.out.ClinicContactDto;
+import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.entity.ClinicProfile;
 import com.nexxserve.nexxclinic.graphql.input.ClinicContactInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdateClinicProfileInput;
-import com.nexxserve.nexxclinic.model.ApiResponse;
 import com.nexxserve.nexxclinic.model.ClinicContactType;
 import com.nexxserve.nexxclinic.model.ResponseStatus;
 import com.nexxserve.nexxclinic.repository.ClinicProfileRepository;
-import java.util.List;
-import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
 @Transactional
-@SuppressWarnings("unchecked")
 class ClinicProfileServiceTest {
 
     @Autowired
@@ -30,9 +30,11 @@ class ClinicProfileServiceTest {
 
     @Test
     void updateClinicProfileStoresTypedContactList() {
+
         UpdateClinicProfileInput input = new UpdateClinicProfileInput(
                 "Nexx Clinic",
                 "Plot 12",
+                null,
                 null,
                 null,
                 List.of(
@@ -43,23 +45,43 @@ class ClinicProfileServiceTest {
                 null
         );
 
-        ApiResponse response = clinicProfileService.updateClinicProfile(input);
+        ApiResponse<ClinicProfileDto> response =
+                clinicProfileService.updateClinicProfile(input);
 
+        // ======================
+        // BASIC ASSERTIONS
+        // ======================
         assertEquals(ResponseStatus.SUCCESS, response.status());
         assertNotNull(response.data());
 
-        Map<String, Object> data = (Map<String, Object>) response.data();
-        assertEquals("Nexx Clinic", data.get("name"));
+        ClinicProfileDto data = response.data();
 
-        List<Map<String, Object>> contacts = (List<Map<String, Object>>) data.get("contacts");
-        assertEquals(3, contacts.size());
-        assertEquals("PHONE", contacts.get(0).get("contactType"));
-        assertEquals("+255700000001", contacts.get(0).get("value"));
-        assertEquals("support", contacts.get(0).get("description"));
-        assertEquals("EMAIL", contacts.get(1).get("contactType"));
-        assertEquals("POBOX", contacts.get(2).get("contactType"));
+        assertEquals("Nexx Clinic", data.name());
+        assertEquals(3, data.contacts().size());
 
-        ClinicProfile savedProfile = clinicProfileRepository.findFirstByOrderByCreatedAtAsc().orElseThrow();
+        // ======================
+        // CONTACT ASSERTIONS
+        // ======================
+        ClinicContactDto phone = data.contacts().get(0);
+        ClinicContactDto email = data.contacts().get(1);
+        ClinicContactDto pobox = data.contacts().get(2);
+
+        assertEquals(ClinicContactType.PHONE, phone.contactType());
+        assertEquals("+255700000001", phone.value());
+        assertEquals("support", phone.description());
+
+        assertEquals(ClinicContactType.EMAIL, email.contactType());
+        assertEquals("finance@nexxclinic.com", email.value());
+
+        assertEquals(ClinicContactType.POBOX, pobox.contactType());
+
+        // ======================
+        // DB ASSERTION
+        // ======================
+        ClinicProfile savedProfile =
+                clinicProfileRepository.findFirstByOrderByCreatedAtAsc()
+                        .orElseThrow();
+
         assertEquals(3, savedProfile.getContacts().size());
         assertEquals(ClinicContactType.PHONE, savedProfile.getContacts().get(0).getContactType());
         assertEquals("support", savedProfile.getContacts().get(0).getDescription());

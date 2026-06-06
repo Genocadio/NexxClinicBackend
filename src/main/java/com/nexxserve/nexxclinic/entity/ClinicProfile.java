@@ -29,6 +29,9 @@ public class ClinicProfile {
     @Column(length = 255)
     private String name;
 
+    @Column(length = 255)
+    private String username;
+
     @Column(length = 1024)
     private String address;
 
@@ -37,8 +40,6 @@ public class ClinicProfile {
     @OrderColumn(name = "contact_order")
     private List<ClinicContact> contacts = new ArrayList<>();
 
-    @Column(name = "contacts", insertable = false, updatable = false)
-    private String legacyContactsJson;
 
     @Column(length = 128)
     private String tinNumber;
@@ -46,9 +47,14 @@ public class ClinicProfile {
     @Column(length = 1024)
     private String logoUrl;
 
-    @Lob
-    @Column(nullable = false)
-    private String metadata;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+            name = "clinic_profile_metadata",
+            joinColumns = @JoinColumn(name = "clinic_profile_id")
+    )
+    @OrderColumn(name = "metadata_order")
+    private List<ClinicMetadata> metadata = new ArrayList<>();
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -64,8 +70,8 @@ public class ClinicProfile {
         if (this.contacts == null) {
             this.contacts = new ArrayList<>();
         }
-        if (this.metadata == null || this.metadata.isBlank()) {
-            this.metadata = "{}";
+        if (this.metadata == null) {
+            this.metadata = new ArrayList<>();
         }
     }
 
@@ -75,8 +81,8 @@ public class ClinicProfile {
         if (this.contacts == null) {
             this.contacts = new ArrayList<>();
         }
-        if (this.metadata == null || this.metadata.isBlank()) {
-            this.metadata = "{}";
+        if (this.metadata == null ) {
+            this.metadata = new ArrayList<>();
         }
     }
 
@@ -96,6 +102,13 @@ public class ClinicProfile {
         this.name = name;
     }
 
+    public void  setUsername(String username) {
+        this.username = username;
+    }
+    public String getUsername() {
+        return username;
+    }
+
     public String getAddress() {
         return address;
     }
@@ -112,8 +125,12 @@ public class ClinicProfile {
         this.contacts = contacts;
     }
 
-    public String getLegacyContactsJson() {
-        return legacyContactsJson;
+    public List<ClinicMetadata> getMetadata() {
+        return metadata;
+    }
+
+    public void setMetadata(List<ClinicMetadata> metadata) {
+        this.metadata = metadata;
     }
 
     public String getTinNumber() {
@@ -132,13 +149,6 @@ public class ClinicProfile {
         this.logoUrl = logoUrl;
     }
 
-    public String getMetadata() {
-        return metadata;
-    }
-
-    public void setMetadata(String metadata) {
-        this.metadata = metadata;
-    }
 
     public LocalDateTime getCreatedAt() {
         return createdAt;

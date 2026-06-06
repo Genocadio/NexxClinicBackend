@@ -7,7 +7,7 @@ import com.nexxserve.nexxclinic.graphql.input.CreatePatientInsuranceInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdateInsuranceProviderInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdatePatientInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdatePatientInsuranceInput;
-import com.nexxserve.nexxclinic.model.ApiResponse;
+import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.security.HasRole;
 import com.nexxserve.nexxclinic.service.InsuranceProviderService;

@@ -16,7 +16,7 @@ import com.nexxserve.nexxclinic.graphql.input.RefreshSessionInput;
 import com.nexxserve.nexxclinic.graphql.input.SelfRegisterInput;
 import com.nexxserve.nexxclinic.graphql.input.SetInitialPasswordInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdateMyProfileInput;
-import com.nexxserve.nexxclinic.model.ApiResponse;
+import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.security.HasRole;
 import com.nexxserve.nexxclinic.service.WorkerService;
