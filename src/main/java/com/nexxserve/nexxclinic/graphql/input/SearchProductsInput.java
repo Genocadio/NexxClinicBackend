@@ -4,6 +4,8 @@ import com.nexxserve.nexxclinic.model.ProductType;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
 
+import java.util.UUID;
+
 public record SearchProductsInput(
         @Size(max = 200, message = "name must not exceed 200 characters")
         String name,
@@ -14,6 +16,8 @@ public record SearchProductsInput(
         Integer page,
 
         @Min(value = 1, message = "size must be at least 1")
-        Integer size
+        Integer size,
+
+         UUID insuranceProviderId
 ) {
 }

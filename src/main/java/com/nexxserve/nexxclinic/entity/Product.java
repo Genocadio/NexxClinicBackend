@@ -2,19 +2,11 @@ package com.nexxserve.nexxclinic.entity;
 
 import com.nexxserve.nexxclinic.model.ProductType;
 import com.nexxserve.nexxclinic.model.ProductUnit;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.Id;
-import jakarta.persistence.Index;
-import jakarta.persistence.Lob;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -59,6 +51,9 @@ public class Product {
     @Column(precision = 19, scale = 2)
     private BigDecimal privateRhicPrice;
 
+    @OneToMany(mappedBy = "product", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<ProductInsuranceCoverage> insuranceCoverages;
+
     @Column(precision = 19, scale = 2)
     private BigDecimal clinicPrice;
 
@@ -84,6 +79,16 @@ public class Product {
         if (this.metadata == null || this.metadata.isBlank()) {
             this.metadata = "{}";
         }
+    }
+
+
+    // getter & setter
+    public List<ProductInsuranceCoverage> getInsuranceCoverages() {
+        return insuranceCoverages;
+    }
+
+    public void setInsuranceCoverages(List<ProductInsuranceCoverage> insuranceCoverages) {
+        this.insuranceCoverages = insuranceCoverages;
     }
 
     public UUID getId() {

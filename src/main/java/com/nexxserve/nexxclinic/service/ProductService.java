@@ -114,8 +114,8 @@ public class ProductService {
             }
         }
 
-        Product latest = productRepository.findById(saved.getId()).orElse(saved);
-        return ApiResponse.success("Product created.", productMapper.toDto(latest));
+        Product latest = productRepository.findByIdWithCoverages(saved.getId()).orElse(saved);
+        return ApiResponse.success("Product created.", toFilteredDto(latest, null));
     }
 
     @Transactional
@@ -200,23 +200,21 @@ public class ProductService {
             }
         }
 
-        Product latest = productRepository.findById(saved.getId()).orElse(saved);
-        return ApiResponse.success("Product updated.", productMapper.toDto(latest));
+        Product latest = productRepository.findByIdWithCoverages(saved.getId()).orElse(saved);
+        return ApiResponse.success("Product updated.", toFilteredDto(latest, null));
     }
 
     @Transactional(readOnly = true)
-    public ApiResponse<ProductDto> product(UUID productId) {
+    public ApiResponse<ProductDto> product(UUID productId, UUID insuranceProviderId) {
         if (productId == null) {
             return ApiResponse.error("productId is required.");
         }
 
-        Optional<Product> productOptional = productRepository.findById(productId);
-        if (productOptional.isEmpty()) {
-            return ApiResponse.error("Product not found.");
-        }
+        Optional<Product> productOptional = productRepository.findByIdWithCoverages(productId);
+        return productOptional.map(product -> ApiResponse.success("Product fetched.", toFilteredDto(product, insuranceProviderId))).orElseGet(() -> ApiResponse.error("Product not found."));
 
-        return ApiResponse.success("Product fetched.", productMapper.toDto(productOptional.get()));
     }
+
 
     @Transactional(readOnly = true)
     public ApiResponse<List<ProductDto>> products(SearchProductsInput input) {
@@ -242,8 +240,15 @@ public class ProductService {
             spec = spec.and((root, queryDef, builder) -> builder.equal(root.get("type"), input.type()));
         }
 
+        UUID insuranceProviderId = input == null ? null : input.insuranceProviderId();
+
         Page<Product> productPage = productRepository.findAll(spec, pageable);
-        List<ProductDto> products = productMapper.toDtoList(productPage.getContent());
+
+        // For each product, reload with coverages fetched (avoids lazy load issues)
+        List<ProductDto> products = productPage.getContent().stream()
+                .map(p -> productRepository.findByIdWithCoverages(p.getId()).orElse(p))
+                .map(product -> toFilteredDto(product, insuranceProviderId))
+                .toList();
 
         return ApiResponse.success(
                 "Products fetched.",
@@ -264,13 +269,37 @@ public class ProductService {
         }
 
         Optional<ProductInsuranceCoverage> coverageOptional = coverageRepository.findById(productInsuranceCoverageId);
-        if (coverageOptional.isEmpty()) {
-            return ApiResponse.error("Product insurance coverage not found.");
-        }
+        return coverageOptional.map(productInsuranceCoverage -> ApiResponse.success("Product insurance coverage fetched.", productMapper.toDto(productInsuranceCoverage))).orElseGet(() -> ApiResponse.error("Product insurance coverage not found."));
 
-        return ApiResponse.success("Product insurance coverage fetched.", productMapper.toDto(coverageOptional.get()));
     }
 
+
+    private ProductDto toFilteredDto(Product product, UUID insuranceProviderId) {
+        List<ProductInsuranceCoverageDto> coverages = product.getInsuranceCoverages() == null
+                ? List.of()
+                : product.getInsuranceCoverages().stream()
+                .filter(c -> insuranceProviderId == null ||
+                             (c.getInsuranceProvider() != null &&
+                                     insuranceProviderId.equals(c.getInsuranceProvider().getId())))
+                .map(productMapper::toDto)
+                .toList();
+
+        return new ProductDto(
+                product.getId(),
+                product.getName(),
+                product.getGenericName(),
+                product.getCode(),
+                product.getDescription(),
+                product.getType(),
+                product.getUnit(),
+                product.getMetadata(),
+                product.getPrivateRhicPrice(),
+                product.getClinicPrice(),
+                coverages,
+                product.getCreatedAt(),
+                product.getUpdatedAt()
+        );
+    }
     @Transactional
     public ApiResponse<ProductInsuranceCoverageDto> createProductInsuranceCoverage(UUID productId, CreateProductInsuranceCoverageInput input) {
         if (productId == null || input == null) {

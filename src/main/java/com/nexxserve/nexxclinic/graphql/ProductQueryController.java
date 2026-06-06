@@ -25,9 +25,10 @@ public class ProductQueryController {
     @QueryMapping
     public ApiResponse product(
             @Argument UUID productId,
+            @Argument UUID insuranceId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return productService.product(productId);
+        return productService.product(productId, insuranceId);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINICIAN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE})
