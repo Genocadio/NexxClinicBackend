@@ -4,10 +4,12 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import com.nexxserve.nexxclinic.model.DepartmentInsurancePolicyMode;
+
 public record DepartmentDto(
         UUID id,
         String name,
-        Object insurancePolicyMode, // Replace with proper Enum if available
+        DepartmentInsurancePolicyMode insurancePolicyMode,
         List<InsuranceProviderDto> insurancePolicies,
         List<ProductDto> defaultProducts,
         boolean nursing,

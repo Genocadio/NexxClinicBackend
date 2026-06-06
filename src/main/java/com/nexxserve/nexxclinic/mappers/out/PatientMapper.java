@@ -19,7 +19,7 @@ public interface PatientMapper {
     @Mapping(source = "patient.id", target = "id")
     @Mapping(source = "patient.createdAt", target = "createdAt")
     @Mapping(source = "patient.updatedAt", target = "updatedAt")
-    @Mapping(source = "insurances", target = "insurances")
+    @Mapping(source = "insurances", target = "patientInsurances")
     // 2. Call your custom calculation method using a Java expression
     @Mapping(target = "age", expression = "java(calculateAge(patient))")
     PatientDto toDto(Patient patient, List<PatientInsurance> insurances);

@@ -2,6 +2,7 @@ package com.nexxserve.nexxclinic.service;
 
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.dto.out.InsuranceProviderDto;
+import com.nexxserve.nexxclinic.dto.out.PaginationDto;
 import com.nexxserve.nexxclinic.entity.InsuranceProvider;
 import com.nexxserve.nexxclinic.graphql.input.CreateInsuranceProviderInput;
 import com.nexxserve.nexxclinic.graphql.input.SearchInsuranceProvidersInput;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
+import java.util.List;
 
 @Service
 public class InsuranceProviderService {
@@ -131,7 +133,7 @@ public class InsuranceProviderService {
     // LIST
     // =========================
     @Transactional(readOnly = true)
-    public ApiResponse<Page<InsuranceProviderDto>> insuranceProviders(SearchInsuranceProvidersInput input) {
+    public ApiResponse<List<InsuranceProviderDto>> insuranceProviders(SearchInsuranceProvidersInput input) {
 
         int page = normalizePage(input == null ? null : input.page());
         int size = normalizeSize(input == null ? null : input.size());
@@ -156,11 +158,19 @@ public class InsuranceProviderService {
             );
         }
 
-        Page<InsuranceProviderDto> pageResult =
-                insuranceProviderRepository.findAll(spec, pageable)
-                        .map(mapper::toDto);
+        Page<InsuranceProvider> pageResult = insuranceProviderRepository.findAll(spec, pageable);
+        List<InsuranceProviderDto> dtoList = pageResult.getContent().stream().map(mapper::toDto).toList();
 
-        return ApiResponse.success("Insurance providers fetched.", pageResult);
+        return ApiResponse.success(
+                "Insurance providers fetched.",
+                dtoList,
+                new PaginationDto(
+                        pageResult.getTotalElements(),
+                        pageResult.getSize(),
+                        pageResult.getNumber(),
+                        pageResult.getTotalPages()
+                )
+        );
     }
 
     // =========================

@@ -73,22 +73,22 @@ public class DepartmentFormService {
     @Transactional
     public ApiResponse createForm(UUID departmentId, FormInput input) {
         if (departmentId == null || input == null) {
-            return ApiResponse.error("departmentId and input are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("departmentId and input are required.");
         }
 
         Optional<Department> departmentOptional = departmentRepository.findById(departmentId);
         if (departmentOptional.isEmpty()) {
-            return ApiResponse.error("Department not found.", "NOT_FOUND");
+            return ApiResponse.error("Department not found.");
         }
 
         String title = requiredTrim(input.title());
         if (title == null) {
-            return ApiResponse.error("title is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("title is required.");
         }
 
         String serializedFormData = serializeFormData(input);
         if (serializedFormData == null) {
-            return ApiResponse.error("Form definition is invalid.", "VALIDATION_ERROR");
+            return ApiResponse.error("Form definition is invalid.");
         }
 
         DepartmentForm form = new DepartmentForm();
@@ -116,23 +116,23 @@ public class DepartmentFormService {
     @Transactional
     public ApiResponse updateForm(UUID departmentId, UUID formId, FormInput input) {
         if (departmentId == null || formId == null || input == null) {
-            return ApiResponse.error("departmentId, formId and input are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("departmentId, formId and input are required.");
         }
 
         Optional<DepartmentForm> formOptional = departmentFormRepository.findByIdAndDepartmentId(formId, departmentId);
         if (formOptional.isEmpty()) {
-            return ApiResponse.error("Form not found.", "NOT_FOUND");
+            return ApiResponse.error("Form not found.");
         }
 
         DepartmentForm form = formOptional.get();
         String title = requiredTrim(input.title());
         if (title == null) {
-            return ApiResponse.error("title is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("title is required.");
         }
 
         String serializedFormData = serializeFormData(input);
         if (serializedFormData == null) {
-            return ApiResponse.error("Form definition is invalid.", "VALIDATION_ERROR");
+            return ApiResponse.error("Form definition is invalid.");
         }
 
         form.setTitle(title);
@@ -175,12 +175,12 @@ public class DepartmentFormService {
     @Transactional
     public ApiResponse finalizeForm(UUID departmentId, UUID formId) {
         if (departmentId == null || formId == null) {
-            return ApiResponse.error("departmentId and formId are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("departmentId and formId are required.");
         }
 
         Optional<DepartmentForm> formOptional = departmentFormRepository.findByIdAndDepartmentId(formId, departmentId);
         if (formOptional.isEmpty()) {
-            return ApiResponse.error("Form not found.", "NOT_FOUND");
+            return ApiResponse.error("Form not found.");
         }
 
         DepartmentForm form = formOptional.get();
@@ -209,11 +209,11 @@ public class DepartmentFormService {
     @Transactional(readOnly = true)
     public ApiResponse getForms(UUID departmentId) {
         if (departmentId == null) {
-            return ApiResponse.error("departmentId is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("departmentId is required.");
         }
 
         if (!departmentRepository.existsById(departmentId)) {
-            return ApiResponse.error("Department not found.", "NOT_FOUND");
+            return ApiResponse.error("Department not found.");
         }
 
         List<Map<String, Object>> forms = departmentFormRepository.findByDepartmentIdOrderByUpdatedAtDesc(departmentId)
@@ -227,12 +227,12 @@ public class DepartmentFormService {
     @Transactional(readOnly = true)
     public ApiResponse getForm(UUID departmentId, UUID formId) {
         if (departmentId == null || formId == null) {
-            return ApiResponse.error("departmentId and formId are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("departmentId and formId are required.");
         }
 
         Optional<DepartmentForm> formOptional = departmentFormRepository.findByIdAndDepartmentId(formId, departmentId);
         if (formOptional.isEmpty()) {
-            return ApiResponse.error("Form not found.", "NOT_FOUND");
+            return ApiResponse.error("Form not found.");
         }
 
         return ApiResponse.success("Form fetched.", formToMap(formOptional.get()));
@@ -241,16 +241,16 @@ public class DepartmentFormService {
     @Transactional(readOnly = true)
     public ApiResponse getLatestForm(UUID departmentId) {
         if (departmentId == null) {
-            return ApiResponse.error("departmentId is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("departmentId is required.");
         }
 
         if (!departmentRepository.existsById(departmentId)) {
-            return ApiResponse.error("Department not found.", "NOT_FOUND");
+            return ApiResponse.error("Department not found.");
         }
 
         Optional<DepartmentForm> latest = departmentFormRepository.findTopByDepartmentIdOrderByUpdatedAtDesc(departmentId);
         if (latest.isEmpty()) {
-            return ApiResponse.error("No forms found for this department.", "NOT_FOUND");
+            return ApiResponse.error("No forms found for this department.");
         }
 
         return ApiResponse.success("Latest form fetched.", formToMap(latest.get()));
@@ -259,12 +259,12 @@ public class DepartmentFormService {
     @Transactional(readOnly = true)
     public ApiResponse getFormVersionHistory(UUID departmentId, UUID formId) {
         if (departmentId == null || formId == null) {
-            return ApiResponse.error("departmentId and formId are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("departmentId and formId are required.");
         }
 
         Optional<DepartmentForm> formOptional = departmentFormRepository.findByIdAndDepartmentId(formId, departmentId);
         if (formOptional.isEmpty()) {
-            return ApiResponse.error("Form not found.", "NOT_FOUND");
+            return ApiResponse.error("Form not found.");
         }
 
         List<Map<String, Object>> versions = departmentFormVersionRepository.findByFormIdOrderByCreatedAtDesc(formId)
@@ -278,19 +278,19 @@ public class DepartmentFormService {
     @Transactional(readOnly = true)
     public ApiResponse getFormVersion(UUID departmentId, UUID formId, String versionNumber) {
         if (departmentId == null || formId == null || versionNumber == null || versionNumber.isBlank()) {
-            return ApiResponse.error("departmentId, formId and versionNumber are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("departmentId, formId and versionNumber are required.");
         }
 
         Optional<DepartmentForm> formOptional = departmentFormRepository.findByIdAndDepartmentId(formId, departmentId);
         if (formOptional.isEmpty()) {
-            return ApiResponse.error("Form not found.", "NOT_FOUND");
+            return ApiResponse.error("Form not found.");
         }
 
         Optional<DepartmentFormVersion> versionOptional = departmentFormVersionRepository
                 .findByFormIdAndVersionNumber(formId, versionNumber.trim());
 
         if (versionOptional.isEmpty()) {
-            return ApiResponse.error("Form version not found.", "NOT_FOUND");
+            return ApiResponse.error("Form version not found.");
         }
 
         return ApiResponse.success("Form version fetched.", formVersionToMap(versionOptional.get()));
@@ -299,7 +299,7 @@ public class DepartmentFormService {
     @Transactional
     public ApiResponse upsertConsultationAnswers(ConsultationAnswersInput input, AuthenticatedUser authUser) {
         if (input == null) {
-            return ApiResponse.error("input is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("input is required.");
         }
 
         if (input.consultationId() == null
@@ -307,12 +307,12 @@ public class DepartmentFormService {
                 || input.patientId() == null
                 || input.departmentId() == null
                 || input.formId() == null) {
-            return ApiResponse.error("consultationId, visitId, patientId, departmentId and formId are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("consultationId, visitId, patientId, departmentId and formId are required.");
         }
 
         Optional<DepartmentForm> formOptional = departmentFormRepository.findByIdAndDepartmentId(input.formId(), input.departmentId());
         if (formOptional.isEmpty()) {
-            return ApiResponse.error("Form not found for department.", "NOT_FOUND");
+            return ApiResponse.error("Form not found for department.");
         }
 
         DepartmentForm form = formOptional.get();
@@ -324,15 +324,15 @@ public class DepartmentFormService {
 
         Optional<DepartmentFormVersion> versionOptional = departmentFormVersionRepository.findByFormIdAndVersionNumber(form.getId(), targetVersion);
         if (versionOptional.isEmpty()) {
-            return ApiResponse.error("Requested form version does not exist.", "NOT_FOUND");
+            return ApiResponse.error("Requested form version does not exist.");
         }
 
         if (input.status() == AnswerStatus.FINAL && versionOptional.get().getStatus() != FormStatus.FINAL) {
-            return ApiResponse.error("Cannot submit FINAL answers against a non-finalized form version.", "VALIDATION_ERROR");
+            return ApiResponse.error("Cannot submit FINAL answers against a non-finalized form version.");
         }
 
         if (!isValidJson(input.answers())) {
-            return ApiResponse.error("answers must be valid JSON.", "VALIDATION_ERROR");
+            return ApiResponse.error("answers must be valid JSON.");
         }
 
         Optional<ConsultationAnswer> existingAnswerOptional = consultationAnswerRepository
@@ -347,7 +347,7 @@ public class DepartmentFormService {
         String resolvedAnswers = input.answers();
         if (resolvedAnswers == null || resolvedAnswers.isBlank()) {
             if (existingAnswerOptional.isEmpty()) {
-                return ApiResponse.error("answers is required when creating a new consultation answer.", "VALIDATION_ERROR");
+                return ApiResponse.error("answers is required when creating a new consultation answer.");
             }
             resolvedAnswers = existingAnswerOptional.get().getAnswers();
         }

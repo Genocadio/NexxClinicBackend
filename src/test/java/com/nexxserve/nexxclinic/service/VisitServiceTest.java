@@ -1,5 +1,12 @@
 package com.nexxserve.nexxclinic.service;
 
+import com.nexxserve.nexxclinic.dto.out.PaginationDto;
+import com.nexxserve.nexxclinic.dto.out.VisitDepartmentDto;
+import com.nexxserve.nexxclinic.dto.out.VisitDto;
+import com.nexxserve.nexxclinic.dto.out.VisitDepartmentProductDto;
+import com.nexxserve.nexxclinic.dto.out.VisitDepartmentDiagnosisDto;
+import com.nexxserve.nexxclinic.dto.out.VisitDepartmentMedicationDto;
+import com.nexxserve.nexxclinic.dto.out.WorkerDto;
 import com.nexxserve.nexxclinic.entity.Department;
 import com.nexxserve.nexxclinic.entity.InsuranceProvider;
 import com.nexxserve.nexxclinic.entity.Patient;
@@ -44,7 +51,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Map;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -155,14 +162,15 @@ class VisitServiceTest {
                 "ICD-10-Flu"
         );
 
-        ApiResponse response = visitService.addDiagnosisToVisitDepartment(input);
+        ApiResponse<VisitDepartmentDto> response = visitService.addDiagnosisToVisitDepartment(input);
         assertEquals(ResponseStatus.SUCCESS, response.status());
         assertNotNull(response.data());
 
-        Map<String, Object> data = (Map<String, Object>) response.data();
-        assertNotNull(data.get("id"));
-        assertEquals("Flu", data.get("diagnosisName"));
-        assertEquals("ICD-10-Flu", data.get("icd11Code"));
+        VisitDepartmentDto data = response.data();
+        assertNotNull(data.id());
+        assertFalse(data.diagnostics().isEmpty());
+        assertEquals("Flu", data.diagnostics().get(0).diagnosisName());
+        assertEquals("ICD-10-Flu", data.diagnostics().get(0).icd11Code());
     }
 
     @Test
@@ -173,14 +181,15 @@ class VisitServiceTest {
                 "Take 500mg twice a day"
         );
 
-        ApiResponse response = visitService.addMedicationToVisitDepartment(input);
+        ApiResponse<VisitDepartmentDto> response = visitService.addMedicationToVisitDepartment(input);
         assertEquals(ResponseStatus.SUCCESS, response.status());
         assertNotNull(response.data());
 
-        Map<String, Object> data = (Map<String, Object>) response.data();
-        assertNotNull(data.get("id"));
-        assertEquals("Paracetamol", data.get("medicationName"));
-        assertEquals("Take 500mg twice a day", data.get("instructions"));
+        VisitDepartmentDto data = response.data();
+        assertNotNull(data.id());
+        assertFalse(data.medications().isEmpty());
+        assertEquals("Paracetamol", data.medications().get(0).medicationName());
+        assertEquals("Take 500mg twice a day", data.medications().get(0).instructions());
     }
 
     @Test
@@ -192,27 +201,23 @@ class VisitServiceTest {
                 java.util.List.of(weight, pulse)
         );
 
-        ApiResponse response = visitService.addVisitVitalSigns(input, null);
+        ApiResponse<VisitDto> response = visitService.addVisitVitalSigns(input, null);
         assertEquals(ResponseStatus.SUCCESS, response.status());
         assertNotNull(response.data());
 
-        Map<String, Object> data = (Map<String, Object>) response.data();
-        assertTrue(data.containsKey("vitalSigns"));
-        java.util.List<?> vitalSigns = (java.util.List<?>) data.get("vitalSigns");
-        assertEquals(1, vitalSigns.size());
+        VisitDto data = response.data();
+        assertFalse(data.vitalSigns().isEmpty());
+        assertEquals(1, data.vitalSigns().size());
 
-        Map<String, Object> group = (Map<String, Object>) vitalSigns.get(0);
-        assertNotNull(group.get("id"));
-        assertNotNull(group.get("createdAt"));
-        assertNull(group.get("addedBy"));
+        var group = data.vitalSigns().get(0);
+        assertNotNull(group.id());
+        assertNotNull(group.createdAt());
+        assertNull(group.addedBy());
 
-        java.util.List<?> measurements = (java.util.List<?>) group.get("measurements");
-        assertEquals(2, measurements.size());
-
-        Map<String, Object> first = (Map<String, Object>) measurements.get(0);
-        assertEquals("Weight", first.get("measurementName"));
-        assertEquals("58", first.get("value"));
-        assertEquals("kg", first.get("unit"));
+        assertEquals(2, group.measurements().size());
+        assertEquals("Weight", group.measurements().get(0).measurementName());
+        assertEquals("58", group.measurements().get(0).value());
+        assertEquals("kg", group.measurements().get(0).unit());
     }
 
     @Test
@@ -232,30 +237,26 @@ class VisitServiceTest {
         patientInsurance.setValidUntil(LocalDate.now().plusYears(1));
         patientInsurance = patientInsuranceRepository.save(patientInsurance);
 
-        ApiResponse linkResponse = visitService.linkVisitInsurances(
+        ApiResponse<VisitDto> linkResponse = visitService.linkVisitInsurances(
                 visitDepartment.getVisit().getId(),
                 java.util.List.of(patientInsurance.getId()),
                 null
         );
 
         assertEquals(ResponseStatus.SUCCESS, linkResponse.status());
-        Map<String, Object> linkedVisit = (Map<String, Object>) linkResponse.data();
-        java.util.List<?> linkedInsurances = (java.util.List<?>) linkedVisit.get("linkedInsurances");
-        assertEquals(1, linkedInsurances.size());
+        VisitDto linkedVisit = linkResponse.data();
+        assertEquals(1, linkedVisit.linkedInsurances().size());
+        assertEquals(patientInsurance.getId(), linkedVisit.linkedInsurances().get(0).id());
 
-        Map<String, Object> linkedInsurance = (Map<String, Object>) linkedInsurances.get(0);
-        assertEquals(patientInsurance.getId(), UUID.fromString(linkedInsurance.get("id").toString()));
-
-        ApiResponse unlinkResponse = visitService.unlinkVisitInsurances(
+        ApiResponse<VisitDto> unlinkResponse = visitService.unlinkVisitInsurances(
                 visitDepartment.getVisit().getId(),
                 java.util.List.of(patientInsurance.getId()),
                 null
         );
 
         assertEquals(ResponseStatus.SUCCESS, unlinkResponse.status());
-        Map<String, Object> unlinkedVisit = (Map<String, Object>) unlinkResponse.data();
-        java.util.List<?> remainingInsurances = (java.util.List<?>) unlinkedVisit.get("linkedInsurances");
-        assertTrue(remainingInsurances.isEmpty());
+        VisitDto unlinkedVisit = unlinkResponse.data();
+        assertTrue(unlinkedVisit.linkedInsurances().isEmpty());
         assertTrue(visitInsuranceRepository.findByVisitId(visitDepartment.getVisit().getId()).isEmpty());
     }
 
@@ -284,7 +285,7 @@ class VisitServiceTest {
         otherPatientInsurance.setValidUntil(LocalDate.now().plusYears(1));
         otherPatientInsurance = patientInsuranceRepository.save(otherPatientInsurance);
 
-        ApiResponse response = visitService.linkVisitInsurances(
+        ApiResponse<?> response = visitService.linkVisitInsurances(
                 visitDepartment.getVisit().getId(),
                 java.util.List.of(otherPatientInsurance.getId()),
                 null
@@ -341,28 +342,26 @@ class VisitServiceTest {
                 20
         );
 
-            ApiResponse response = visitService.getPatientHistory(requestedPatientId, input);
+        ApiResponse<List<VisitDto>> response = visitService.getPatientHistory(requestedPatientId, input);
         assertEquals(ResponseStatus.SUCCESS, response.status());
         assertNotNull(response.data());
 
-        java.util.List<?> visits = (java.util.List<?>) response.data();
+        List<VisitDto> visits = response.data();
         assertEquals(1, visits.size());
 
-        Map<String, Object> visit = (Map<String, Object>) visits.get(0);
-        Map<String, Object> patient = (Map<String, Object>) visit.get("patient");
-        assertEquals(visitDepartment.getVisit().getPatient().getId(), UUID.fromString(patient.get("id").toString()));
+        VisitDto visit = visits.get(0);
+        assertEquals(requestedPatientId, visit.patient().id());
 
-        java.util.List<?> departments = (java.util.List<?>) visit.get("departments");
-        assertEquals(1, departments.size());
-        Map<String, Object> department = (Map<String, Object>) departments.get(0);
-        assertNotNull(department.get("id"));
+        assertEquals(1, visit.departments().size());
+        assertNotNull(visit.departments().get(0).id());
 
-        Map<String, Object> pagination = (Map<String, Object>) response.pagination();
-        assertEquals(1L, pagination.get("total"));
+        PaginationDto pagination = response.pagination();
+        assertNotNull(pagination);
+        assertEquals(1L, pagination.total());
     }
 
-        @Test
-        void testActivatingDepartmentAddsCurrentUserAsProcessor() {
+    @Test
+    void testActivatingDepartmentAddsCurrentUserAsProcessor() {
         AuthenticatedUser authUser = new AuthenticatedUser(
             processorOne.getId(),
             processorOne.getUsername(),
@@ -376,16 +375,16 @@ class VisitServiceTest {
             VisitDepartmentStatus.ACTIVE
         );
 
-        ApiResponse response = visitService.updateVisitDepartmentStatus(input, authUser);
+        ApiResponse<?> response = visitService.updateVisitDepartmentStatus(input, authUser);
         assertEquals(ResponseStatus.SUCCESS, response.status());
 
         VisitDepartment refreshed = visitDepartmentRepository.findById(visitDepartment.getId()).orElseThrow();
         assertEquals(1, refreshed.getProcessors().size());
         assertEquals(processorOne.getId(), refreshed.getProcessors().get(0).getId());
-        }
+    }
 
-        @Test
-        void testAddVisitDepartmentProductUsesExplicitProcessorWhenManyAreAvailable() {
+    @Test
+    void testAddVisitDepartmentProductUsesExplicitProcessorWhenManyAreAvailable() {
         AuthenticatedUser authUser = new AuthenticatedUser(
             processorOne.getId(),
             processorOne.getUsername(),
@@ -400,7 +399,7 @@ class VisitServiceTest {
         );
         visitService.addVisitDepartmentProcessor(visitDepartment.getId(), processorTwo.getId(), authUser);
 
-        ApiResponse missingProcessorResponse = visitService.addVisitDepartmentProduct(
+        ApiResponse<?> missingProcessorResponse = visitService.addVisitDepartmentProduct(
             new CreateVisitDepartmentProductInput(
                 visitDepartment.getVisit().getId(),
                 visitDepartment.getDepartment().getId(),
@@ -414,7 +413,7 @@ class VisitServiceTest {
         );
         assertEquals(ResponseStatus.ERROR, missingProcessorResponse.status());
 
-        ApiResponse explicitProcessorResponse = visitService.addVisitDepartmentProduct(
+        ApiResponse<VisitDepartmentDto> explicitProcessorResponse = visitService.addVisitDepartmentProduct(
             new CreateVisitDepartmentProductInput(
                 visitDepartment.getVisit().getId(),
                 visitDepartment.getDepartment().getId(),
@@ -428,17 +427,17 @@ class VisitServiceTest {
         );
         assertEquals(ResponseStatus.SUCCESS, explicitProcessorResponse.status());
 
-        Map<String, Object> departmentData = (Map<String, Object>) explicitProcessorResponse.data();
-        java.util.List<?> products = (java.util.List<?>) departmentData.get("products");
-        assertEquals(1, products.size());
+        VisitDepartmentDto departmentData = explicitProcessorResponse.data();
+        assertFalse(departmentData.products().isEmpty());
+        assertEquals(1, departmentData.products().size());
 
-        Map<String, Object> addedProduct = (Map<String, Object>) products.get(0);
-        Map<String, Object> processor = (Map<String, Object>) addedProduct.get("processor");
-        assertEquals(processorTwo.getId(), UUID.fromString(processor.get("id").toString()));
-        }
+        VisitDepartmentProductDto addedProduct = departmentData.products().get(0);
+        assertNotNull(addedProduct.processor());
+        assertEquals(processorTwo.getId(), addedProduct.processor().id());
+    }
 
-        @Test
-        void testAddAndRemoveChildVisitDepartmentDeletesEmptyChild() {
+    @Test
+    void testAddAndRemoveChildVisitDepartmentDeletesEmptyChild() {
         Department childDepartment = new Department();
         childDepartment.setName("Laboratory");
         childDepartment.setSupportRequests(true);
@@ -449,7 +448,7 @@ class VisitServiceTest {
             new AuthenticatedUser(processorOne.getId(), processorOne.getUsername(), Set.of(), null, null)
         );
 
-        ApiResponse addChildResponse = visitService.addChildVisitDepartment(
+        ApiResponse<?> addChildResponse = visitService.addChildVisitDepartment(
             new AddChildVisitDepartmentInput(
                 visitDepartment.getId(),
                 childDepartment.getId(),
@@ -470,14 +469,14 @@ class VisitServiceTest {
         assertEquals(1, visitDepartmentProductRepository.findByVisitDepartmentId(child.getId()).size());
 
         UUID childProductId = visitDepartmentProductRepository.findByVisitDepartmentId(child.getId()).get(0).getId();
-        ApiResponse removeProductResponse = visitService.removeVisitDepartmentProduct(childProductId);
+        ApiResponse<?> removeProductResponse = visitService.removeVisitDepartmentProduct(childProductId);
         assertEquals(ResponseStatus.SUCCESS, removeProductResponse.status());
 
         assertTrue(visitDepartmentRepository.findByParentVisitDepartmentId(visitDepartment.getId()).isEmpty());
-        }
+    }
 
-        @Test
-        void testAddChildVisitDepartmentRequiresProcessorIdWhenMultipleProcessors() {
+    @Test
+    void testAddChildVisitDepartmentRequiresProcessorIdWhenMultipleProcessors() {
         Department childDepartment = new Department();
         childDepartment.setName("Laboratory");
         childDepartment.setSupportRequests(true);
@@ -496,7 +495,7 @@ class VisitServiceTest {
         visitDepartmentRepository.save(visitDepartment);
 
         // Should succeed without processorId even when parent has multiple processors
-        ApiResponse addChildNoProcessorResponse = visitService.addChildVisitDepartment(
+        ApiResponse<?> addChildNoProcessorResponse = visitService.addChildVisitDepartment(
             new AddChildVisitDepartmentInput(
                 visitDepartment.getId(),
                 childDepartment.getId(),
@@ -513,11 +512,16 @@ class VisitServiceTest {
         assertEquals(1, children.size());
         assertEquals(1, visitDepartmentProductRepository.findByVisitDepartmentId(children.get(0).getId()).size());
 
-        // Should also succeed with valid processorId
-        ApiResponse addChildWithProcessorResponse = visitService.addChildVisitDepartment(
+        // Should also succeed with valid processorId and a different department
+        Department radiologyDepartment = new Department();
+        radiologyDepartment.setName("Radiology");
+        radiologyDepartment.setSupportRequests(true);
+        radiologyDepartment = departmentRepository.save(radiologyDepartment);
+
+        ApiResponse<?> addChildWithProcessorResponse = visitService.addChildVisitDepartment(
             new AddChildVisitDepartmentInput(
                 visitDepartment.getId(),
-                childDepartment.getId(),
+                radiologyDepartment.getId(),
                 java.util.List.of(new AddChildVisitDepartmentProductInput(product.getId(), 1.0)),
                 processorTwo.getId(),
                 null
@@ -527,5 +531,5 @@ class VisitServiceTest {
         assertEquals(ResponseStatus.SUCCESS, addChildWithProcessorResponse.status());
         assertEquals(2, visitDepartmentRepository.findByParentVisitDepartmentId(visitDepartment.getId()).size());
         assertEquals(1, visitDepartmentProductRepository.findByVisitDepartmentId(children.get(0).getId()).size());
-        }
+    }
 }

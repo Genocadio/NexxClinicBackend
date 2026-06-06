@@ -14,5 +14,17 @@ public interface DepartmentMapper {
     @Mapping(target = "defaultProducts", ignore = true)     // Handled dynamically/manually via custom logic in WorkerService if required
     DepartmentDto toDto(Department department);
 
+    @Mapping(target = "id", source = "department.id")
+    @Mapping(target = "name", source = "department.name")
+    @Mapping(target = "insurancePolicyMode", source = "department.insurancePolicyMode")
+    @Mapping(target = "nursing", source = "department.nursing")
+    @Mapping(target = "supportRequests", source = "department.supportRequests")
+    @Mapping(target = "requestsProducts", source = "department.requestsProducts")
+    @Mapping(target = "createdAt", source = "department.createdAt")
+    @Mapping(target = "updatedAt", source = "department.updatedAt")
+    @Mapping(target = "insurancePolicies", source = "insurancePolicies")
+    @Mapping(target = "defaultProducts", source = "defaultProducts")
+    DepartmentDto toDtoWithDetails(Department department, List<com.nexxserve.nexxclinic.dto.out.InsuranceProviderDto> insurancePolicies, List<com.nexxserve.nexxclinic.dto.out.ProductDto> defaultProducts);
+
     List<DepartmentDto> toDtoList(List<Department> departments);
 }

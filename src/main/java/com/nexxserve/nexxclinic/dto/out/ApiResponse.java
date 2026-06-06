@@ -6,7 +6,7 @@ public record ApiResponse<T>(
         ResponseStatus status,
         String message,
         T data,
-        Object pagination
+        PaginationDto pagination
 ) {
 
     public ApiResponse(ResponseStatus status, String message, T data) {
@@ -24,7 +24,7 @@ public record ApiResponse<T>(
     public static <T> ApiResponse<T> success(
             String message,
             T data,
-            Object pagination
+            PaginationDto pagination
     ) {
         return new ApiResponse<>(
                 ResponseStatus.SUCCESS,

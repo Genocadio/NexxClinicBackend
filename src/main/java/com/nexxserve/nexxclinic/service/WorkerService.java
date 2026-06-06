@@ -91,7 +91,7 @@ public class WorkerService {
         }
 
         if (input.password() == null || input.password().isBlank()) {
-            return ApiResponse.error("Password is required for self registration.", "PASSWORD_REQUIRED");
+            return ApiResponse.error("Password is required for self registration.");
         }
 
         boolean firstUser = workerRepository.count() == 0;
@@ -154,7 +154,7 @@ public class WorkerService {
         }
 
         if (input.roles() == null || input.roles().isEmpty()) {
-            return ApiResponse.error("Admin-created users must include at least one role.", "ROLES_REQUIRED");
+            return ApiResponse.error("Admin-created users must include at least one role.");
         }
 
         Worker worker = new Worker();
@@ -197,16 +197,16 @@ public class WorkerService {
     @Transactional
     public ApiResponse activateUser(ActivateUserInput input, AuthenticatedUser adminUser) {
         if (input.userId() == null) {
-            return ApiResponse.error("userId is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("userId is required.");
         }
 
         if (input.roles() == null || input.roles().isEmpty()) {
-            return ApiResponse.error("At least one role is required when activating a user.", "ROLES_REQUIRED");
+            return ApiResponse.error("At least one role is required when activating a user.");
         }
 
         Optional<Worker> workerOptional = workerRepository.findById(input.userId());
         if (workerOptional.isEmpty()) {
-            return ApiResponse.error("User not found.", "NOT_FOUND");
+            return ApiResponse.error("User not found.");
         }
 
         Worker worker = workerOptional.get();
@@ -229,7 +229,7 @@ public class WorkerService {
     public ApiResponse login(LoginInput input) {
         if (input.identifier() == null || input.identifier().isBlank() || input.password() == null || input.password().isBlank()) {
             logger.warn("Login attempt with missing identifier or password");
-            return ApiResponse.error("identifier and password are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("identifier and password are required.");
         }
 
         logger.info("Login attempt for identifier: {}", input.identifier());
@@ -237,13 +237,13 @@ public class WorkerService {
         Optional<Worker> workerOptional = findByIdentifier(input.identifier());
         if (workerOptional.isEmpty()) {
             logger.warn("Login failed: User not found for identifier: {}", input.identifier());
-            return ApiResponse.error("Invalid credentials.", "INVALID_CREDENTIALS");
+            return ApiResponse.error("Invalid credentials.");
         }
 
         Worker worker = workerOptional.get();
         if (!worker.isActive() || worker.getAccountStatus() != AccountStatus.ACTIVE) {
             logger.warn("Login denied: Account not active for user: {} (status: {})", worker.getId(), worker.getAccountStatus());
-            return ApiResponse.error("Your account is not activated yet.", "ACCOUNT_INACTIVE");
+            return ApiResponse.error("Your account is not activated yet.");
         }
 
         if (worker.getPasswordHash() == null || worker.getPasswordHash().isBlank()) {
@@ -254,17 +254,16 @@ public class WorkerService {
                 "userId", worker.getId(),
                 "user", workerToMap(worker)
             );
-            return new ApiResponse(
+            return new ApiResponse<>(
                     com.nexxserve.nexxclinic.model.ResponseStatus.PARTIAL_SUCCESS,
                     "Password not set. Complete initial password setup.",
-                    List.of(),
                     data
             );
         }
 
         if (!passwordEncoder.matches(input.password(), worker.getPasswordHash())) {
             logger.warn("Login failed: Invalid password for user: {}", worker.getId());
-            return ApiResponse.error("Invalid credentials.", "INVALID_CREDENTIALS");
+            return ApiResponse.error("Invalid credentials.");
         }
 
         TokenBundle bundle = sessionTokenService.issueSession(worker);
@@ -275,21 +274,21 @@ public class WorkerService {
     @Transactional
     public ApiResponse setInitialPassword(SetInitialPasswordInput input) {
         if (input.identifier() == null || input.identifier().isBlank() || input.newPassword() == null || input.newPassword().isBlank()) {
-            return ApiResponse.error("identifier and newPassword are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("identifier and newPassword are required.");
         }
 
         Optional<Worker> workerOptional = findByIdentifier(input.identifier());
         if (workerOptional.isEmpty()) {
-            return ApiResponse.error("User not found.", "NOT_FOUND");
+            return ApiResponse.error("User not found.");
         }
 
         Worker worker = workerOptional.get();
         if (!worker.isActive() || worker.getAccountStatus() != AccountStatus.ACTIVE) {
-            return ApiResponse.error("Only active users can set initial password.", "ACCOUNT_INACTIVE");
+            return ApiResponse.error("Only active users can set initial password.");
         }
 
         if (worker.getPasswordHash() != null && !worker.getPasswordHash().isBlank()) {
-            return ApiResponse.error("Initial password already set. Use normal login.", "PASSWORD_ALREADY_SET");
+            return ApiResponse.error("Initial password already set. Use normal login.");
         }
 
         ApiResponse passwordPolicyError = passwordPolicyService.validateNewPassword(worker, input.newPassword());
@@ -315,12 +314,12 @@ public class WorkerService {
     @Transactional
     public ApiResponse refreshSession(RefreshSessionInput input) {
         if (input == null || input.refreshToken() == null || input.refreshToken().isBlank()) {
-            return ApiResponse.error("refreshToken is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("refreshToken is required.");
         }
 
         Optional<TokenBundle> rotated = sessionTokenService.rotateRefreshToken(input.refreshToken());
         if (rotated.isEmpty()) {
-            return ApiResponse.error("Invalid or expired refresh token.", "INVALID_REFRESH_TOKEN");
+            return ApiResponse.error("Invalid or expired refresh token.");
         }
 
         return ApiResponse.success(
@@ -336,7 +335,7 @@ public class WorkerService {
     public ApiResponse refreshToken(RefreshTokenInput input) {
         if (input == null || input.refreshToken() == null || input.refreshToken().isBlank()) {
             logger.warn("Token refresh attempt with missing refresh token");
-            return ApiResponse.error("refreshToken is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("refreshToken is required.");
         }
 
         logger.debug("Attempting to refresh access token");
@@ -346,12 +345,12 @@ public class WorkerService {
     @Transactional
     public ApiResponse deactivateUser(DeactivateUserInput input, AuthenticatedUser adminUser) {
         if (input == null || input.userId() == null) {
-            return ApiResponse.error("userId is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("userId is required.");
         }
 
         Optional<Worker> workerOptional = workerRepository.findById(input.userId());
         if (workerOptional.isEmpty()) {
-            return ApiResponse.error("User not found.", "NOT_FOUND");
+            return ApiResponse.error("User not found.");
         }
 
         Worker worker = workerOptional.get();
@@ -402,12 +401,7 @@ public class WorkerService {
 
         if (!anyRevoked) {
             logger.warn("No active session token could be revoked for logout request");
-            return new ApiResponse(
-                    ResponseStatus.PARTIAL_SUCCESS,
-                    "No active session token could be revoked.",
-                    List.of(),
-                    false
-            );
+            return ApiResponse.partialSuccess("No active session token could be revoked.", List.of());
         }
 
         return ApiResponse.success("Session revoked successfully.", true);
@@ -417,7 +411,7 @@ public class WorkerService {
     public ApiResponse me(AuthenticatedUser authUser) {
         Optional<Worker> workerOptional = workerRepository.findById(authUser.userId());
         if (workerOptional.isEmpty()) {
-            return ApiResponse.error("Authenticated user no longer exists.", "NOT_FOUND");
+            return ApiResponse.error("Authenticated user no longer exists.");
         }
 
         return ApiResponse.success("Authenticated user profile.", workerToMap(workerOptional.get()));
@@ -442,21 +436,21 @@ public class WorkerService {
 
         Optional<Worker> workerOptional = workerRepository.findById(authUser.userId());
         if (workerOptional.isEmpty()) {
-            return ApiResponse.error("Authenticated user no longer exists.", "NOT_FOUND");
+            return ApiResponse.error("Authenticated user no longer exists.");
         }
 
         Worker worker = workerOptional.get();
 
         if (input.firstName() != null) {
             if (input.firstName().isBlank()) {
-                return ApiResponse.error("firstName cannot be blank.", "VALIDATION_ERROR");
+                return ApiResponse.error("firstName cannot be blank.");
             }
             worker.setFirstName(input.firstName().trim());
         }
 
         if (input.lastName() != null) {
             if (input.lastName().isBlank()) {
-                return ApiResponse.error("lastName cannot be blank.", "VALIDATION_ERROR");
+                return ApiResponse.error("lastName cannot be blank.");
             }
             worker.setLastName(input.lastName().trim());
         }
@@ -477,7 +471,7 @@ public class WorkerService {
             String normalizedEmail = blankToNull(input.email());
             if (normalizedEmail != null
                     && workerRepository.existsByEmailIgnoreCaseAndIdNot(normalizedEmail, worker.getId())) {
-                return ApiResponse.error("Email already exists.", "DUPLICATE_EMAIL");
+                return ApiResponse.error("Email already exists.");
             }
             worker.setEmail(normalizedEmail);
         }
@@ -486,7 +480,7 @@ public class WorkerService {
             String normalizedPhone = blankToNull(input.phoneNumber());
             if (normalizedPhone != null
                     && workerRepository.existsByPhoneNumberAndIdNot(normalizedPhone, worker.getId())) {
-                return ApiResponse.error("Phone number already exists.", "DUPLICATE_PHONE");
+                return ApiResponse.error("Phone number already exists.");
             }
             worker.setPhoneNumber(normalizedPhone);
         }
@@ -495,7 +489,7 @@ public class WorkerService {
             String normalizedUsername = blankToNull(input.username());
             if (normalizedUsername != null
                     && workerRepository.existsByUsernameIgnoreCaseAndIdNot(normalizedUsername, worker.getId())) {
-                return ApiResponse.error("Username already exists.", "DUPLICATE_USERNAME");
+                return ApiResponse.error("Username already exists.");
             }
             worker.setUsername(normalizedUsername);
         }
@@ -509,7 +503,7 @@ public class WorkerService {
 
         if ((worker.getEmail() == null || worker.getEmail().isBlank())
                 && (worker.getPhoneNumber() == null || worker.getPhoneNumber().isBlank())) {
-            return ApiResponse.error("At least one contact method is required: email or phoneNumber.", "VALIDATION_ERROR");
+            return ApiResponse.error("At least one contact method is required: email or phoneNumber.");
         }
 
         if (input.workerDocProfile() != null) {
@@ -523,26 +517,26 @@ public class WorkerService {
     @Transactional
     public ApiResponse adminUpdateUser(UUID userId, AdminUpdateUserInput input, AuthenticatedUser adminUser) {
         if (userId == null || input == null) {
-            return ApiResponse.error("userId and input are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("userId and input are required.");
         }
 
         Optional<Worker> workerOptional = workerRepository.findById(userId);
         if (workerOptional.isEmpty()) {
-            return ApiResponse.error("User not found.", "NOT_FOUND");
+            return ApiResponse.error("User not found.");
         }
 
         Worker worker = workerOptional.get();
 
         if (input.firstName() != null) {
             if (input.firstName().isBlank()) {
-                return ApiResponse.error("firstName cannot be blank.", "VALIDATION_ERROR");
+                return ApiResponse.error("firstName cannot be blank.");
             }
             worker.setFirstName(input.firstName().trim());
         }
 
         if (input.lastName() != null) {
             if (input.lastName().isBlank()) {
-                return ApiResponse.error("lastName cannot be blank.", "VALIDATION_ERROR");
+                return ApiResponse.error("lastName cannot be blank.");
             }
             worker.setLastName(input.lastName().trim());
         }
@@ -563,7 +557,7 @@ public class WorkerService {
             String normalizedEmail = blankToNull(input.email());
             if (normalizedEmail != null
                     && workerRepository.existsByEmailIgnoreCaseAndIdNot(normalizedEmail, worker.getId())) {
-                return ApiResponse.error("Email already exists.", "DUPLICATE_EMAIL");
+                return ApiResponse.error("Email already exists.");
             }
             worker.setEmail(normalizedEmail);
         }
@@ -572,7 +566,7 @@ public class WorkerService {
             String normalizedPhone = blankToNull(input.phoneNumber());
             if (normalizedPhone != null
                     && workerRepository.existsByPhoneNumberAndIdNot(normalizedPhone, worker.getId())) {
-                return ApiResponse.error("Phone number already exists.", "DUPLICATE_PHONE");
+                return ApiResponse.error("Phone number already exists.");
             }
             worker.setPhoneNumber(normalizedPhone);
         }
@@ -581,7 +575,7 @@ public class WorkerService {
             String normalizedUsername = blankToNull(input.username());
             if (normalizedUsername != null
                     && workerRepository.existsByUsernameIgnoreCaseAndIdNot(normalizedUsername, worker.getId())) {
-                return ApiResponse.error("Username already exists.", "DUPLICATE_USERNAME");
+                return ApiResponse.error("Username already exists.");
             }
             worker.setUsername(normalizedUsername);
         }
@@ -595,14 +589,14 @@ public class WorkerService {
 
         if (input.roles() != null) {
             if (input.roles().isEmpty()) {
-                return ApiResponse.error("roles cannot be empty.", "VALIDATION_ERROR");
+                return ApiResponse.error("roles cannot be empty.");
             }
             worker.setRoles(input.roles());
         }
 
         if ((worker.getEmail() == null || worker.getEmail().isBlank())
                 && (worker.getPhoneNumber() == null || worker.getPhoneNumber().isBlank())) {
-            return ApiResponse.error("At least one contact method is required: email or phoneNumber.", "VALIDATION_ERROR");
+            return ApiResponse.error("At least one contact method is required: email or phoneNumber.");
         }
 
         if (input.workerDocProfile() != null) {
@@ -640,24 +634,24 @@ public class WorkerService {
         if (input == null || input.currentPassword() == null || input.currentPassword().isBlank()
                 || input.newPassword() == null || input.newPassword().isBlank()) {
             logger.warn("Password change attempt with missing fields from user: {}", authUser.userId());
-            return ApiResponse.error("currentPassword and newPassword are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("currentPassword and newPassword are required.");
         }
 
         Optional<Worker> workerOptional = workerRepository.findById(authUser.userId());
         if (workerOptional.isEmpty()) {
             logger.error("Authenticated user no longer exists: {}", authUser.userId());
-            return ApiResponse.error("Authenticated user no longer exists.", "NOT_FOUND");
+            return ApiResponse.error("Authenticated user no longer exists.");
         }
 
         Worker worker = workerOptional.get();
         if (worker.getPasswordHash() == null || worker.getPasswordHash().isBlank()) {
             logger.warn("Password change attempted but no existing password set for user: {}", authUser.userId());
-            return ApiResponse.error("No existing password set. Use initial password setup.", "PASSWORD_NOT_SET");
+            return ApiResponse.error("No existing password set. Use initial password setup.");
         }
 
         if (!passwordEncoder.matches(input.currentPassword(), worker.getPasswordHash())) {
             logger.warn("Password change failed: Current password incorrect for user: {}", authUser.userId());
-            return ApiResponse.error("Current password is incorrect.", "INVALID_CREDENTIALS");
+            return ApiResponse.error("Current password is incorrect.");
         }
 
         ApiResponse passwordPolicyError = passwordPolicyService.validateNewPassword(worker, input.newPassword());
@@ -695,12 +689,12 @@ public class WorkerService {
     @Transactional
     public ApiResponse adminTriggerPasswordReset(AdminTriggerPasswordResetInput input, AuthenticatedUser adminUser) {
         if (input == null || input.userId() == null) {
-            return ApiResponse.error("userId is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("userId is required.");
         }
 
         Optional<Worker> workerOptional = workerRepository.findById(input.userId());
         if (workerOptional.isEmpty()) {
-            return ApiResponse.error("User not found.", "NOT_FOUND");
+            return ApiResponse.error("User not found.");
         }
 
         Worker worker = workerOptional.get();
@@ -728,16 +722,16 @@ public class WorkerService {
     @Transactional
     public ApiResponse adminSetUserSessionLimit(AdminSetUserSessionLimitInput input, AuthenticatedUser adminUser) {
         if (input == null || input.userId() == null || input.maxActiveSessions() == null) {
-            return ApiResponse.error("userId and maxActiveSessions are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("userId and maxActiveSessions are required.");
         }
 
         if (input.maxActiveSessions() < 1) {
-            return ApiResponse.error("maxActiveSessions must be at least 1.", "VALIDATION_ERROR");
+            return ApiResponse.error("maxActiveSessions must be at least 1.");
         }
 
         Optional<Worker> workerOptional = workerRepository.findById(input.userId());
         if (workerOptional.isEmpty()) {
-            return ApiResponse.error("User not found.", "NOT_FOUND");
+            return ApiResponse.error("User not found.");
         }
 
         Worker worker = workerOptional.get();
@@ -762,23 +756,23 @@ public class WorkerService {
 
     private ApiResponse validateInputBasics(String firstName, String lastName, String email, String phoneNumber, String username) {
         if (firstName == null || firstName.isBlank()) {
-            return ApiResponse.error("firstName is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("firstName is required.");
         }
 
         if ((email == null || email.isBlank()) && (phoneNumber == null || phoneNumber.isBlank())) {
-            return ApiResponse.error("At least one contact method is required: email or phoneNumber.", "VALIDATION_ERROR");
+            return ApiResponse.error("At least one contact method is required: email or phoneNumber.");
         }
 
         if (email != null && !email.isBlank() && workerRepository.existsByEmailIgnoreCase(email)) {
-            return ApiResponse.error("Email already exists.", "DUPLICATE_EMAIL");
+            return ApiResponse.error("Email already exists.");
         }
 
         if (phoneNumber != null && !phoneNumber.isBlank() && workerRepository.existsByPhoneNumber(phoneNumber)) {
-            return ApiResponse.error("Phone number already exists.", "DUPLICATE_PHONE");
+            return ApiResponse.error("Phone number already exists.");
         }
 
         if (username != null && !username.isBlank() && workerRepository.existsByUsernameIgnoreCase(username)) {
-            return ApiResponse.error("Username already exists.", "DUPLICATE_USERNAME");
+            return ApiResponse.error("Username already exists.");
         }
 
         return null;
@@ -905,7 +899,7 @@ public class WorkerService {
         for (UUID id : departmentIds) {
             Optional<Department> deptOpt = departmentRepository.findById(id);
             if (deptOpt.isEmpty()) {
-                return ApiResponse.error("Department not found.", "NOT_FOUND");
+                return ApiResponse.error("Department not found.");
             }
             departments.add(deptOpt.get());
         }
@@ -1047,15 +1041,15 @@ public class WorkerService {
     private ApiResponse mapPersistenceError(DataIntegrityViolationException ex, String defaultMessage) {
         String loweredMessage = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase();
         if (loweredMessage.contains("workers_email_key") || loweredMessage.contains("email")) {
-            return ApiResponse.error("Email already exists.", "DUPLICATE_EMAIL");
+            return ApiResponse.error("Email already exists.");
         }
         if (loweredMessage.contains("workers_phone_number_key") || loweredMessage.contains("phone")) {
-            return ApiResponse.error("Phone number already exists.", "DUPLICATE_PHONE");
+            return ApiResponse.error("Phone number already exists.");
         }
         if (loweredMessage.contains("workers_username_key") || loweredMessage.contains("username")) {
-            return ApiResponse.error("Username already exists.", "DUPLICATE_USERNAME");
+            return ApiResponse.error("Username already exists.");
         }
         logger.error("Persistence error while saving worker", ex);
-        return ApiResponse.error(defaultMessage, "VALIDATION_ERROR");
+        return ApiResponse.error(defaultMessage);
     }
 }

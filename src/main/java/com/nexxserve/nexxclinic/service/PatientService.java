@@ -18,23 +18,26 @@ public class PatientService {
 
     private final PatientRepository patientRepository;
     private final PatientMapper patientMapper;
+    private final com.nexxserve.nexxclinic.mappers.out.PatientInsuranceMapper patientInsuranceMapper;
     private final PatientInsuranceRepository patientInsuranceRepository;
 
     public PatientService(
             PatientRepository patientRepository,
             PatientInsuranceRepository patientInsuranceRepository,
-            PatientMapper patientMapper
+            PatientMapper patientMapper,
+            com.nexxserve.nexxclinic.mappers.out.PatientInsuranceMapper patientInsuranceMapper
     ) {
         this.patientRepository = patientRepository;
         this.patientInsuranceRepository = patientInsuranceRepository;
         this.patientMapper = patientMapper;
+        this.patientInsuranceMapper = patientInsuranceMapper;
     }
 
     // =========================
     // SEARCH PATIENTS
     // =========================
     @Transactional(readOnly = true)
-    public ApiResponse<Page<PatientDto>> searchPatients(SearchPatientsInput input) {
+    public ApiResponse<List<PatientDto>> searchPatients(SearchPatientsInput input) {
         int page = normalizePage(input == null ? null : input.page());
         int size = normalizeSize(input == null ? null : input.size());
 
@@ -51,10 +54,18 @@ public class PatientService {
 
         Page<Patient> patientPage = patientRepository.findAll(spec, pageable);
 
-        // Uses the mapper to convert the page of entities to DTOs
-        Page<PatientDto> dtoPage = patientPage.map(this::mapToDto);
+        List<PatientDto> dtos = patientPage.getContent().stream().map(this::mapToDto).toList();
 
-        return ApiResponse.success("Patients fetched.", dtoPage);
+        return ApiResponse.success(
+                "Patients fetched.",
+                dtos,
+                new com.nexxserve.nexxclinic.dto.out.PaginationDto(
+                        patientPage.getTotalElements(),
+                        patientPage.getSize(),
+                        patientPage.getNumber(),
+                        patientPage.getTotalPages()
+                )
+        );
     }
 
     // =========================
@@ -138,6 +149,59 @@ public class PatientService {
     // =========================
     // HELPERS
     // =========================
+    
+    // =========================
+    // GET PATIENTS
+    // =========================
+    @Transactional(readOnly = true)
+    public ApiResponse<List<PatientDto>> patients() {
+        List<PatientDto> dtos = patientRepository.findAll().stream().map(this::mapToDto).toList();
+        return ApiResponse.success("Patients fetched.", dtos);
+    }
+
+    // =========================
+    // GET PATIENT INSURANCES
+    // =========================
+    @Transactional(readOnly = true)
+    public ApiResponse<List<com.nexxserve.nexxclinic.dto.out.PatientInsuranceDto>> patientInsurances(UUID patientId) {
+        List<com.nexxserve.nexxclinic.dto.out.PatientInsuranceDto> insurances = patientInsuranceRepository.findByPatientId(patientId)
+                .stream()
+                .map(patientInsuranceMapper::toDto)
+                .toList();
+        return ApiResponse.success("Patient insurances fetched.", insurances);
+    }
+
+    // =========================
+    // CREATE PATIENT INSURANCE
+    // =========================
+    @Transactional
+    public ApiResponse<com.nexxserve.nexxclinic.dto.out.PatientInsuranceDto> createPatientInsurance(CreatePatientInsuranceInput input) {
+        if (input == null) {
+            return ApiResponse.error("input is required.");
+        }
+        return ApiResponse.error("Not implemented yet.");
+    }
+
+    // =========================
+    // UPDATE PATIENT INSURANCE
+    // =========================
+    @Transactional
+    public ApiResponse<com.nexxserve.nexxclinic.dto.out.PatientInsuranceDto> updatePatientInsurance(UUID patientInsuranceId, UpdatePatientInsuranceInput input) {
+        return ApiResponse.error("Not implemented yet.");
+    }
+
+    // =========================
+    // DELETE PATIENT INSURANCE
+    // =========================
+    @Transactional
+    public ApiResponse<Boolean> deletePatientInsurance(UUID patientInsuranceId) {
+        if (!patientInsuranceRepository.existsById(patientInsuranceId)) {
+            return ApiResponse.error("Patient insurance not found.");
+        }
+        patientInsuranceRepository.deleteById(patientInsuranceId);
+        return ApiResponse.success("Patient insurance deleted.", true);
+    }
+
     private void applyPatientInput(Patient patient, CreatePatientInput input) {
         patient.setFirstName(input.firstName().trim());
         patient.setLastName(blankToNull(input.lastName()));

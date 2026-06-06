@@ -13,7 +13,7 @@ public class ClinicContact {
     @Column(name = "contact_type", nullable = false, length = 32)
     private ClinicContactType contactType;
 
-    @Column(nullable = false, length = 200)
+    @Column(name = "contact_value", nullable = false, length = 200)
     private String value;
 
     @Column(length = 200)

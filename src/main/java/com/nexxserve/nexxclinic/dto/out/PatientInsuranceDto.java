@@ -6,11 +6,8 @@ import java.util.UUID;
 
 public record PatientInsuranceDto(
         UUID id,
-        UUID patientId,
-        UUID insuranceProviderId,
-        String insuranceName,
-        String insuranceAcronym,
-        Double coveragePercentage,
+        PatientDto patient,
+        InsuranceProviderDto insuranceProvider,
         String insuranceCardNumber,
         String providingCompanyOrEmployer,
         boolean principalMember,
@@ -20,5 +17,4 @@ public record PatientInsuranceDto(
         LocalDate validUntil,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
-) {
-}
+) {}

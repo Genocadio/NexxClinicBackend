@@ -34,6 +34,8 @@ import com.nexxserve.nexxclinic.graphql.input.AddVisitPreInstructionsInput;
 import com.nexxserve.nexxclinic.graphql.input.AddChildVisitDepartmentInput;
 import com.nexxserve.nexxclinic.entity.VisitPreInstructionProductRequest;
 import com.nexxserve.nexxclinic.model.AnswerStatus;
+import com.nexxserve.nexxclinic.dto.out.*;
+import com.nexxserve.nexxclinic.mappers.out.*;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.ResponseStatus;
 import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
@@ -97,6 +99,13 @@ public class VisitService {
     private final ProductInsuranceCoverageRepository productInsuranceCoverageRepository;
     private final WorkerRepository workerRepository;
 
+    private final WorkerMapper workerMapper;
+    private final PatientMapper patientMapper;
+    private final PatientInsuranceMapper patientInsuranceMapper;
+    private final DepartmentMapper departmentMapper;
+    private final ProductMapper productMapper;
+    private final InsuranceProviderMapper insuranceProviderMapper;
+
     public VisitService(
             VisitRepository visitRepository,
             VisitInsuranceRepository visitInsuranceRepository,
@@ -114,7 +123,13 @@ public class VisitService {
             DepartmentRepository departmentRepository,
             ProductRepository productRepository,
             ProductInsuranceCoverageRepository productInsuranceCoverageRepository,
-            WorkerRepository workerRepository
+            WorkerRepository workerRepository,
+            WorkerMapper workerMapper,
+            PatientMapper patientMapper,
+            PatientInsuranceMapper patientInsuranceMapper,
+            DepartmentMapper departmentMapper,
+            ProductMapper productMapper,
+            InsuranceProviderMapper insuranceProviderMapper
     ) {
         this.visitRepository = visitRepository;
         this.visitInsuranceRepository = visitInsuranceRepository;
@@ -133,23 +148,29 @@ public class VisitService {
         this.productRepository = productRepository;
         this.productInsuranceCoverageRepository = productInsuranceCoverageRepository;
         this.workerRepository = workerRepository;
+        this.workerMapper = workerMapper;
+        this.patientMapper = patientMapper;
+        this.patientInsuranceMapper = patientInsuranceMapper;
+        this.departmentMapper = departmentMapper;
+        this.productMapper = productMapper;
+        this.insuranceProviderMapper = insuranceProviderMapper;
     }
 
 
     @Transactional
-    public ApiResponse createVisit(CreateVisitInput input, AuthenticatedUser authUser) {
+    public ApiResponse<VisitDto> createVisit(CreateVisitInput input, AuthenticatedUser authUser) {
         if (input == null || input.patientId() == null) {
-            return ApiResponse.error("patientId is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("patientId is required.");
         }
 
         Optional<Patient> patientOptional = patientRepository.findById(input.patientId());
         if (patientOptional.isEmpty()) {
-            return ApiResponse.error("Patient not found.", "NOT_FOUND");
+            return ApiResponse.error("Patient not found.");
         }
 
         List<PatientInsurance> linkedInsurances = resolveLinkedInsurances(input.patientId(), input.linkedPatientInsuranceIds());
         if (linkedInsurances == null) {
-            return ApiResponse.error("Each linked insurance must exist and belong to the selected patient.", "INVALID_VISIT_INSURANCE_LINKS");
+            return ApiResponse.error("Each linked insurance must exist and belong to the selected patient.");
         }
 
         Worker actingUser = resolveWorker(authUser);
@@ -178,42 +199,42 @@ public class VisitService {
         }
 
         Visit latest = visitRepository.findById(saved.getId()).orElse(saved);
-        return ApiResponse.success("Visit created.", visitToMap(latest));
+        return ApiResponse.success("Visit created.", visitToDto(latest));
     }
 
     @Transactional
-    public ApiResponse changeVisitDate(ChangeVisitDateInput input) {
+    public ApiResponse<VisitDto> changeVisitDate(ChangeVisitDateInput input) {
         if (input == null || input.visitId() == null || input.visitDate() == null) {
-            return ApiResponse.error("visitId and visitDate are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitId and visitDate are required.");
         }
 
         Optional<Visit> visitOptional = visitRepository.findById(input.visitId());
         if (visitOptional.isEmpty()) {
-            return ApiResponse.error("Visit not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit not found.");
         }
 
         int updatedRows = visitRepository.updateVisitDate(input.visitId(), input.visitDate());
         if (updatedRows == 0) {
-            return ApiResponse.error("Visit date could not be updated.", "UPDATE_FAILED");
+            return ApiResponse.error("Visit date could not be updated.");
         }
 
         Visit updatedVisit = visitRepository.findById(input.visitId()).orElse(visitOptional.get());
-        return ApiResponse.success("Visit date changed.", visitToMap(updatedVisit));
+        return ApiResponse.success("Visit date changed.", visitToDto(updatedVisit));
     }
 
     @Transactional(readOnly = true)
-    public ApiResponse visit(UUID visitId) {
+    public ApiResponse<VisitDto> visit(UUID visitId) {
         if (visitId == null) {
-            return ApiResponse.error("visitId is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitId is required.");
         }
 
         Optional<Visit> visitOptional = visitRepository.findById(visitId);
-        return visitOptional.map(visit -> ApiResponse.success("Visit fetched.", visitToMap(visit))).orElseGet(() -> ApiResponse.error("Visit not found.", "NOT_FOUND"));
+        return visitOptional.map(visit -> ApiResponse.success("Visit fetched.", visitToDto(visit))).orElseGet(() -> ApiResponse.error("Visit not found."));
 
     }
 
     @Transactional(readOnly = true)
-    public ApiResponse visits(SearchVisitsInput input) {
+    public ApiResponse<List<VisitDto>> visits(SearchVisitsInput input) {
         int page = normalizePage(input == null ? null : input.page());
         int size = normalizeSize(input == null ? null : input.size());
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "visitDate").and(Sort.by(Sort.Direction.DESC, "createdAt")));
@@ -237,20 +258,20 @@ public class VisitService {
         }
 
         Page<Visit> visitPage = visitRepository.findAll(spec, pageable);
-        List<Map<String, Object>> visits = visitPage.getContent().stream().map(this::visitToMap).toList();
+        List<VisitDto> visits = visitPage.getContent().stream().map(this::visitToDto).toList();
 
-        return ApiResponse.success("Visits fetched.", visits, paginationToMap(visitPage));
+        return ApiResponse.success("Visits fetched.", visits, new PaginationDto(visitPage.getTotalElements(), visitPage.getSize(), visitPage.getNumber(), visitPage.getTotalPages()));
     }
 
     @Transactional(readOnly = true)
-    public ApiResponse getPatientHistory(UUID patientId, SearchPatientHistoryInput input) {
+    public ApiResponse<List<VisitDto>> getPatientHistory(UUID patientId, SearchPatientHistoryInput input) {
         if (patientId == null) {
-            return ApiResponse.error("patientId is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("patientId is required.");
         }
 
         Optional<Patient> patientOptional = patientRepository.findById(patientId);
         if (patientOptional.isEmpty()) {
-            return ApiResponse.error("Patient not found.", "NOT_FOUND");
+            return ApiResponse.error("Patient not found.");
         }
 
         int page = normalizePage(input == null ? null : input.page());
@@ -261,7 +282,7 @@ public class VisitService {
         try {
             dateWindow = resolvePatientHistoryDateWindow(input);
         } catch (IllegalArgumentException ex) {
-            return ApiResponse.error(ex.getMessage(), "VALIDATION_ERROR");
+            return ApiResponse.error(ex.getMessage());
         }
 
         Set<UUID> departmentIds = normalizeDepartmentIds(input == null ? null : input.departmentIds());
@@ -284,34 +305,34 @@ public class VisitService {
 
             if (matchingVisitIds.isEmpty()) {
                 Page<Visit> emptyPage = Page.empty(pageable);
-                return ApiResponse.success("Patient history fetched.", List.of(), paginationToMap(emptyPage));
+                return ApiResponse.success("Patient history fetched.", List.of(), new PaginationDto(emptyPage.getTotalElements(), emptyPage.getSize(), emptyPage.getNumber(), emptyPage.getTotalPages()));
             }
 
             spec = spec.and((root, queryDef, builder) -> root.get("id").in(matchingVisitIds));
         }
 
         Page<Visit> visitPage = visitRepository.findAll(spec, pageable);
-        List<Map<String, Object>> visits = visitPage.getContent().stream()
-                .map(visit -> visitToMap(visit, departmentIds))
+        List<VisitDto> visits = visitPage.getContent().stream()
+                .map(visit -> visitToDto(visit, departmentIds))
                 .toList();
 
-        return ApiResponse.success("Patient history fetched.", visits, paginationToMap(visitPage));
+        return ApiResponse.success("Patient history fetched.", visits, new PaginationDto(visitPage.getTotalElements(), visitPage.getSize(), visitPage.getNumber(), visitPage.getTotalPages()));
     }
 
     @Transactional
-    public ApiResponse completeVisit(UUID visitId) {
+    public ApiResponse<VisitDto> completeVisit(UUID visitId) {
         if (visitId == null) {
-            return ApiResponse.error("visitId is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitId is required.");
         }
 
         Optional<Visit> visitOptional = visitRepository.findById(visitId);
         if (visitOptional.isEmpty()) {
-            return ApiResponse.error("Visit not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit not found.");
         }
 
         Visit visit = visitOptional.get();
         if (visit.getStatus() == VisitStatus.CANCELLED) {
-            return ApiResponse.error("Cancelled visit cannot be completed.", "INVALID_VISIT_STATUS_TRANSITION");
+            return ApiResponse.error("Cancelled visit cannot be completed.");
         }
 
         // Check if all products on the visit are billed (not PENDING)
@@ -320,7 +341,7 @@ public class VisitService {
                 .anyMatch(product -> product.getStatus() == VisitProductStatus.PENDING);
         
         if (hasUnbilledProducts) {
-            return ApiResponse.error("Cannot complete visit with unbilled products. All products must be billed first.", "VISIT_HAS_UNBILLED_PRODUCTS");
+            return ApiResponse.error("Cannot complete visit with unbilled products. All products must be billed first.");
         }
 
         // Mark all departments as COMPLETED
@@ -334,27 +355,27 @@ public class VisitService {
 
         visit.setStatus(VisitStatus.COMPLETED);
         Visit saved = visitRepository.save(visit);
-        return ApiResponse.success("Visit completed.", visitToMap(saved));
+        return ApiResponse.success("Visit completed.", visitToDto(saved));
     }
 
     @Transactional
-    public ApiResponse completeVisit(ConsultationAnswersInput input, boolean finalAnswer, AuthenticatedUser authUser) {
+    public ApiResponse<VisitDto> completeVisit(ConsultationAnswersInput input, boolean finalAnswer, AuthenticatedUser authUser) {
         if (input == null) {
-            return ApiResponse.error("input is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("input is required.");
         }
 
         if (input.visitId() == null || input.departmentId() == null) {
-            return ApiResponse.error("visitId and departmentId are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitId and departmentId are required.");
         }
 
         Optional<Visit> visitOptional = visitRepository.findById(input.visitId());
         if (visitOptional.isEmpty()) {
-            return ApiResponse.error("Visit not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit not found.");
         }
 
         Visit visit = visitOptional.get();
         if (visit.getStatus() == VisitStatus.CANCELLED) {
-            return ApiResponse.error("Cancelled visit cannot be completed.", "INVALID_VISIT_STATUS_TRANSITION");
+            return ApiResponse.error("Cancelled visit cannot be completed.");
         }
 
         ConsultationAnswersInput effectiveInput = input;
@@ -386,34 +407,34 @@ public class VisitService {
         }
 
         Visit saved = visitRepository.save(visit);
-        return ApiResponse.success("Visit submitted for billing.", visitToMap(saved));
+        return ApiResponse.success("Visit submitted for billing.", visitToDto(saved));
     }
 
     @Transactional
-    public ApiResponse saveAnswerAndCompleteVisit(ConsultationAnswersInput input, boolean finalAnswer, AuthenticatedUser authUser) {
+    public ApiResponse<VisitDto> saveAnswerAndCompleteVisit(ConsultationAnswersInput input, boolean finalAnswer, AuthenticatedUser authUser) {
         return completeVisit(input, finalAnswer, authUser);
     }
 
     @Transactional
-    public ApiResponse cancelVisit(UUID visitId) {
+    public ApiResponse<VisitDto> cancelVisit(UUID visitId) {
         if (visitId == null) {
-            return ApiResponse.error("visitId is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitId is required.");
         }
 
         Optional<Visit> visitOptional = visitRepository.findById(visitId);
         if (visitOptional.isEmpty()) {
-            return ApiResponse.error("Visit not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit not found.");
         }
 
         Visit visit = visitOptional.get();
         if (visit.getStatus() == VisitStatus.COMPLETED) {
-            return ApiResponse.error("Completed visit cannot be cancelled.", "INVALID_VISIT_STATUS_TRANSITION");
+            return ApiResponse.error("Completed visit cannot be cancelled.");
         }
 
         // Check if there are any products on the visit
         List<VisitDepartmentProduct> visitProducts = visitDepartmentProductRepository.findByVisitDepartmentVisitId(visitId);
         if (!visitProducts.isEmpty()) {
-            return ApiResponse.error("Cannot cancel visit with existing products. Remove all products first.", "VISIT_HAS_PRODUCTS");
+            return ApiResponse.error("Cannot cancel visit with existing products. Remove all products first.");
         }
 
         // Mark all departments as CANCELLED
@@ -425,36 +446,36 @@ public class VisitService {
 
         visit.setStatus(VisitStatus.CANCELLED);
         Visit saved = visitRepository.save(visit);
-        return ApiResponse.success("Visit cancelled.", visitToMap(saved));
+        return ApiResponse.success("Visit cancelled.", visitToDto(saved));
     }
 
     @Transactional
-    public ApiResponse addVisitDepartment(UUID visitId, UUID departmentId, com.nexxserve.nexxclinic.model.EncounterType encounterType, AuthenticatedUser authUser) {
+    public ApiResponse<VisitDto> addVisitDepartment(UUID visitId, UUID departmentId, com.nexxserve.nexxclinic.model.EncounterType encounterType, AuthenticatedUser authUser) {
         if (visitId == null || departmentId == null) {
-            return ApiResponse.error("visitId and departmentId are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitId and departmentId are required.");
         }
 
         Optional<Visit> visitOptional = visitRepository.findById(visitId);
         if (visitOptional.isEmpty()) {
-            return ApiResponse.error("Visit not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit not found.");
         }
 
         Visit visit = visitOptional.get();
         if (visit.getStatus() == VisitStatus.COMPLETED) {
-            return ApiResponse.error("Cannot add departments to a completed visit.", "VISIT_IS_COMPLETED");
+            return ApiResponse.error("Cannot add departments to a completed visit.");
         }
 
         if (visit.getStatus() == VisitStatus.CANCELLED) {
-            return ApiResponse.error("Cannot add departments to a cancelled visit.", "VISIT_IS_CANCELLED");
+            return ApiResponse.error("Cannot add departments to a cancelled visit.");
         }
 
         Optional<Department> departmentOptional = departmentRepository.findById(departmentId);
         if (departmentOptional.isEmpty()) {
-            return ApiResponse.error("Department not found.", "NOT_FOUND");
+            return ApiResponse.error("Department not found.");
         }
 
         if (visitDepartmentRepository.existsByVisitIdAndDepartmentId(visitId, departmentId)) {
-            return ApiResponse.error("Department is already added to this visit.", "DUPLICATE_VISIT_DEPARTMENT");
+            return ApiResponse.error("Department is already added to this visit.");
         }
 
         VisitDepartment visitDepartment = new VisitDepartment();
@@ -466,51 +487,51 @@ public class VisitService {
         visitDepartment.setStatus(VisitDepartmentStatus.PENDING);
         visitDepartmentRepository.save(visitDepartment);
 
-        return ApiResponse.success("Department added to visit.", visitToMap(visit));
+        return ApiResponse.success("Department added to visit.", visitToDto(visit));
     }
 
     @Transactional
-    public ApiResponse addChildVisitDepartment(AddChildVisitDepartmentInput input, AuthenticatedUser authUser) {
+    public ApiResponse<VisitDepartmentDto> addChildVisitDepartment(AddChildVisitDepartmentInput input, AuthenticatedUser authUser) {
         if (input == null || input.parentVisitDepartmentId() == null || input.departmentId() == null || 
             input.products() == null || input.products().isEmpty()) {
-            return ApiResponse.error("parentVisitDepartmentId, departmentId and products are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("parentVisitDepartmentId, departmentId and products are required.");
         }
 
         Optional<VisitDepartment> parentOptional = visitDepartmentRepository.findById(input.parentVisitDepartmentId());
         if (parentOptional.isEmpty()) {
-            return ApiResponse.error("Parent visit department not found.", "NOT_FOUND");
+            return ApiResponse.error("Parent visit department not found.");
         }
 
         VisitDepartment parent = parentOptional.get();
         if (parent.getStatus() == VisitDepartmentStatus.COMPLETED) {
-            return ApiResponse.error("Cannot add child departments to a completed department.", "DEPARTMENT_IS_COMPLETED");
+            return ApiResponse.error("Cannot add child departments to a completed department.");
         }
         if (parent.getStatus() == VisitDepartmentStatus.CANCELLED) {
-            return ApiResponse.error("Cannot add child departments to a cancelled department.", "DEPARTMENT_IS_CANCELLED");
+            return ApiResponse.error("Cannot add child departments to a cancelled department.");
         }
 
         if (parent.getDepartment() != null && parent.getDepartment().getId() != null && parent.getDepartment().getId().equals(input.departmentId())) {
-            return ApiResponse.error("A department cannot be added as a child of itself.", "INVALID_CHILD_DEPARTMENT");
+            return ApiResponse.error("A department cannot be added as a child of itself.");
         }
 
         Optional<Department> departmentOptional = departmentRepository.findById(input.departmentId());
         if (departmentOptional.isEmpty()) {
-            return ApiResponse.error("Department not found.", "NOT_FOUND");
+            return ApiResponse.error("Department not found.");
         }
 
         Department childDepartment = departmentOptional.get();
         if (!childDepartment.isSupportRequests()) {
-            return ApiResponse.error("Only support request departments can be added as children.", "INVALID_CHILD_DEPARTMENT");
+            return ApiResponse.error("Only support request departments can be added as children.");
         }
 
         Visit visit = parent.getVisit();
         if (visit == null) {
-            return ApiResponse.error("Visit not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit not found.");
         }
 
         if (visitDepartmentRepository.existsByVisitIdAndDepartmentId(visit.getId(), input.departmentId())
             || visitDepartmentRepository.existsByVisitIdAndDepartmentIdAndParentVisitDepartmentId(visit.getId(), input.departmentId(), input.parentVisitDepartmentId())) {
-            return ApiResponse.error("Child department already exists for this parent.", "DUPLICATE_VISIT_DEPARTMENT");
+            return ApiResponse.error("Child department already exists for this parent.");
         }
 
         // Validate all products before creating the child department
@@ -519,20 +540,20 @@ public class VisitService {
         
         for (var productInput : input.products()) {
             if (productInput == null || productInput.productId() == null) {
-                return ApiResponse.error("productId is required for each product.", "VALIDATION_ERROR");
+                return ApiResponse.error("productId is required for each product.");
             }
             
             if (productInput.quantity() == null) {
-                return ApiResponse.error("quantity is required for each product.", "VALIDATION_ERROR");
+                return ApiResponse.error("quantity is required for each product.");
             }
             
             if (!seenProducts.add(productInput.productId())) {
-                return ApiResponse.error("Duplicate productId found in products.", "DUPLICATE_VISIT_DEPARTMENT_PRODUCT");
+                return ApiResponse.error("Duplicate productId found in products.");
             }
             
             Optional<Product> productOptional = productRepository.findById(productInput.productId());
             if (productOptional.isEmpty()) {
-                return ApiResponse.error("Product not found.", "NOT_FOUND");
+                return ApiResponse.error("Product not found.");
             }
         }
 
@@ -547,7 +568,7 @@ public class VisitService {
             List<Worker> processors = resolveAvailableProcessorsForProductAssignment(tempChild);
             Worker requestedProcessor = findProcessorById(processors, input.processorId());
             if (requestedProcessor == null) {
-                return ApiResponse.error("processorId must belong to the visit department processors.", "INVALID_PROCESSOR");
+                return ApiResponse.error("processorId must belong to the visit department processors.");
             }
         }
 
@@ -568,7 +589,7 @@ public class VisitService {
             Optional<Product> productOptional = productRepository.findById(productInput.productId());
             if (productOptional.isEmpty()) {
                 // This shouldn't happen as we already validated above, but safe to check
-                return ApiResponse.error("Product not found.", "NOT_FOUND");
+                return ApiResponse.error("Product not found.");
             }
             
             VisitDepartmentProduct item = new VisitDepartmentProduct();
@@ -587,63 +608,63 @@ public class VisitService {
             visitDepartmentProductRepository.save(item);
         }
 
-        return ApiResponse.success("Child visit department added.", visitDepartmentToMap(parent));
+        return ApiResponse.success("Child visit department added.", visitDepartmentToDto(parent));
     }
 
     @Transactional
-    public ApiResponse removeChildVisitDepartment(UUID visitDepartmentId, AuthenticatedUser authUser) {
+    public ApiResponse<VisitDepartmentDto> removeChildVisitDepartment(UUID visitDepartmentId, AuthenticatedUser authUser) {
         if (visitDepartmentId == null) {
-            return ApiResponse.error("visitDepartmentId is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitDepartmentId is required.");
         }
 
         Optional<VisitDepartment> departmentOptional = visitDepartmentRepository.findById(visitDepartmentId);
         if (departmentOptional.isEmpty()) {
-            return ApiResponse.error("Visit department not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit department not found.");
         }
 
         VisitDepartment child = departmentOptional.get();
         if (child.getParentVisitDepartment() == null) {
-            return ApiResponse.error("Only child visit departments can be removed with this mutation.", "INVALID_CHILD_DEPARTMENT");
+            return ApiResponse.error("Only child visit departments can be removed with this mutation.");
         }
 
         VisitDepartment parent = child.getParentVisitDepartment();
         visitDepartmentRepository.delete(child);
-        return ApiResponse.success("Child visit department removed.", visitDepartmentToMap(parent));
+        return ApiResponse.success("Child visit department removed.", visitDepartmentToDto(parent));
     }
 
     @Transactional
-    public ApiResponse linkVisitInsurances(UUID visitId, List<UUID> insuranceIds, AuthenticatedUser authUser) {
+    public ApiResponse<VisitDto> linkVisitInsurances(UUID visitId, List<UUID> insuranceIds, AuthenticatedUser authUser) {
         if (visitId == null || insuranceIds == null) {
-            return ApiResponse.error("visitId and insuranceIds are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitId and insuranceIds are required.");
         }
 
         Optional<Visit> visitOptional = visitRepository.findById(visitId);
         if (visitOptional.isEmpty()) {
-            return ApiResponse.error("Visit not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit not found.");
         }
 
         Visit visit = visitOptional.get();
         if (visit.getStatus() == VisitStatus.COMPLETED) {
-            return ApiResponse.error("Cannot add insurances to a completed visit.", "VISIT_IS_COMPLETED");
+            return ApiResponse.error("Cannot add insurances to a completed visit.");
         }
 
         if (visit.getStatus() == VisitStatus.CANCELLED) {
-            return ApiResponse.error("Cannot add insurances to a cancelled visit.", "VISIT_IS_CANCELLED");
+            return ApiResponse.error("Cannot add insurances to a cancelled visit.");
         }
 
         List<UUID> uniqueIds = normalizeUniqueIds(insuranceIds);
         if (uniqueIds.isEmpty()) {
-            return ApiResponse.error("insuranceIds must not be empty.", "VALIDATION_ERROR");
+            return ApiResponse.error("insuranceIds must not be empty.");
         }
 
         List<PatientInsurance> patientInsurances = resolveLinkedInsurances(visit.getPatient().getId(), uniqueIds);
         if (patientInsurances == null) {
-            return ApiResponse.error("Each insurance must exist and belong to the selected patient.", "INVALID_VISIT_INSURANCE_LINKS");
+            return ApiResponse.error("Each insurance must exist and belong to the selected patient.");
         }
 
         for (PatientInsurance patientInsurance : patientInsurances) {
             if (visitInsuranceRepository.existsByVisitIdAndPatientInsuranceId(visitId, patientInsurance.getId())) {
-                return ApiResponse.error("One or more insurances are already linked to this visit.", "DUPLICATE_VISIT_INSURANCE");
+                return ApiResponse.error("One or more insurances are already linked to this visit.");
             }
         }
 
@@ -657,32 +678,32 @@ public class VisitService {
 
         visitInsuranceRepository.saveAll(links);
         Visit refreshedVisit = visitRepository.findById(visitId).orElse(visit);
-        return ApiResponse.success("Insurance linked to visit.", visitToMap(refreshedVisit));
+        return ApiResponse.success("Insurance linked to visit.", visitToDto(refreshedVisit));
     }
 
     @Transactional
-    public ApiResponse unlinkVisitInsurances(UUID visitId, List<UUID> insuranceIds, AuthenticatedUser authUser) {
+    public ApiResponse<VisitDto> unlinkVisitInsurances(UUID visitId, List<UUID> insuranceIds, AuthenticatedUser authUser) {
         if (visitId == null || insuranceIds == null) {
-            return ApiResponse.error("visitId and insuranceIds are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitId and insuranceIds are required.");
         }
 
         Optional<Visit> visitOptional = visitRepository.findById(visitId);
         if (visitOptional.isEmpty()) {
-            return ApiResponse.error("Visit not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit not found.");
         }
 
         Visit visit = visitOptional.get();
         if (visit.getStatus() == VisitStatus.COMPLETED) {
-            return ApiResponse.error("Cannot remove insurances from a completed visit.", "VISIT_IS_COMPLETED");
+            return ApiResponse.error("Cannot remove insurances from a completed visit.");
         }
 
         if (visit.getStatus() == VisitStatus.CANCELLED) {
-            return ApiResponse.error("Cannot remove insurances from a cancelled visit.", "VISIT_IS_CANCELLED");
+            return ApiResponse.error("Cannot remove insurances from a cancelled visit.");
         }
 
         List<UUID> uniqueIds = normalizeUniqueIds(insuranceIds);
         if (uniqueIds.isEmpty()) {
-            return ApiResponse.error("insuranceIds must not be empty.", "VALIDATION_ERROR");
+            return ApiResponse.error("insuranceIds must not be empty.");
         }
 
         List<VisitInsurance> visitInsurances = visitInsuranceRepository.findByVisitId(visitId);
@@ -694,58 +715,58 @@ public class VisitService {
         }
 
         if (linksToRemove.size() != uniqueIds.size()) {
-            return ApiResponse.error("One or more insurances are not linked to this visit.", "VISIT_INSURANCE_NOT_FOUND");
+            return ApiResponse.error("One or more insurances are not linked to this visit.");
         }
 
         visitInsuranceRepository.deleteAll(linksToRemove);
         Visit refreshedVisit = visitRepository.findById(visitId).orElse(visit);
-        return ApiResponse.success("Insurance unlinked from visit.", visitToMap(refreshedVisit));
+        return ApiResponse.success("Insurance unlinked from visit.", visitToDto(refreshedVisit));
     }
 
     @Transactional
-    public ApiResponse addVisitDepartmentProduct(CreateVisitDepartmentProductInput input, AuthenticatedUser authUser) {
+    public ApiResponse<VisitDepartmentDto> addVisitDepartmentProduct(CreateVisitDepartmentProductInput input, AuthenticatedUser authUser) {
         if (input == null || input.visitId() == null || input.departmentId() == null || input.productId() == null) {
-            return ApiResponse.error("visitId, departmentId and productId are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitId, departmentId and productId are required.");
         }
 
         Optional<Visit> visitOptional = visitRepository.findById(input.visitId());
         if (visitOptional.isEmpty()) {
-            return ApiResponse.error("Visit not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit not found.");
         }
 
         Visit visit = visitOptional.get();
         if (visit.getStatus() == VisitStatus.COMPLETED) {
-            return ApiResponse.error("Cannot add products to a completed visit.", "VISIT_IS_COMPLETED");
+            return ApiResponse.error("Cannot add products to a completed visit.");
         }
 
         if (visit.getStatus() == VisitStatus.CANCELLED) {
-            return ApiResponse.error("Cannot add products to a cancelled visit.", "VISIT_IS_CANCELLED");
+            return ApiResponse.error("Cannot add products to a cancelled visit.");
         }
 
         Optional<VisitDepartment> visitDepartmentOptional = visitDepartmentRepository.findByVisitIdAndDepartmentId(input.visitId(), input.departmentId());
         if (visitDepartmentOptional.isEmpty()) {
-            return ApiResponse.error("Department is not linked to this visit.", "VISIT_DEPARTMENT_NOT_FOUND");
+            return ApiResponse.error("Department is not linked to this visit.");
         }
 
         VisitDepartment visitDepartment = visitDepartmentOptional.get();
         if (visitDepartment.getStatus() == VisitDepartmentStatus.COMPLETED) {
-            return ApiResponse.error("Cannot add products to a completed department.", "DEPARTMENT_IS_COMPLETED");
+            return ApiResponse.error("Cannot add products to a completed department.");
         }
 
         if (visitDepartment.getStatus() == VisitDepartmentStatus.CANCELLED) {
-            return ApiResponse.error("Cannot add products to a cancelled department.", "DEPARTMENT_IS_CANCELLED");
+            return ApiResponse.error("Cannot add products to a cancelled department.");
         }
 
         Optional<Product> productOptional = productRepository.findById(input.productId());
         if (productOptional.isEmpty()) {
-            return ApiResponse.error("Product not found.", "NOT_FOUND");
+            return ApiResponse.error("Product not found.");
         }
 
         Optional<VisitDepartmentProduct> existing = visitDepartmentProductRepository.findByVisitDepartmentIdAndProductId(
                 visitDepartment.getId(), input.productId()
         );
         if (existing.isPresent()) {
-            return ApiResponse.error("Product already exists for this visit department.", "DUPLICATE_VISIT_DEPARTMENT_PRODUCT");
+            return ApiResponse.error("Product already exists for this visit department.");
         }
 
         VisitDepartmentProduct item = new VisitDepartmentProduct();
@@ -767,26 +788,26 @@ public class VisitService {
 
         visitDepartmentProductRepository.save(item);
         reopenVisitIfCompleted(visit);
-        return ApiResponse.success("Product added to visit department.", visitDepartmentToMap(visitDepartment));
+        return ApiResponse.success("Product added to visit department.", visitDepartmentToDto(visitDepartment));
     }
 
     @Transactional
-    public ApiResponse addVisitVitalSigns(AddVisitVitalSignsInput input, AuthenticatedUser authUser) {
+    public ApiResponse<VisitDto> addVisitVitalSigns(AddVisitVitalSignsInput input, AuthenticatedUser authUser) {
         if (input == null || input.visitId() == null || input.vitalSigns() == null || input.vitalSigns().isEmpty()) {
-            return ApiResponse.error("visitId and vitalSigns are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitId and vitalSigns are required.");
         }
 
         Optional<Visit> visitOptional = visitRepository.findById(input.visitId());
         if (visitOptional.isEmpty()) {
-            return ApiResponse.error("Visit not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit not found.");
         }
 
         Visit visit = visitOptional.get();
         if (visit.getStatus() == VisitStatus.COMPLETED) {
-            return ApiResponse.error("Cannot add vital signs to a completed visit.", "VISIT_IS_COMPLETED");
+            return ApiResponse.error("Cannot add vital signs to a completed visit.");
         }
         if (visit.getStatus() == VisitStatus.CANCELLED) {
-            return ApiResponse.error("Cannot add vital signs to a cancelled visit.", "VISIT_IS_CANCELLED");
+            return ApiResponse.error("Cannot add vital signs to a cancelled visit.");
         }
 
         Worker actingUser = resolveWorker(authUser);
@@ -804,7 +825,7 @@ public class VisitService {
                     || vitalSignInput.value().isBlank()
                     || vitalSignInput.unit() == null
                     || vitalSignInput.unit().isBlank()) {
-                return ApiResponse.error("measurementName, value and unit are required for each vital sign.", "VALIDATION_ERROR");
+                return ApiResponse.error("measurementName, value and unit are required for each vital sign.");
             }
 
             VitalMeasurement item = new VitalMeasurement();
@@ -816,38 +837,38 @@ public class VisitService {
         }
 
         vitalMeasurementRepository.saveAll(measurements);
-        return ApiResponse.success("Vital signs added to visit.", visitToMap(visit));
+        return ApiResponse.success("Vital signs added to visit.", visitToDto(visit));
     }
 
     @Transactional
-    public ApiResponse addVisitPreInstructions(AddVisitPreInstructionsInput input, AuthenticatedUser authUser) {
+    public ApiResponse<VisitDepartmentDto> addVisitPreInstructions(AddVisitPreInstructionsInput input, AuthenticatedUser authUser) {
         if (input == null || input.visitDepartmentId() == null || input.items() == null || input.items().isEmpty()) {
-            return ApiResponse.error("visitDepartmentId and items are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitDepartmentId and items are required.");
         }
 
         Optional<VisitDepartment> visitDepartmentOptional = visitDepartmentRepository.findById(input.visitDepartmentId());
         if (visitDepartmentOptional.isEmpty()) {
-            return ApiResponse.error("Visit department not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit department not found.");
         }
 
         VisitDepartment visitDepartment = visitDepartmentOptional.get();
         Visit visit = visitDepartment.getVisit();
         if (visitDepartment.getStatus() == VisitDepartmentStatus.COMPLETED) {
-            return ApiResponse.error("Cannot add pre-instructions to a completed department.", "DEPARTMENT_IS_COMPLETED");
+            return ApiResponse.error("Cannot add pre-instructions to a completed department.");
         }
         if (visitDepartment.getStatus() == VisitDepartmentStatus.CANCELLED) {
-            return ApiResponse.error("Cannot add pre-instructions to a cancelled department.", "DEPARTMENT_IS_CANCELLED");
+            return ApiResponse.error("Cannot add pre-instructions to a cancelled department.");
         }
 
         Worker actingUser = resolveWorker(authUser);
         List<VisitPreInstruction> items = new ArrayList<>();
         for (com.nexxserve.nexxclinic.graphql.input.AddVisitPreInstructionItemInput itemInput : input.items()) {
             if (itemInput == null || itemInput.type() == null || itemInput.type().isBlank()) {
-                return ApiResponse.error("Each item must have a type (NOTE or MEDICATION).", "VALIDATION_ERROR");
+                return ApiResponse.error("Each item must have a type (NOTE or MEDICATION).");
             }
             String type = itemInput.type().trim().toUpperCase();
             if (!type.equals("NOTE") && !type.equals("MEDICATION") && !type.equals("PRODUCT")) {
-                return ApiResponse.error("Item type must be NOTE, MEDICATION or PRODUCT.", "VALIDATION_ERROR");
+                return ApiResponse.error("Item type must be NOTE, MEDICATION or PRODUCT.");
             }
 
             VisitPreInstruction pi = new VisitPreInstruction();
@@ -859,11 +880,11 @@ public class VisitService {
 
             if (type.equals("MEDICATION")) {
                 if (itemInput.medications() == null || itemInput.medications().isEmpty()) {
-                    return ApiResponse.error("Medication items must include at least one medication entry.", "VALIDATION_ERROR");
+                    return ApiResponse.error("Medication items must include at least one medication entry.");
                 }
                 for (com.nexxserve.nexxclinic.graphql.input.AddVisitPreInstructionMedicationInput medIn : itemInput.medications()) {
                     if (medIn == null || medIn.medName() == null || medIn.medName().isBlank()) {
-                        return ApiResponse.error("medName is required for medication entries.", "VALIDATION_ERROR");
+                        return ApiResponse.error("medName is required for medication entries.");
                     }
                     VisitPreInstructionMedication med = new VisitPreInstructionMedication();
                     med.setPreInstruction(pi);
@@ -879,15 +900,15 @@ public class VisitService {
             }
             if (type.equals("PRODUCT")) {
                 if (itemInput.products() == null || itemInput.products().isEmpty()) {
-                    return ApiResponse.error("Product items must include at least one product entry.", "VALIDATION_ERROR");
+                    return ApiResponse.error("Product items must include at least one product entry.");
                 }
                 for (com.nexxserve.nexxclinic.graphql.input.AddVisitPreInstructionProductInput prodIn : itemInput.products()) {
                     if (prodIn == null || prodIn.productId() == null) {
-                        return ApiResponse.error("productId is required for product entries.", "VALIDATION_ERROR");
+                        return ApiResponse.error("productId is required for product entries.");
                     }
                     Optional<com.nexxserve.nexxclinic.entity.Product> productOptional = productRepository.findById(prodIn.productId());
                     if (productOptional.isEmpty()) {
-                        return ApiResponse.error("Product not found.", "NOT_FOUND");
+                        return ApiResponse.error("Product not found.");
                     }
                     VisitPreInstructionProductRequest pr = new VisitPreInstructionProductRequest();
                     pr.setPreInstruction(pi);
@@ -903,18 +924,18 @@ public class VisitService {
         }
 
         visitPreInstructionRepository.saveAll(items);
-        return ApiResponse.success("Pre-instructions added to visit department.", visitDepartmentToMap(visitDepartment));
+        return ApiResponse.success("Pre-instructions added to visit department.", visitDepartmentToDto(visitDepartment));
     }
 
     @Transactional
     public ApiResponse updateVisitDepartmentProductStatus(UpdateVisitDepartmentProductStatusInput input, AuthenticatedUser authUser) {
         if (input == null || input.visitDepartmentProductId() == null || input.status() == null) {
-            return ApiResponse.error("visitDepartmentProductId and status are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitDepartmentProductId and status are required.");
         }
 
         Optional<VisitDepartmentProduct> itemOptional = visitDepartmentProductRepository.findById(input.visitDepartmentProductId());
         if (itemOptional.isEmpty()) {
-            return ApiResponse.error("Visit department product not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit department product not found.");
         }
 
         VisitDepartmentProduct item = itemOptional.get();
@@ -928,18 +949,18 @@ public class VisitService {
 
         VisitDepartmentProduct saved = visitDepartmentProductRepository.save(item);
         deleteChildVisitDepartmentIfEmpty(saved.getVisitDepartment());
-        return ApiResponse.success("Visit department product status updated.", visitDepartmentToMap(saved.getVisitDepartment()));
+        return ApiResponse.success("Visit department product status updated.", visitDepartmentToDto(saved.getVisitDepartment()));
     }
 
     @Transactional
     public ApiResponse updateVisitDepartmentStatus(com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentStatusInput input, AuthenticatedUser authUser) {
         if (input == null || input.visitDepartmentId() == null || input.status() == null) {
-            return ApiResponse.error("visitDepartmentId and status are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitDepartmentId and status are required.");
         }
 
         Optional<VisitDepartment> departmentOptional = visitDepartmentRepository.findById(input.visitDepartmentId());
         if (departmentOptional.isEmpty()) {
-            return ApiResponse.error("Visit department not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit department not found.");
         }
 
         VisitDepartment department = departmentOptional.get();
@@ -956,79 +977,79 @@ public class VisitService {
         }
 
         VisitDepartment saved = visitDepartmentRepository.save(department);
-        return ApiResponse.success("Visit department status updated.", visitDepartmentToMap(saved));
+        return ApiResponse.success("Visit department status updated.", visitDepartmentToDto(saved));
     }
 
     @Transactional
     public ApiResponse addVisitDepartmentProcessor(UUID visitDepartmentId, UUID processorId, AuthenticatedUser authUser) {
         if (visitDepartmentId == null || processorId == null) {
-            return ApiResponse.error("visitDepartmentId and processorId are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitDepartmentId and processorId are required.");
         }
 
         Optional<VisitDepartment> departmentOptional = visitDepartmentRepository.findById(visitDepartmentId);
         if (departmentOptional.isEmpty()) {
-            return ApiResponse.error("Visit department not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit department not found.");
         }
 
         VisitDepartment department = departmentOptional.get();
         if (department.getStatus() == VisitDepartmentStatus.COMPLETED) {
-            return ApiResponse.error("Cannot modify processors on a completed department.", "DEPARTMENT_IS_COMPLETED");
+            return ApiResponse.error("Cannot modify processors on a completed department.");
         }
         if (department.getStatus() == VisitDepartmentStatus.CANCELLED) {
-            return ApiResponse.error("Cannot modify processors on a cancelled department.", "DEPARTMENT_IS_CANCELLED");
+            return ApiResponse.error("Cannot modify processors on a cancelled department.");
         }
 
         Optional<Worker> processorOptional = workerRepository.findById(processorId);
         if (processorOptional.isEmpty()) {
-            return ApiResponse.error("Processor not found.", "NOT_FOUND");
+            return ApiResponse.error("Processor not found.");
         }
 
         addProcessorToVisitDepartment(department, processorOptional.get());
         VisitDepartment saved = visitDepartmentRepository.save(department);
-        return ApiResponse.success("Visit department processor added.", visitDepartmentToMap(saved));
+        return ApiResponse.success("Visit department processor added.", visitDepartmentToDto(saved));
     }
 
     @Transactional
     public ApiResponse removeVisitDepartmentProcessor(UUID visitDepartmentId, UUID processorId, AuthenticatedUser authUser) {
         if (visitDepartmentId == null || processorId == null) {
-            return ApiResponse.error("visitDepartmentId and processorId are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitDepartmentId and processorId are required.");
         }
 
         Optional<VisitDepartment> departmentOptional = visitDepartmentRepository.findById(visitDepartmentId);
         if (departmentOptional.isEmpty()) {
-            return ApiResponse.error("Visit department not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit department not found.");
         }
 
         VisitDepartment department = departmentOptional.get();
         if (department.getStatus() == VisitDepartmentStatus.COMPLETED) {
-            return ApiResponse.error("Cannot modify processors on a completed department.", "DEPARTMENT_IS_COMPLETED");
+            return ApiResponse.error("Cannot modify processors on a completed department.");
         }
         if (department.getStatus() == VisitDepartmentStatus.CANCELLED) {
-            return ApiResponse.error("Cannot modify processors on a cancelled department.", "DEPARTMENT_IS_CANCELLED");
+            return ApiResponse.error("Cannot modify processors on a cancelled department.");
         }
 
         if (department.getProcessors() == null || department.getProcessors().isEmpty()) {
-            return ApiResponse.error("Visit department has no processors.", "PROCESSOR_NOT_FOUND");
+            return ApiResponse.error("Visit department has no processors.");
         }
 
         boolean removed = department.getProcessors().removeIf(worker -> worker != null && processorId.equals(worker.getId()));
         if (!removed) {
-            return ApiResponse.error("Processor not found on this visit department.", "PROCESSOR_NOT_FOUND");
+            return ApiResponse.error("Processor not found on this visit department.");
         }
 
         VisitDepartment saved = visitDepartmentRepository.save(department);
-        return ApiResponse.success("Visit department processor removed.", visitDepartmentToMap(saved));
+        return ApiResponse.success("Visit department processor removed.", visitDepartmentToDto(saved));
     }
 
     @Transactional
-    public ApiResponse updateVisitDepartmentProductQuantity(com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentProductQuantityInput input) {
+    public ApiResponse<VisitDepartmentDto> updateVisitDepartmentProductQuantity(com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentProductQuantityInput input) {
         if (input == null || input.visitDepartmentProductId() == null || input.quantity() == null) {
-            return ApiResponse.error("visitDepartmentProductId and quantity are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitDepartmentProductId and quantity are required.");
         }
 
         Optional<VisitDepartmentProduct> itemOptional = visitDepartmentProductRepository.findById(input.visitDepartmentProductId());
         if (itemOptional.isEmpty()) {
-            return ApiResponse.error("Visit department product not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit department product not found.");
         }
 
         VisitDepartmentProduct item = itemOptional.get();
@@ -1040,49 +1061,49 @@ public class VisitService {
             visitDepartmentProductRepository.delete(item);
             reopenVisitIfCompleted(visit);
             VisitDepartment mappedDepartment = deleteChildVisitDepartmentIfEmpty(affectedDepartment);
-            return ApiResponse.success("Visit department product removed.", visitDepartmentToMap(mappedDepartment == null ? affectedDepartment : mappedDepartment));
+            return ApiResponse.success("Visit department product removed.", visitDepartmentToDto(mappedDepartment == null ? affectedDepartment : mappedDepartment));
         }
 
         item.setQuantity(input.quantity());
 
         VisitDepartmentProduct saved = visitDepartmentProductRepository.save(item);
         deleteChildVisitDepartmentIfEmpty(saved.getVisitDepartment());
-        return ApiResponse.success("Visit department product quantity updated.", visitDepartmentToMap(saved.getVisitDepartment()));
+        return ApiResponse.success("Visit department product quantity updated.", visitDepartmentToDto(saved.getVisitDepartment()));
     }
 
     @Transactional
-    public ApiResponse updateVisitDepartmentEncounterType(UUID visitDepartmentId, com.nexxserve.nexxclinic.model.EncounterType encounterType, AuthenticatedUser authUser) {
+    public ApiResponse<VisitDepartmentDto> updateVisitDepartmentEncounterType(UUID visitDepartmentId, com.nexxserve.nexxclinic.model.EncounterType encounterType, AuthenticatedUser authUser) {
         if (visitDepartmentId == null || encounterType == null) {
-            return ApiResponse.error("visitDepartmentId and encounterType are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitDepartmentId and encounterType are required.");
         }
 
         Optional<VisitDepartment> departmentOptional = visitDepartmentRepository.findById(visitDepartmentId);
         if (departmentOptional.isEmpty()) {
-            return ApiResponse.error("Visit department not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit department not found.");
         }
 
         VisitDepartment department = departmentOptional.get();
         if (department.getStatus() == VisitDepartmentStatus.COMPLETED) {
-            return ApiResponse.error("Cannot modify encounter type on a completed department.", "DEPARTMENT_IS_COMPLETED");
+            return ApiResponse.error("Cannot modify encounter type on a completed department.");
         }
         if (department.getStatus() == VisitDepartmentStatus.CANCELLED) {
-            return ApiResponse.error("Cannot modify encounter type on a cancelled department.", "DEPARTMENT_IS_CANCELLED");
+            return ApiResponse.error("Cannot modify encounter type on a cancelled department.");
         }
 
         department.setEncounterType(encounterType);
         VisitDepartment saved = visitDepartmentRepository.save(department);
-        return ApiResponse.success("Visit department encounter type updated.", visitDepartmentToMap(saved));
+        return ApiResponse.success("Visit department encounter type updated.", visitDepartmentToDto(saved));
     }
 
     @Transactional
-    public ApiResponse removeVisitDepartmentProduct(UUID visitDepartmentProductId) {
+    public ApiResponse<VisitDepartmentDto> removeVisitDepartmentProduct(UUID visitDepartmentProductId) {
         if (visitDepartmentProductId == null) {
-            return ApiResponse.error("visitDepartmentProductId is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitDepartmentProductId is required.");
         }
 
         Optional<VisitDepartmentProduct> itemOptional = visitDepartmentProductRepository.findById(visitDepartmentProductId);
         if (itemOptional.isEmpty()) {
-            return ApiResponse.error("Visit department product not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit department product not found.");
         }
 
         VisitDepartmentProduct item = itemOptional.get();
@@ -1094,7 +1115,7 @@ public class VisitService {
         reopenVisitIfCompleted(visit);
 
         VisitDepartment mappedDepartment = deleteChildVisitDepartmentIfEmpty(affectedDepartment);
-        return ApiResponse.success("Visit department product removed.", visitDepartmentToMap(mappedDepartment == null ? affectedDepartment : mappedDepartment));
+        return ApiResponse.success("Visit department product removed.", visitDepartmentToDto(mappedDepartment == null ? affectedDepartment : mappedDepartment));
     }
 
     private ApiResponse addDepartmentsToVisit(
@@ -1109,16 +1130,16 @@ public class VisitService {
         Set<UUID> seenDepartments = new LinkedHashSet<>();
         for (CreateVisitDepartmentInput departmentInput : departments) {
             if (departmentInput == null || departmentInput.departmentId() == null) {
-                return ApiResponse.error("departmentId is required for each visit department.", "VALIDATION_ERROR");
+                return ApiResponse.error("departmentId is required for each visit department.");
             }
 
             if (!seenDepartments.add(departmentInput.departmentId())) {
-                return ApiResponse.error("Duplicate departmentId found in visit departments.", "DUPLICATE_VISIT_DEPARTMENT");
+                return ApiResponse.error("Duplicate departmentId found in visit departments.");
             }
 
             Optional<Department> departmentOptional = departmentRepository.findById(departmentInput.departmentId());
             if (departmentOptional.isEmpty()) {
-                return ApiResponse.error("Department not found.", "NOT_FOUND");
+                return ApiResponse.error("Department not found.");
             }
 
             VisitDepartment visitDepartment = new VisitDepartment();
@@ -1151,16 +1172,16 @@ public class VisitService {
         Set<UUID> seenProducts = new LinkedHashSet<>();
         for (CreateVisitDepartmentInput.CreateVisitDepartmentProductItemInput productInput : products) {
             if (productInput == null || productInput.productId() == null) {
-                return ApiResponse.error("productId is required for each department product.", "VALIDATION_ERROR");
+                return ApiResponse.error("productId is required for each department product.");
             }
 
             if (!seenProducts.add(productInput.productId())) {
-                return ApiResponse.error("Duplicate productId found in visit department products.", "DUPLICATE_VISIT_DEPARTMENT_PRODUCT");
+                return ApiResponse.error("Duplicate productId found in visit department products.");
             }
 
             Optional<Product> productOptional = productRepository.findById(productInput.productId());
             if (productOptional.isEmpty()) {
-                return ApiResponse.error("Product not found.", "NOT_FOUND");
+                return ApiResponse.error("Product not found.");
             }
 
             VisitDepartmentProduct item = new VisitDepartmentProduct();
@@ -1228,89 +1249,65 @@ public class VisitService {
         return new ArrayList<>(uniqueIds);
     }
 
-    private Map<String, Object> visitToMap(Visit visit) {
-        return visitToMap(visit, Set.of());
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    private VisitDto visitToDto(Visit visit) {
+        return visitToDto(visit, Set.of());
     }
 
-    private Map<String, Object> visitToMap(Visit visit, Set<UUID> departmentIds) {
+    private VisitDto visitToDto(Visit visit, Set<UUID> departmentIds) {
         Set<UUID> visitInsuranceProviderIds = resolveVisitInsuranceProviderIds(visit.getId());
-        Map<String, Object> data = new HashMap<>();
-        data.put("id", visit.getId());
-        data.put("patient", patientToMap(visit.getPatient()));
-        data.put("status", visit.getStatus());
-        data.put("visitDate", visit.getVisitDate());
-        data.put(
-                "linkedInsurances",
-                visitInsuranceRepository.findByVisitId(visit.getId())
-                        .stream()
-                        .map(link -> patientInsuranceToMap(link.getPatientInsurance()))
-                        .toList()
-        );
-        data.put(
-                "departments",
-            resolveVisitDepartmentsForResponse(visit.getId(), departmentIds)
+        List<PatientInsuranceDto> linkedInsurances = visitInsuranceRepository.findByVisitId(visit.getId())
                 .stream()
-                .map(visitDepartment -> visitDepartmentToMap(visitDepartment, visitInsuranceProviderIds))
-                .toList()
+                .map(link -> patientInsuranceMapper.toDto(link.getPatientInsurance()))
+                .toList();
+
+        List<VisitDepartmentDto> departments = resolveVisitDepartmentsForResponse(visit.getId(), departmentIds)
+                .stream()
+                .map(visitDepartment -> visitDepartmentToDto(visitDepartment, visitInsuranceProviderIds))
+                .toList();
+
+        List<VisitVitalSignsGroupDto> vitalSigns = visitVitalSignsGroupRepository.findByVisitIdOrderByCreatedAtAsc(visit.getId())
+                .stream()
+                .map(this::visitVitalSignsGroupToDto)
+                .toList();
+
+        return new VisitDto(
+                visit.getId(),
+                patientMapper.toDto(visit.getPatient(), patientInsuranceRepository.findByPatientId(visit.getPatient().getId())),
+                visit.getStatus(),
+                visit.getVisitDate(),
+                linkedInsurances,
+                departments,
+                vitalSigns
         );
-        data.put(
-                "vitalSigns",
-            visitVitalSignsGroupRepository.findByVisitIdOrderByCreatedAtAsc(visit.getId())
-                        .stream()
-                .map(this::visitVitalSignsGroupToMap)
-                        .toList()
-        );
-        return data;
     }
 
-    private Map<String, Object> visitPreInstructionToMap(VisitPreInstruction pre) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("id", pre.getId());
-        data.put("type", pre.getType());
-        data.put("note", pre.getNote());
-        data.put("addedBy", pre.getAddedBy() == null ? null : workerToMap(pre.getAddedBy()));
-        data.put("createdAt", pre.getCreatedAt());
-        data.put(
-                "medications",
-                pre.getMedications().stream().map(m -> {
-                    Map<String, Object> med = new HashMap<>();
-                    med.put("id", m.getId());
-                    med.put("medName", m.getMedName());
-                    med.put("dosage", m.getDosage());
-                    med.put("route", m.getRoute());
-                    med.put("frequency", m.getFrequency());
-                    med.put("duration", m.getDuration());
-                    med.put("quantity", m.getQuantity());
-                    med.put("otherInstructions", m.getOtherInstructions());
-                    med.put("createdAt", m.getCreatedAt());
-                    return med;
-                }).toList()
-        );
-                data.put(
-                    "products",
-                    pre.getProducts().stream()
-                            .map(item -> visitPreInstructionProductToMap(
-                                    item,
-                                    resolveVisitInsuranceProviderIds(pre.getVisit().getId())
-                            ))
-                            .toList()
-                );
-        return data;
-    }
-
-    private Map<String, Object> visitDepartmentToMap(VisitDepartment visitDepartment) {
-        return visitDepartmentToMap(
+    private VisitDepartmentDto visitDepartmentToDto(VisitDepartment visitDepartment) {
+        return visitDepartmentToDto(
                 visitDepartment,
                 resolveVisitInsuranceProviderIds(visitDepartment.getVisit().getId()),
                 new LinkedHashSet<>()
         );
     }
 
-    private Map<String, Object> visitDepartmentToMap(VisitDepartment visitDepartment, Set<UUID> visitInsuranceProviderIds) {
-        return visitDepartmentToMap(visitDepartment, visitInsuranceProviderIds, new LinkedHashSet<>());
+    private VisitDepartmentDto visitDepartmentToDto(VisitDepartment visitDepartment, Set<UUID> visitInsuranceProviderIds) {
+        return visitDepartmentToDto(visitDepartment, visitInsuranceProviderIds, new LinkedHashSet<>());
     }
 
-    private Map<String, Object> visitDepartmentToMap(
+    private VisitDepartmentDto visitDepartmentToDto(
             VisitDepartment visitDepartment,
             Set<UUID> visitInsuranceProviderIds,
             Set<UUID> visitedDepartmentIds
@@ -1320,183 +1317,168 @@ public class VisitService {
         }
 
         if (visitedDepartmentIds.contains(visitDepartment.getId())) {
-            Map<String, Object> circular = new HashMap<>();
-            circular.put("id", visitDepartment.getId());
-            circular.put("department", departmentToMap(visitDepartment.getDepartment()));
-            circular.put("status", visitDepartment.getStatus());
-            circular.put("completedAt", visitDepartment.getCompletedAt());
-            circular.put("encounterType", visitDepartment.getEncounterType());
-            circular.put("processors", visitDepartment.getProcessors() == null || visitDepartment.getProcessors().isEmpty() ? null : visitDepartment.getProcessors().stream().map(this::workerToMap).toList());
-            circular.put("products", List.of());
-            circular.put("diagnostics", List.of());
-            circular.put("medications", List.of());
-            circular.put("preInstructions", List.of());
-            circular.put("childVisitDepartments", List.of());
-            circular.put("createdAt", visitDepartment.getCreatedAt());
-            circular.put("updatedAt", visitDepartment.getUpdatedAt());
-            return circular;
+            return new VisitDepartmentDto(
+                    visitDepartment.getId(),
+                    departmentMapper.toDto(visitDepartment.getDepartment()),
+                    visitDepartment.getStatus(),
+                    visitDepartment.getEncounterType(),
+                    visitDepartment.getCompletedAt(),
+                    visitDepartment.getProcessors() == null || visitDepartment.getProcessors().isEmpty() ? null : visitDepartment.getProcessors().stream().map(workerMapper::toDto).toList(),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    visitDepartment.getCreatedAt(),
+                    visitDepartment.getUpdatedAt()
+            );
         }
 
         visitedDepartmentIds.add(visitDepartment.getId());
-        Map<String, Object> data = new HashMap<>();
-        data.put("id", visitDepartment.getId());
-        data.put("department", departmentToMap(visitDepartment.getDepartment()));
-        data.put("status", visitDepartment.getStatus());
-        data.put("encounterType", visitDepartment.getEncounterType());
-        data.put("completedAt", visitDepartment.getCompletedAt());
-        data.put(
-            "processors",
-            visitDepartment.getProcessors() == null || visitDepartment.getProcessors().isEmpty()
+
+        List<WorkerDto> processors = visitDepartment.getProcessors() == null || visitDepartment.getProcessors().isEmpty()
                 ? null
-                : visitDepartment.getProcessors().stream().map(this::workerToMap).toList()
-        );
-        data.put(
-                "products",
-                visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartment.getId())
-                        .stream()
-                        .map(item -> visitDepartmentProductToMap(item, visitInsuranceProviderIds))
-                        .toList()
-        );
-        data.put(
-                "diagnostics",
-                visitDepartmentDiagnosisRepository.findByVisitDepartmentId(visitDepartment.getId())
-                        .stream()
-                        .map(this::visitDepartmentDiagnosisToMap)
-                        .toList()
-        );
-        data.put(
-                "medications",
-                visitDepartmentMedicationRepository.findByVisitDepartmentId(visitDepartment.getId())
-                        .stream()
-                        .map(this::visitDepartmentMedicationToMap)
-                        .toList()
-        );
-        data.put(
-                "preInstructions",
-                visitPreInstructionRepository.findByVisitDepartmentIdOrderByCreatedAtAsc(visitDepartment.getId())
-                        .stream()
-                        .map(this::visitPreInstructionToMap)
-                        .toList()
-        );
-        data.put(
-            "childVisitDepartments",
-            visitDepartmentRepository.findByParentVisitDepartmentId(visitDepartment.getId())
+                : visitDepartment.getProcessors().stream().map(workerMapper::toDto).toList();
+
+        List<VisitDepartmentProductDto> products = visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartment.getId())
                 .stream()
-                .map(child -> visitDepartmentToMap(child, visitInsuranceProviderIds, new LinkedHashSet<>(visitedDepartmentIds)))
-                .toList()
+                .map(item -> visitDepartmentProductToDto(item, visitInsuranceProviderIds))
+                .toList();
+
+        List<VisitDepartmentDiagnosisDto> diagnostics = visitDepartmentDiagnosisRepository.findByVisitDepartmentId(visitDepartment.getId())
+                .stream()
+                .map(this::visitDepartmentDiagnosisToDto)
+                .toList();
+
+        List<VisitDepartmentMedicationDto> medications = visitDepartmentMedicationRepository.findByVisitDepartmentId(visitDepartment.getId())
+                .stream()
+                .map(this::visitDepartmentMedicationToDto)
+                .toList();
+
+        List<VisitPreInstructionDto> preInstructions = visitPreInstructionRepository.findByVisitDepartmentIdOrderByCreatedAtAsc(visitDepartment.getId())
+                .stream()
+                .map(this::visitPreInstructionToDto)
+                .toList();
+
+        List<VisitDepartmentDto> childVisitDepartments = visitDepartmentRepository.findByParentVisitDepartmentId(visitDepartment.getId())
+                .stream()
+                .map(child -> visitDepartmentToDto(child, visitInsuranceProviderIds, new LinkedHashSet<>(visitedDepartmentIds)))
+                .toList();
+
+        return new VisitDepartmentDto(
+                visitDepartment.getId(),
+                departmentMapper.toDto(visitDepartment.getDepartment()),
+                visitDepartment.getStatus(),
+                visitDepartment.getEncounterType(),
+                visitDepartment.getCompletedAt(),
+                processors,
+                products,
+                diagnostics,
+                medications,
+                preInstructions,
+                childVisitDepartments,
+                visitDepartment.getCreatedAt(),
+                visitDepartment.getUpdatedAt()
         );
-        data.put("createdAt", visitDepartment.getCreatedAt());
-        data.put("updatedAt", visitDepartment.getUpdatedAt());
-        return data;
     }
 
-    private Map<String, Object> visitPreInstructionProductToMap(
-            VisitPreInstructionProductRequest item,
-            Set<UUID> visitInsuranceProviderIds
-    ) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("id", item.getId());
-        data.put("product", productToMap(item.getProduct(), visitInsuranceProviderIds));
-        data.put("quantity", item.getQuantity());
-        data.put("requestedBy", workerToMap(item.getRequestedBy()));
-        data.put("status", item.getStatus());
-        data.put("processedBy", workerToMap(item.getProcessedBy()));
-        data.put("createdAt", item.getCreatedAt());
-        data.put("updatedAt", item.getUpdatedAt());
-        return data;
-    }
-
-    private Map<String, Object> visitDepartmentDiagnosisToMap(VisitDepartmentDiagnosis item) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("id", item.getId());
-        data.put("diagnosisName", item.getDiagnosisName());
-        data.put("icd11Code", item.getIcd11Code());
-        data.put("createdAt", item.getCreatedAt());
-        return data;
-    }
-
-    private Map<String, Object> visitDepartmentMedicationToMap(VisitDepartmentMedication item) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("id", item.getId());
-        data.put("medicationName", item.getMedicationName());
-        data.put("instructions", item.getInstructions());
-        data.put("createdAt", item.getCreatedAt());
-        return data;
-    }
-
-    private Map<String, Object> visitDepartmentProductToMap(
+    private VisitDepartmentProductDto visitDepartmentProductToDto(
             VisitDepartmentProduct item,
             Set<UUID> visitInsuranceProviderIds
     ) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("id", item.getId());
-        data.put("product", productToMap(item.getProduct(), visitInsuranceProviderIds));
-        data.put("quantity", item.getQuantity());
-        data.put("price", item.getPrice());
-        data.put("status", item.getStatus());
-        data.put("addedBy", workerToMap(item.getAddedBy()));
-        data.put("billedBy", workerToMap(item.getBilledBy()));
-        data.put("processor", workerToMap(item.getProcessor()));
-        data.put("createdAt", item.getCreatedAt());
-        data.put("updatedAt", item.getUpdatedAt());
-        return data;
-    }
-
-    private Map<String, Object> visitVitalSignsGroupToMap(VisitVitalSignsGroup group) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("id", group.getId());
-        data.put("createdAt", group.getCreatedAt());
-        data.put("addedBy", workerToMap(group.getAddedBy()));
-        data.put(
-                "measurements",
-                vitalMeasurementRepository.findByGroupIdOrderByCreatedAtAsc(group.getId())
-                        .stream()
-                        .map(this::vitalMeasurementToMap)
-                        .toList()
+        return new VisitDepartmentProductDto(
+                item.getId(),
+                productMapper.toDto(item.getProduct()),
+                item.getQuantity(),
+                item.getPrice(),
+                item.getStatus(),
+                workerMapper.toDto(item.getAddedBy()),
+                workerMapper.toDto(item.getBilledBy()),
+                workerMapper.toDto(item.getProcessor()),
+                item.getCreatedAt(),
+                item.getUpdatedAt()
         );
-        return data;
     }
 
-    private Map<String, Object> vitalMeasurementToMap(VitalMeasurement item) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("id", item.getId());
-        data.put("measurementName", item.getMeasurementName());
-        data.put("value", item.getValue());
-        data.put("unit", item.getUnit());
-        data.put("createdAt", item.getCreatedAt());
-        return data;
+    private VisitDepartmentDiagnosisDto visitDepartmentDiagnosisToDto(VisitDepartmentDiagnosis item) {
+        return new VisitDepartmentDiagnosisDto(
+                item.getId(),
+                item.getDiagnosisName(),
+                item.getIcd11Code(),
+                item.getCreatedAt()
+        );
     }
 
-    private Map<String, Object> departmentToMap(Department department) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("id", department.getId());
-        data.put("name", department.getName());
-        data.put("insurancePolicyMode", department.getInsurancePolicyMode());
-        data.put("createdAt", department.getCreatedAt());
-        data.put("updatedAt", department.getUpdatedAt());
-        data.put("nursing", department.isNursing());
-        data.put("supportRequests", department.isSupportRequests());
-        data.put("requestsProducts", department.isRequestsProducts());
-        return data;
+    private VisitDepartmentMedicationDto visitDepartmentMedicationToDto(VisitDepartmentMedication item) {
+        return new VisitDepartmentMedicationDto(
+                item.getId(),
+                item.getMedicationName(),
+                item.getInstructions(),
+                item.getCreatedAt()
+        );
     }
 
-    private Map<String, Object> productToMap(Product product, Set<UUID> visitInsuranceProviderIds) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("id", product.getId());
-        data.put("name", product.getName());
-        data.put("genericName", product.getGenericName());
-        data.put("code", product.getCode());
-        data.put("description", product.getDescription());
-        data.put("type", product.getType());
-        data.put("unit", product.getUnit());
-        data.put("metadata", product.getMetadata());
-        data.put("privateRhicPrice", product.getPrivateRhicPrice());
-        data.put("clinicPrice", product.getClinicPrice());
-        data.put("insuranceCoverages", resolveProductInsuranceCoverages(product, visitInsuranceProviderIds));
-        data.put("createdAt", product.getCreatedAt());
-        data.put("updatedAt", product.getUpdatedAt());
-        return data;
+    private VisitPreInstructionDto visitPreInstructionToDto(VisitPreInstruction pre) {
+        List<VisitPreInstructionMedicationRequestDto> medications = pre.getMedications().stream()
+                .map(m -> new VisitPreInstructionMedicationRequestDto(
+                        m.getId(),
+                        m.getMedName(),
+                        m.getDosage(),
+                        m.getRoute(),
+                        m.getFrequency(),
+                        m.getDuration(),
+                        m.getQuantity(),
+                        m.getOtherInstructions(),
+                        m.getCreatedAt()
+                )).toList();
+
+        List<VisitPreInstructionProductRequestDto> products = pre.getProducts().stream()
+                .map(item -> new VisitPreInstructionProductRequestDto(
+                        item.getId(),
+                        productMapper.toDto(item.getProduct()),
+                        item.getQuantity(),
+                        workerMapper.toDto(item.getRequestedBy()),
+                        item.getStatus(),
+                        workerMapper.toDto(item.getProcessedBy()),
+                        item.getCreatedAt(),
+                        item.getUpdatedAt()
+                )).toList();
+
+        return new VisitPreInstructionDto(
+                pre.getId(),
+                pre.getType(),
+                pre.getNote(),
+                workerMapper.toDto(pre.getAddedBy()),
+                pre.getCreatedAt(),
+                medications,
+                products
+        );
     }
+
+    private VisitVitalSignsGroupDto visitVitalSignsGroupToDto(VisitVitalSignsGroup group) {
+        List<VitalMeasurementDto> measurements = vitalMeasurementRepository.findByGroupIdOrderByCreatedAtAsc(group.getId())
+                .stream()
+                .map(this::vitalMeasurementToDto)
+                .toList();
+
+        return new VisitVitalSignsGroupDto(
+                group.getId(),
+                group.getCreatedAt(),
+                workerMapper.toDto(group.getAddedBy()),
+                measurements
+        );
+    }
+
+    private VitalMeasurementDto vitalMeasurementToDto(VitalMeasurement item) {
+        return new VitalMeasurementDto(
+                item.getId(),
+                item.getMeasurementName(),
+                item.getValue(),
+                item.getUnit(),
+                item.getCreatedAt()
+        );
+    }
+
 
     private Set<UUID> resolveVisitInsuranceProviderIds(UUID visitId) {
         return visitInsuranceRepository.findByVisitId(visitId).stream()
@@ -1504,115 +1486,12 @@ public class VisitService {
                 .collect(Collectors.toSet());
     }
 
-    private List<Map<String, Object>> resolveProductInsuranceCoverages(Product product, Set<UUID> visitInsuranceProviderIds) {
-        if (visitInsuranceProviderIds == null || visitInsuranceProviderIds.isEmpty()) {
-            return List.of();
-        }
 
-        return productInsuranceCoverageRepository.findByProductId(product.getId()).stream()
-                .filter(coverage -> visitInsuranceProviderIds.contains(coverage.getInsuranceProvider().getId()))
-                .map(this::productCoverageToMap)
-                .toList();
-    }
 
-    private Map<String, Object> productCoverageToMap(ProductInsuranceCoverage coverage) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("id", coverage.getId());
-        data.put("insuranceProvider", insuranceProviderToMap(coverage.getInsuranceProvider()));
-        data.put("cost", coverage.getCost());
-        data.put("covered", coverage.isCovered());
-        data.put("requireMedicalAdvisor", coverage.isRequireMedicalAdvisor());
-        data.put("mustPrescribedBy", coverage.getMustPrescribedBy());
-        data.put("drugAdministrationFrequency", coverage.getDrugAdministrationFrequency());
-        data.put("authorizationRequestReasons", new ArrayList<>(coverage.getAuthorizationRequestReasons()));
-        data.put("createdAt", coverage.getCreatedAt());
-        data.put("updatedAt", coverage.getUpdatedAt());
-        return data;
-    }
 
-    private Map<String, Object> workerToMap(Worker worker) {
-        if (worker == null) {
-            return null;
-        }
 
-        Map<String, Object> data = new HashMap<>();
-        data.put("id", worker.getId());
-        data.put("firstName", worker.getFirstName());
-        data.put("lastName", worker.getLastName());
-        data.put("username", worker.getUsername());
-        data.put("email", worker.getEmail());
-        return data;
-    }
 
-    private Map<String, Object> patientToMap(Patient patient) {
-        return patientToMap(patient, true);
-    }
 
-    private Map<String, Object> patientSummaryToMap(Patient patient) {
-        return patientToMap(patient, false);
-    }
-
-    private Map<String, Object> patientToMap(Patient patient, boolean includePatientInsurances) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("id", patient.getId());
-        data.put("firstName", patient.getFirstName());
-        data.put("middleName", patient.getMiddleName());
-        data.put("lastName", patient.getLastName());
-        data.put("fullName", patient.getFullName());
-        data.put("dateOfBirth", patient.getDateOfBirth());
-        data.put("age", patient.getDateOfBirth() == null ? null : Period.between(patient.getDateOfBirth(), LocalDate.now()).getYears());
-        data.put("gender", patient.getGender());
-        data.put("primaryPhoneNumber", patient.getPrimaryPhoneNumber());
-        data.put("alternativePhone", patient.getAlternativePhone());
-        data.put("village", patient.getVillage());
-        data.put("city", patient.getCity());
-        data.put("district", patient.getDistrict());
-        data.put("postalAddress", patient.getPostalAddress());
-        data.put("nationalIdNumber", patient.getNationalIdNumber());
-        data.put("passportNumber", patient.getPassportNumber());
-        data.put("emergencyContactName", patient.getEmergencyContactName());
-        data.put("emergencyContactRelationship", patient.getEmergencyContactRelationship());
-        data.put("emergencyContactPhoneNumber", patient.getEmergencyContactPhoneNumber());
-        data.put(
-            "patientInsurances",
-            includePatientInsurances
-                ? patientInsuranceRepository.findByPatientId(patient.getId()).stream().map(this::patientInsuranceToMap).toList()
-                : List.of()
-        );
-        data.put("createdAt", patient.getCreatedAt());
-        data.put("updatedAt", patient.getUpdatedAt());
-        return data;
-    }
-
-    private Map<String, Object> patientInsuranceToMap(PatientInsurance patientInsurance) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("id", patientInsurance.getId());
-        data.put("patient", patientSummaryToMap(patientInsurance.getPatient()));
-        data.put("insuranceProvider", insuranceProviderToMap(patientInsurance.getInsuranceProvider()));
-        data.put("insuranceCardNumber", patientInsurance.getInsuranceCardNumber());
-        data.put("providingCompanyOrEmployer", patientInsurance.getProvidingCompanyOrEmployer());
-        data.put("principalMember", patientInsurance.isPrincipalMember());
-        data.put("principalMemberName", patientInsurance.getPrincipalMemberName());
-        data.put("principalMemberPhoneNumber", patientInsurance.getPrincipalMemberPhoneNumber());
-        data.put("validFrom", patientInsurance.getValidFrom());
-        data.put("validUntil", patientInsurance.getValidUntil());
-        data.put("createdAt", patientInsurance.getCreatedAt());
-        data.put("updatedAt", patientInsurance.getUpdatedAt());
-        return data;
-    }
-
-    private Map<String, Object> insuranceProviderToMap(InsuranceProvider insuranceProvider) {
-        Map<String, Object> data = new HashMap<>();
-        data.put("id", insuranceProvider.getId());
-        data.put("insuranceName", insuranceProvider.getInsuranceName());
-        data.put("acronym", insuranceProvider.getAcronym());
-        data.put("defaultCoveragePercentage", insuranceProvider.getDefaultCoveragePercentage());
-        data.put("supportedByClinic", insuranceProvider.isSupportedByClinic());
-        data.put("iconUrl", insuranceProvider.getIconUrl());
-        data.put("createdAt", insuranceProvider.getCreatedAt());
-        data.put("updatedAt", insuranceProvider.getUpdatedAt());
-        return data;
-    }
 
     private int normalizePage(Integer page) {
         if (page == null || page < 0) {
@@ -1716,14 +1595,6 @@ public class VisitService {
         return new DateWindow(null, null);
     }
 
-    private Map<String, Object> paginationToMap(Page<?> page) {
-        Map<String, Object> pagination = new HashMap<>();
-        pagination.put("total", page.getTotalElements());
-        pagination.put("perPage", page.getSize());
-        pagination.put("currentPage", page.getNumber());
-        pagination.put("totalPages", page.getTotalPages());
-        return pagination;
-    }
 
     private String blankToNull(String value) {
         if (value == null || value.isBlank()) {
@@ -1754,7 +1625,7 @@ public class VisitService {
         if (requestedProcessorId != null) {
             Worker requestedProcessor = findProcessorById(processors, requestedProcessorId);
             if (requestedProcessor == null) {
-                return ApiResponse.error("processorId must belong to the visit department processors.", "INVALID_PROCESSOR");
+                return ApiResponse.error("processorId must belong to the visit department processors.");
             }
             item.setProcessor(requestedProcessor);
             return null;
@@ -1781,14 +1652,14 @@ public class VisitService {
 
         if (processors.isEmpty()) {
             if (supportRequests) {
-                return ApiResponse.error("processorId is required when supportRequests is enabled.", "VALIDATION_ERROR");
+                return ApiResponse.error("processorId is required when supportRequests is enabled.");
             }
 
             item.setProcessor(null);
             return null;
         }
 
-        return ApiResponse.error("processorId is required when the visit department has multiple processors.", "VALIDATION_ERROR");
+        return ApiResponse.error("processorId is required when the visit department has multiple processors.");
     }
 
     private List<Worker> resolveAvailableProcessorsForProductAssignment(VisitDepartment visitDepartment) {
@@ -1900,29 +1771,29 @@ public class VisitService {
     }
 
     @Transactional
-    public ApiResponse addDiagnosisToVisitDepartment(AddDiagnosisInput input) {
+    public ApiResponse<VisitDepartmentDto> addDiagnosisToVisitDepartment(AddDiagnosisInput input) {
         if (input == null || input.visitDepartmentId() == null || input.diagnosisName() == null || input.diagnosisName().isBlank()) {
-            return ApiResponse.error("visitDepartmentId and diagnosisName are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitDepartmentId and diagnosisName are required.");
         }
 
         UUID visitDeptId;
         try {
             visitDeptId = UUID.fromString(input.visitDepartmentId());
         } catch (IllegalArgumentException e) {
-            return ApiResponse.error("Invalid visitDepartmentId format.", "VALIDATION_ERROR");
+            return ApiResponse.error("Invalid visitDepartmentId format.");
         }
 
         Optional<VisitDepartment> visitDeptOptional = visitDepartmentRepository.findById(visitDeptId);
         if (visitDeptOptional.isEmpty()) {
-            return ApiResponse.error("Visit department not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit department not found.");
         }
 
         VisitDepartment visitDept = visitDeptOptional.get();
         if (visitDept.getStatus() == VisitDepartmentStatus.COMPLETED) {
-            return ApiResponse.error("Cannot add diagnostics to a completed department.", "DEPARTMENT_IS_COMPLETED");
+            return ApiResponse.error("Cannot add diagnostics to a completed department.");
         }
         if (visitDept.getStatus() == VisitDepartmentStatus.CANCELLED) {
-            return ApiResponse.error("Cannot add diagnostics to a cancelled department.", "DEPARTMENT_IS_CANCELLED");
+            return ApiResponse.error("Cannot add diagnostics to a cancelled department.");
         }
 
         VisitDepartmentDiagnosis diagnosis = new VisitDepartmentDiagnosis();
@@ -1931,33 +1802,33 @@ public class VisitService {
         diagnosis.setIcd11Code(input.icd11Code() == null || input.icd11Code().isBlank() ? null : input.icd11Code().trim());
 
         visitDepartmentDiagnosisRepository.save(diagnosis);
-        return ApiResponse.success("Diagnosis added successfully.", visitDepartmentToMap(visitDept));
+        return ApiResponse.success("Diagnosis added successfully.", visitDepartmentToDto(visitDept));
     }
 
     @Transactional
-    public ApiResponse addMedicationToVisitDepartment(AddMedicationInput input) {
+    public ApiResponse<VisitDepartmentDto> addMedicationToVisitDepartment(AddMedicationInput input) {
         if (input == null || input.visitDepartmentId() == null || input.medicationName() == null || input.medicationName().isBlank() || input.instructions() == null || input.instructions().isBlank()) {
-            return ApiResponse.error("visitDepartmentId, medicationName and instructions are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitDepartmentId, medicationName and instructions are required.");
         }
 
         UUID visitDeptId;
         try {
             visitDeptId = UUID.fromString(input.visitDepartmentId());
         } catch (IllegalArgumentException e) {
-            return ApiResponse.error("Invalid visitDepartmentId format.", "VALIDATION_ERROR");
+            return ApiResponse.error("Invalid visitDepartmentId format.");
         }
 
         Optional<VisitDepartment> visitDeptOptional = visitDepartmentRepository.findById(visitDeptId);
         if (visitDeptOptional.isEmpty()) {
-            return ApiResponse.error("Visit department not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit department not found.");
         }
 
         VisitDepartment visitDept = visitDeptOptional.get();
         if (visitDept.getStatus() == VisitDepartmentStatus.COMPLETED) {
-            return ApiResponse.error("Cannot add medication to a completed department.", "DEPARTMENT_IS_COMPLETED");
+            return ApiResponse.error("Cannot add medication to a completed department.");
         }
         if (visitDept.getStatus() == VisitDepartmentStatus.CANCELLED) {
-            return ApiResponse.error("Cannot add medication to a cancelled department.", "DEPARTMENT_IS_CANCELLED");
+            return ApiResponse.error("Cannot add medication to a cancelled department.");
         }
 
         VisitDepartmentMedication medication = new VisitDepartmentMedication();
@@ -1966,6 +1837,6 @@ public class VisitService {
         medication.setInstructions(input.instructions().trim());
 
         visitDepartmentMedicationRepository.save(medication);
-        return ApiResponse.success("Medication added successfully.", visitDepartmentToMap(visitDept));
+        return ApiResponse.success("Medication added successfully.", visitDepartmentToDto(visitDept));
     }
 }

@@ -1,7 +1,9 @@
 package com.nexxserve.nexxclinic.dto.out;
 
+import com.nexxserve.nexxclinic.model.ClinicContactType;
+
 public record ClinicContactDto(
-        String contactType,
+        ClinicContactType contactType,
         String value,
         String description
 ) {}

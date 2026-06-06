@@ -1,12 +1,15 @@
 package com.nexxserve.nexxclinic.entity;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 
 @Embeddable
 public class ClinicMetadata {
 
+    @Column(name = "meta_key")
     private String key;
 
+    @Column(name = "meta_value")
     private String value;
 
     public ClinicMetadata() {}

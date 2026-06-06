@@ -99,21 +99,21 @@ public class VisitBillingService {
     @Transactional
     public ApiResponse billVisit(BillVisitInput input, AuthenticatedUser authUser) {
         if (input == null || input.visitId() == null) {
-            return ApiResponse.error("visitId is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitId is required.");
         }
 
         if (input.departments() == null || input.departments().isEmpty()) {
-            return ApiResponse.error("At least one department is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("At least one department is required.");
         }
 
         Optional<Visit> visitOptional = visitRepository.findById(input.visitId());
         if (visitOptional.isEmpty()) {
-            return ApiResponse.error("Visit not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit not found.");
         }
 
         Visit visit = visitOptional.get();
         if (visit.getStatus() == VisitStatus.CANCELLED) {
-            return ApiResponse.error("Cancelled visits cannot be billed.", "INVALID_VISIT_STATUS_FOR_BILLING");
+            return ApiResponse.error("Cancelled visits cannot be billed.");
         }
 
         List<VisitDepartment> allVisitDepartments = visitDepartmentRepository.findByVisitId(visit.getId());
@@ -126,24 +126,24 @@ public class VisitBillingService {
 
         for (BillVisitInput.BillVisitDepartmentInput departmentInput : input.departments()) {
             if (departmentInput == null || departmentInput.visitDepartmentId() == null) {
-                return ApiResponse.error("Each department entry requires a visitDepartmentId.", "VALIDATION_ERROR");
+                return ApiResponse.error("Each department entry requires a visitDepartmentId.");
             }
 
             VisitDepartment rootVisitDepartment = visitDepartmentsById.get(departmentInput.visitDepartmentId());
             if (rootVisitDepartment == null) {
-                return ApiResponse.error("Visit department not found.", "INVALID_BILLING_SELECTION");
+                return ApiResponse.error("Visit department not found.");
             }
 
             if (!rootVisitDepartment.getVisit().getId().equals(visit.getId())) {
-                return ApiResponse.error("Visit department does not belong to the visit.", "INVALID_BILLING_SELECTION");
+                return ApiResponse.error("Visit department does not belong to the visit.");
             }
 
             if (!isTopLevelDepartment(rootVisitDepartment)) {
-                return ApiResponse.error("visitDepartmentId must reference a top-level department.", "INVALID_BILLING_SELECTION");
+                return ApiResponse.error("visitDepartmentId must reference a top-level department.");
             }
 
             if (rootDepartments.containsKey(rootVisitDepartment.getId())) {
-                return ApiResponse.error("Duplicate visitDepartmentId provided.", "VALIDATION_ERROR");
+                return ApiResponse.error("Duplicate visitDepartmentId provided.");
             }
 
             rootDepartments.put(rootVisitDepartment.getId(), rootVisitDepartment);
@@ -153,10 +153,10 @@ public class VisitBillingService {
             if (departmentInput.payments() != null) {
                 for (BillVisitInput.BillingPaymentInput payment : departmentInput.payments()) {
                     if (payment == null || payment.amount() == null || payment.paymentMethod() == null) {
-                        return ApiResponse.error("Each payment requires amount and paymentMethod.", "VALIDATION_ERROR");
+                        return ApiResponse.error("Each payment requires amount and paymentMethod.");
                     }
                     if (payment.amount().compareTo(ZERO) <= 0) {
-                        return ApiResponse.error("Payment amount must be greater than 0.", "VALIDATION_ERROR");
+                        return ApiResponse.error("Payment amount must be greater than 0.");
                     }
                     totalPaid = toMoney(totalPaid.add(payment.amount()));
                 }
@@ -188,39 +188,39 @@ public class VisitBillingService {
 
         for (BillVisitInput.BillVisitDepartmentInput departmentInput : input.departments()) {
             if (departmentInput.products() == null || departmentInput.products().isEmpty()) {
-                return ApiResponse.error("Each department must contain at least one product to bill.", "VALIDATION_ERROR");
+                return ApiResponse.error("Each department must contain at least one product to bill.");
             }
 
             UUID rootVisitDepartmentId = departmentInput.visitDepartmentId();
             for (BillVisitInput.BillVisitDepartmentProductInput productInput : departmentInput.products()) {
                 if (productInput == null || productInput.visitDepartmentProductId() == null) {
-                    return ApiResponse.error("Each product entry requires visitDepartmentProductId.", "VALIDATION_ERROR");
+                    return ApiResponse.error("Each product entry requires visitDepartmentProductId.");
                 }
 
                 if (requestedProductIds.contains(productInput.visitDepartmentProductId())) {
-                    return ApiResponse.error("Duplicate visitDepartmentProductId provided in request.", "VALIDATION_ERROR");
+                    return ApiResponse.error("Duplicate visitDepartmentProductId provided in request.");
                 }
                 requestedProductIds.add(productInput.visitDepartmentProductId());
 
                 VisitDepartmentProduct item = allProductsById.get(productInput.visitDepartmentProductId());
                 if (item == null || !requiresBilling(item)) {
-                    return ApiResponse.error("Invalid billing selection. Ensure product ids exist and are billable.", "INVALID_BILLING_SELECTION");
+                    return ApiResponse.error("Invalid billing selection. Ensure product ids exist and are billable.");
                 }
 
                 if (productInput.parentVisitDepartmentId() != null
                         && !item.getVisitDepartment().getId().equals(productInput.parentVisitDepartmentId())) {
-                    return ApiResponse.error("Selected product does not belong to the provided parent visit department.", "INVALID_BILLING_SELECTION");
+                    return ApiResponse.error("Selected product does not belong to the provided parent visit department.");
                 }
 
                 if (!isProductUnderRootDepartment(item, rootVisitDepartmentId)) {
-                    return ApiResponse.error("Selected product is not under the requested visit department.", "INVALID_BILLING_SELECTION");
+                    return ApiResponse.error("Selected product is not under the requested visit department.");
                 }
 
                 if (productInput.quantity() != null && productInput.quantity().compareTo(ZERO) <= 0) {
-                    return ApiResponse.error("quantity must be greater than 0.", "VALIDATION_ERROR");
+                    return ApiResponse.error("quantity must be greater than 0.");
                 }
                 if (productInput.unitPrice() != null && productInput.unitPrice().compareTo(ZERO) < 0) {
-                    return ApiResponse.error("unitPrice must be zero or positive.", "VALIDATION_ERROR");
+                    return ApiResponse.error("unitPrice must be zero or positive.");
                 }
 
                 if (productInput.patientInsuranceId() != null) {
@@ -239,7 +239,7 @@ public class VisitBillingService {
                 UUID requestedPatientInsuranceId = requestedInsuranceByItem.get(item.getId());
                 PatientInsurance appliedInsurance = resolveAppliedInsurance(item, requestedPatientInsuranceId, visitInsurancePatientInsuranceIds, visitInsurances);
                 if (requestedPatientInsuranceId != null && appliedInsurance == null) {
-                    return ApiResponse.error("Selected patientInsuranceId is invalid for the visit or does not cover the product.", "INVALID_VISIT_INSURANCE_SELECTION");
+                    return ApiResponse.error("Selected patientInsuranceId is invalid for the visit or does not cover the product.");
                 }
 
                 UUID appliedPatientInsuranceId = appliedInsurance == null ? null : appliedInsurance.getId();
@@ -250,7 +250,7 @@ public class VisitBillingService {
         }
 
         if (grouping.isEmpty()) {
-            return ApiResponse.error("No products eligible for billing.", "NOTHING_TO_BILL");
+            return ApiResponse.error("No products eligible for billing.");
         }
 
         Map<UUID, VisitDepartmentBilling> departmentBillingByRoot = new HashMap<>();
@@ -263,7 +263,7 @@ public class VisitBillingService {
             BillingGroup group = entry.getKey();
             VisitDepartment rootVisitDepartment = visitDepartmentRepository.findById(group.rootVisitDepartmentId()).orElse(null);
             if (rootVisitDepartment == null) {
-                return ApiResponse.error("Root visit department could not be resolved.", "INVALID_BILLING_SELECTION");
+                return ApiResponse.error("Root visit department could not be resolved.");
             }
 
             VisitDepartmentBilling departmentBilling = departmentBillingByRoot.computeIfAbsent(rootVisitDepartment.getId(), key -> {
@@ -397,23 +397,23 @@ public class VisitBillingService {
     @Transactional
     public ApiResponse recordVisitBillingPayment(RecordVisitBillingPaymentInput input, AuthenticatedUser authUser) {
         if (input == null || input.departmentInsuranceBillingId() == null || input.amount() == null || input.paymentMethod() == null) {
-            return ApiResponse.error("departmentInsuranceBillingId, amount and paymentMethod are required.", "VALIDATION_ERROR");
+            return ApiResponse.error("departmentInsuranceBillingId, amount and paymentMethod are required.");
         }
 
         if (input.amount().compareTo(BigDecimal.ZERO) <= 0) {
-            return ApiResponse.error("amount must be greater than 0.", "VALIDATION_ERROR");
+            return ApiResponse.error("amount must be greater than 0.");
         }
 
         Optional<DepartmentInsuranceBilling> billingOptional = departmentInsuranceBillingRepository
                 .findByIdWithDepartmentBillingAndVisit(input.departmentInsuranceBillingId());
         if (billingOptional.isEmpty()) {
-            return ApiResponse.error("Department insurance billing not found.", "NOT_FOUND");
+            return ApiResponse.error("Department insurance billing not found.");
         }
 
         DepartmentInsuranceBilling insuranceBilling = billingOptional.get();
         Visit visit = insuranceBilling.getVisitDepartmentBilling().getVisitBilling().getVisit();
         if (visit != null && visit.getStatus() == VisitStatus.CANCELLED) {
-            return ApiResponse.error("Cancelled visits cannot accept billing payments.", "INVALID_VISIT_STATUS_FOR_BILLING");
+            return ApiResponse.error("Cancelled visits cannot accept billing payments.");
         }
 
         BigDecimal nextPaid = toMoney(insuranceBilling.getPaidAmount().add(input.amount()));
@@ -462,12 +462,12 @@ public class VisitBillingService {
     @Transactional(readOnly = true)
     public ApiResponse visitBilling(UUID visitId) {
         if (visitId == null) {
-            return ApiResponse.error("visitId is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitId is required.");
         }
 
         List<VisitBilling> billings = visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId);
         if (billings.isEmpty()) {
-            return ApiResponse.error("Visit billing not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit billing not found.");
         }
 
         return ApiResponse.success("Visit billing fetched.", visitBillingToMap(billings.get(0)));
@@ -476,11 +476,11 @@ public class VisitBillingService {
     @Transactional(readOnly = true)
     public ApiResponse visitBillings(UUID visitId) {
         if (visitId == null) {
-            return ApiResponse.error("visitId is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("visitId is required.");
         }
 
         if (!visitRepository.existsById(visitId)) {
-            return ApiResponse.error("Visit not found.", "NOT_FOUND");
+            return ApiResponse.error("Visit not found.");
         }
 
         List<Map<String, Object>> billings = visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId)
@@ -494,13 +494,13 @@ public class VisitBillingService {
     @Transactional
     public ApiResponse generateInvoice(UUID departmentInsuranceBillingId, AuthenticatedUser authUser) {
         if (departmentInsuranceBillingId == null) {
-            return ApiResponse.error("departmentInsuranceBillingId is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("departmentInsuranceBillingId is required.");
         }
 
         Optional<DepartmentInsuranceBilling> billingOptional = departmentInsuranceBillingRepository
                 .findByIdWithDepartmentBillingAndVisit(departmentInsuranceBillingId);
         if (billingOptional.isEmpty()) {
-            return ApiResponse.error("Department insurance billing not found.", "NOT_FOUND");
+            return ApiResponse.error("Department insurance billing not found.");
         }
 
         DepartmentInsuranceBilling billing = billingOptional.get();
@@ -533,19 +533,19 @@ public class VisitBillingService {
             Map<String, Object> data = Map.of("invoiceUrl", INVOICE_URL_PATH + filename);
             return ApiResponse.success("Invoice generated successfully.", data);
         } catch (IOException e) {
-            return ApiResponse.error("Failed to generate invoice PDF.", "INVOICE_GENERATION_FAILED");
+            return ApiResponse.error("Failed to generate invoice PDF.");
         }
     }
 
     @Transactional(readOnly = true)
     public ApiResponse getInvoice(UUID departmentInsuranceBillingId) {
         if (departmentInsuranceBillingId == null) {
-            return ApiResponse.error("departmentInsuranceBillingId is required.", "VALIDATION_ERROR");
+            return ApiResponse.error("departmentInsuranceBillingId is required.");
         }
 
         Optional<DepartmentInsuranceBilling> billingOptional = departmentInsuranceBillingRepository.findById(departmentInsuranceBillingId);
         if (billingOptional.isEmpty()) {
-            return ApiResponse.error("Department insurance billing not found.", "NOT_FOUND");
+            return ApiResponse.error("Department insurance billing not found.");
         }
 
         String filename = "invoice-" + departmentInsuranceBillingId + ".pdf";
@@ -555,7 +555,7 @@ public class VisitBillingService {
             return ApiResponse.success("Invoice fetched.", data);
         }
 
-        return ApiResponse.error("Invoice not found. Generate it first.", "INVOICE_NOT_FOUND");
+        return ApiResponse.error("Invoice not found. Generate it first.");
     }
 
     private List<VisitDepartmentProduct> loadVisitDepartmentProducts(UUID visitId) {

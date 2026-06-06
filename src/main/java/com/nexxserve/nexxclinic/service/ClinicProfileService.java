@@ -130,7 +130,7 @@ public class ClinicProfileService {
 
     private ClinicContactDto toContactDto(ClinicContact contact) {
         return new ClinicContactDto(
-                contact.getContactType() == null ? null : contact.getContactType().name(),
+                contact.getContactType(),
                 contact.getValue(),
                 contact.getDescription()
         );
@@ -155,7 +155,7 @@ public class ClinicProfileService {
                     contact.setDescription(blankToNull(input.description()));
                     return contact;
                 })
-                .toList();
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
     }
 
     private void updateMetadata(ClinicProfile profile, List<ClinicMetadataDto> inputs) {

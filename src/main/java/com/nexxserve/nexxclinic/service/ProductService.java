@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.dto.out.ProductDto;
+import com.nexxserve.nexxclinic.dto.out.PaginationDto;
 import com.nexxserve.nexxclinic.dto.out.ProductInsuranceCoverageDto;
 import com.nexxserve.nexxclinic.entity.InsuranceProvider;
 import com.nexxserve.nexxclinic.entity.Product;
@@ -247,7 +248,7 @@ public class ProductService {
         return ApiResponse.success(
                 "Products fetched.",
                 products,
-                new PaginationInfo(
+                new PaginationDto(
                         productPage.getTotalElements(),
                         productPage.getSize(),
                         productPage.getNumber(),
@@ -538,6 +539,4 @@ public class ProductService {
         return Math.min(size, 100);
     }
 
-    // Explicit record for clean signature handling in products pagination wrapper
-    public record PaginationInfo(long total, int perPage, int currentPage, int totalPages) {}
 }
