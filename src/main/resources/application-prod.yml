@@ -1,18 +1,28 @@
+server:
+  port: 8080
+
 spring:
   datasource:
-    url: ${DB_URL:jdbc:postgresql://db:5432/nexxclinic}
-    username: ${DB_USER:nexxclinic_user}
-    password: ${DB_PASSWORD:nexxclinic_pass}
-    driver-class-name: org.postgresql.Driver
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    driver-class-name: ${DB_DRIVER}
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+
     properties:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
+  # Optional but recommended
+  sql:
+    init:
+      mode: never
+
 logging:
   level:
     root: INFO
+    org.hibernate.SQL: DEBUG
