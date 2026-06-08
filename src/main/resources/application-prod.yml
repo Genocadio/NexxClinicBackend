@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: jdbc:postgresql://db:5432/nexxclinic
-    username: nexxclinic_user
-    password: nexxclinic_pass
+    url: ${DB_URL:jdbc:postgresql://db:5432/nexxclinic}
+    username: ${DB_USER:nexxclinic_user}
+    password: ${DB_PASSWORD:nexxclinic_pass}
     driver-class-name: org.postgresql.Driver
 
   jpa:
