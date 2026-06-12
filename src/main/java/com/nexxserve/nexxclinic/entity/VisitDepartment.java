@@ -65,6 +65,9 @@ public class VisitDepartment {
     @OneToMany(mappedBy = "visitDepartment", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<VisitPreInstruction> preInstructions = new ArrayList<>();
 
+    @OneToMany(mappedBy = "visitDepartment", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<VisitDepartmentNote> notes = new ArrayList<>();
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_visit_department_id")
     private VisitDepartment parentVisitDepartment;
@@ -167,6 +170,14 @@ public class VisitDepartment {
 
     public void setPreInstructions(List<VisitPreInstruction> preInstructions) {
         this.preInstructions = preInstructions;
+    }
+
+    public List<VisitDepartmentNote> getNotes() {
+        return notes;
+    }
+
+    public void setNotes(List<VisitDepartmentNote> notes) {
+        this.notes = notes == null ? new ArrayList<>() : new ArrayList<>(notes);
     }
 
     public VisitDepartment getParentVisitDepartment() {

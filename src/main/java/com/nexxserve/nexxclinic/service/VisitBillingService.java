@@ -1,6 +1,7 @@
 package com.nexxserve.nexxclinic.service;
 
 import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
+import com.nexxserve.nexxclinic.entity.ClinicProfile;
 import com.nexxserve.nexxclinic.entity.Department;
 import com.nexxserve.nexxclinic.entity.PatientInsurance;
 import com.nexxserve.nexxclinic.entity.ProductInsuranceCoverage;
@@ -20,6 +21,7 @@ import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.VisitBillingStatus;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
 import com.nexxserve.nexxclinic.model.VisitStatus;
+import com.nexxserve.nexxclinic.repository.ClinicProfileRepository;
 import com.nexxserve.nexxclinic.repository.DepartmentInsuranceBillingRepository;
 import com.nexxserve.nexxclinic.repository.PatientInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.ProductInsuranceCoverageRepository;
@@ -69,6 +71,7 @@ public class VisitBillingService {
     private final DepartmentInsuranceBillingRepository departmentInsuranceBillingRepository;
     private final VisitBillingItemRepository visitBillingItemRepository;
     private final WorkerRepository workerRepository;
+    private final ClinicProfileRepository clinicProfileRepository;
 
     public VisitBillingService(
             VisitRepository visitRepository,
@@ -81,7 +84,8 @@ public class VisitBillingService {
             VisitDepartmentBillingRepository visitDepartmentBillingRepository,
             DepartmentInsuranceBillingRepository departmentInsuranceBillingRepository,
             VisitBillingItemRepository visitBillingItemRepository,
-            WorkerRepository workerRepository
+            WorkerRepository workerRepository,
+            ClinicProfileRepository clinicProfileRepository
     ) {
         this.visitRepository = visitRepository;
         this.visitDepartmentRepository = visitDepartmentRepository;
@@ -94,6 +98,7 @@ public class VisitBillingService {
         this.departmentInsuranceBillingRepository = departmentInsuranceBillingRepository;
         this.visitBillingItemRepository = visitBillingItemRepository;
         this.workerRepository = workerRepository;
+        this.clinicProfileRepository = clinicProfileRepository;
     }
 
     @Transactional
@@ -389,6 +394,7 @@ public class VisitBillingService {
         if (fullyBilled) {
             visit.setStatus(VisitStatus.COMPLETED);
             visitRepository.save(visit);
+            generateInvoicesWhenVisitFullyBilled(visit.getId());
         }
 
         return ApiResponse.success("Visit billed successfully.", visitBillingToMap(savedVisitBilling));
@@ -505,36 +511,63 @@ public class VisitBillingService {
 
         DepartmentInsuranceBilling billing = billingOptional.get();
         Visit visit = billing.getVisitDepartmentBilling().getVisitBilling().getVisit();
+        if (visit == null) {
+            return ApiResponse.error("Visit not found for billing.");
+        }
+
+        if (!isVisitFullyBilled(visit.getId())) {
+            return ApiResponse.error("Invoice can only be generated after all visit products are billed.");
+        }
+
+        if (hasText(billing.getInvoiceUrl())) {
+            Map<String, Object> data = Map.of("invoiceUrl", billing.getInvoiceUrl());
+            return ApiResponse.success("Invoice already exists.", data);
+        }
 
         try {
-            Path invoiceDirectory = Path.of(INVOICE_DIR).toAbsolutePath();
-            Files.createDirectories(invoiceDirectory);
-            String filename = "invoice-" + departmentInsuranceBillingId + ".pdf";
-            Path invoiceFile = invoiceDirectory.resolve(filename);
-
-            if (Files.exists(invoiceFile)) {
-                Map<String, Object> data = Map.of("invoiceUrl", INVOICE_URL_PATH + filename);
-                return ApiResponse.success("Invoice already exists.", data);
-            }
-
-            if (visit != null && visit.getStatus() != VisitStatus.COMPLETED) {
-                visit.setStatus(VisitStatus.COMPLETED);
-                visitRepository.save(visit);
-            }
-
-            List<Map<String, Object>> items = visitBillingItemRepository.findByDepartmentInsuranceBillingIdWithProduct(billing.getId())
-                    .stream()
-                    .map(this::visitBillingItemToMap)
-                    .toList();
-
-            InvoicePdfGenerator.createInvoicePdf(invoiceFile, billing, items);
-            billing.setInvoiceUrl(INVOICE_URL_PATH + filename);
-            departmentInsuranceBillingRepository.save(billing);
-            Map<String, Object> data = Map.of("invoiceUrl", INVOICE_URL_PATH + filename);
+            ClinicProfile clinicProfile = clinicProfileRepository.findFirstByOrderByCreatedAtAsc().orElse(null);
+            String invoiceUrl = generateInvoicePdfFile(billing, clinicProfile);
+            Map<String, Object> data = Map.of("invoiceUrl", invoiceUrl);
             return ApiResponse.success("Invoice generated successfully.", data);
         } catch (IOException e) {
             return ApiResponse.error("Failed to generate invoice PDF.");
         }
+    }
+
+    private void generateInvoicesWhenVisitFullyBilled(UUID visitId) {
+        ClinicProfile clinicProfile = clinicProfileRepository.findFirstByOrderByCreatedAtAsc().orElse(null);
+        for (DepartmentInsuranceBilling billing : departmentInsuranceBillingRepository.findAllByVisitIdWithDetails(visitId)) {
+            if (hasText(billing.getInvoiceUrl())) {
+                continue;
+            }
+            try {
+                generateInvoicePdfFile(billing, clinicProfile);
+            } catch (IOException ignored) {
+                // Billing should remain successful even if PDF generation fails.
+            }
+        }
+    }
+
+    private String generateInvoicePdfFile(DepartmentInsuranceBilling billing, ClinicProfile clinicProfile) throws IOException {
+        Path invoiceDirectory = Path.of(INVOICE_DIR).toAbsolutePath();
+        Files.createDirectories(invoiceDirectory);
+        String filename = "invoice-" + billing.getId() + ".pdf";
+        Path invoiceFile = invoiceDirectory.resolve(filename);
+
+        List<Map<String, Object>> items = visitBillingItemRepository.findByDepartmentInsuranceBillingIdWithProduct(billing.getId())
+                .stream()
+                .map(this::visitBillingItemToMap)
+                .toList();
+
+        InvoicePdfGenerator.createInvoicePdf(invoiceFile, billing, items, clinicProfile);
+        String invoiceUrl = INVOICE_URL_PATH + filename;
+        billing.setInvoiceUrl(invoiceUrl);
+        departmentInsuranceBillingRepository.save(billing);
+        return invoiceUrl;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     @Transactional(readOnly = true)

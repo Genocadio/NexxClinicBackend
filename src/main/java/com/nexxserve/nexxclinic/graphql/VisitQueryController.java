@@ -6,6 +6,7 @@ import com.nexxserve.nexxclinic.graphql.input.SearchVisitsInput;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.security.HasRole;
+import com.nexxserve.nexxclinic.service.VisitDepartmentNoteService;
 import com.nexxserve.nexxclinic.service.VisitService;
 import jakarta.validation.Valid;
 import java.util.UUID;
@@ -18,9 +19,12 @@ import org.springframework.stereotype.Controller;
 public class VisitQueryController {
 
     private final VisitService visitService;
+    private final VisitDepartmentNoteService noteService;
 
-    public VisitQueryController(VisitService visitService) {
+    public VisitQueryController(VisitService visitService, VisitDepartmentNoteService noteService) {
+
         this.visitService = visitService;
+        this.noteService = noteService;
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
@@ -29,7 +33,17 @@ public class VisitQueryController {
             @Argument UUID visitId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.visit(visitId);
+        return visitService.visit(visitId, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
+    @QueryMapping
+    public ApiResponse visitDepartmentNotes(
+            @Argument UUID visitId,
+            @Argument UUID visitDepartmentId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return noteService.visitDepartmentNotes(visitId, visitDepartmentId, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
@@ -38,7 +52,7 @@ public class VisitQueryController {
             @Argument @Valid SearchVisitsInput input,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.visits(input);
+        return visitService.visits(input, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
@@ -48,6 +62,6 @@ public class VisitQueryController {
             @Argument @Valid SearchPatientHistoryInput input,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.getPatientHistory(patientId, input);
+        return visitService.getPatientHistory(patientId, input, authUser);
     }
 }

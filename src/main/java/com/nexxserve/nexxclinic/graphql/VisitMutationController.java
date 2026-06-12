@@ -12,10 +12,13 @@ import com.nexxserve.nexxclinic.graphql.input.AddDiagnosisInput;
 import com.nexxserve.nexxclinic.graphql.input.AddMedicationInput;
 import com.nexxserve.nexxclinic.graphql.input.AddVisitVitalSignsInput;
 import com.nexxserve.nexxclinic.graphql.input.AddVisitPreInstructionsInput;
+import com.nexxserve.nexxclinic.graphql.input.AddVisitDepartmentNoteInput;
 import com.nexxserve.nexxclinic.graphql.input.AddChildVisitDepartmentInput;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.security.HasRole;
+import com.nexxserve.nexxclinic.service.VisitDepartmentNoteService;
+import com.nexxserve.nexxclinic.service.VisitDepartmentService;
 import com.nexxserve.nexxclinic.service.VisitService;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -29,9 +32,13 @@ import org.springframework.stereotype.Controller;
 public class VisitMutationController {
 
     private final VisitService visitService;
+    private final VisitDepartmentService visitDepartmentService;
+    private final VisitDepartmentNoteService noteService;
 
-    public VisitMutationController(VisitService visitService) {
+    public VisitMutationController(VisitService visitService, VisitDepartmentService visitDepartmentService,  VisitDepartmentNoteService noteService) {
         this.visitService = visitService;
+        this.visitDepartmentService = visitDepartmentService;
+        this.noteService = noteService;
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
@@ -60,7 +67,7 @@ public class VisitMutationController {
             @Argument com.nexxserve.nexxclinic.model.EncounterType encounterType,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.addVisitDepartment(visitId, departmentId, encounterType, authUser);
+        return visitDepartmentService.addVisitDepartment(visitId, departmentId, encounterType, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
@@ -70,7 +77,7 @@ public class VisitMutationController {
             @Argument com.nexxserve.nexxclinic.model.EncounterType encounterType,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.updateVisitDepartmentEncounterType(visitDepartmentId, encounterType, authUser);
+        return visitDepartmentService.updateVisitDepartmentEncounterType(visitDepartmentId, encounterType, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
@@ -79,7 +86,7 @@ public class VisitMutationController {
             @Argument @Valid AddChildVisitDepartmentInput input,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.addChildVisitDepartment(input, authUser);
+        return visitDepartmentService.addChildVisitDepartment(input, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
@@ -88,7 +95,7 @@ public class VisitMutationController {
             @Argument UUID visitDepartmentId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.removeChildVisitDepartment(visitDepartmentId, authUser);
+        return visitDepartmentService.removeChildVisitDepartment(visitDepartmentId, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
@@ -98,7 +105,7 @@ public class VisitMutationController {
             @Argument UUID processorId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.addVisitDepartmentProcessor(visitDepartmentId, processorId, authUser);
+        return visitDepartmentService.addVisitDepartmentProcessor(visitDepartmentId, processorId, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
@@ -108,7 +115,7 @@ public class VisitMutationController {
             @Argument UUID processorId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.removeVisitDepartmentProcessor(visitDepartmentId, processorId, authUser);
+        return visitDepartmentService.removeVisitDepartmentProcessor(visitDepartmentId, processorId, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.FINANCE})
@@ -137,7 +144,7 @@ public class VisitMutationController {
             @Argument @Valid UpdateVisitDepartmentStatusInput input,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.updateVisitDepartmentStatus(input, authUser);
+        return visitDepartmentService.updateVisitDepartmentStatus(input, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
@@ -156,7 +163,7 @@ public class VisitMutationController {
             @Argument @Valid CreateVisitDepartmentProductInput input,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.addVisitDepartmentProduct(input, authUser);
+        return visitDepartmentService.addVisitDepartmentProduct(input, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
@@ -165,7 +172,7 @@ public class VisitMutationController {
             @Argument @Valid UpdateVisitDepartmentProductStatusInput input,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.updateVisitDepartmentProductStatus(input, authUser);
+        return visitDepartmentService.updateVisitDepartmentProductStatus(input, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.FINANCE, RoleName.NURSE, RoleName.CLINICIAN})
@@ -174,7 +181,7 @@ public class VisitMutationController {
             @Argument @Valid UpdateVisitDepartmentProductQuantityInput input,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.updateVisitDepartmentProductQuantity(input);
+        return visitDepartmentService.updateVisitDepartmentProductQuantity(input);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
@@ -211,7 +218,7 @@ public class VisitMutationController {
             @Argument UUID visitDepartmentProductId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.removeVisitDepartmentProduct(visitDepartmentProductId);
+        return visitDepartmentService.removeVisitDepartmentProduct(visitDepartmentProductId);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
@@ -220,7 +227,7 @@ public class VisitMutationController {
             @Argument @Valid AddDiagnosisInput input,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.addDiagnosisToVisitDepartment(input);
+        return visitDepartmentService.addDiagnosisToVisitDepartment(input);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
@@ -238,7 +245,7 @@ public class VisitMutationController {
             @Argument @Valid AddVisitPreInstructionsInput input,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.addVisitPreInstructions(input, authUser);
+        return visitDepartmentService.addVisitPreInstructions(input, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
@@ -247,7 +254,34 @@ public class VisitMutationController {
             @Argument @Valid AddMedicationInput input,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.addMedicationToVisitDepartment(input);
+        return visitDepartmentService.addMedicationToVisitDepartment(input);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
+    public ApiResponse addVisitDepartmentNote(
+            @Argument @Valid AddVisitDepartmentNoteInput input,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return noteService.addVisitDepartmentNote(input, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
+    public ApiResponse markVisitDepartmentNoteViewed(
+            @Argument UUID noteId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return noteService.markVisitDepartmentNoteViewed(noteId, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
+    public ApiResponse markVisitDepartmentNotesViewed(
+            @Argument UUID visitDepartmentId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return noteService.markVisitDepartmentNotesViewed(visitDepartmentId, authUser);
     }
 }
 

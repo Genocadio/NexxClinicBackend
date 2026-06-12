@@ -18,6 +18,7 @@ public record VisitDepartmentDto(
         List<VisitDepartmentMedicationDto> medications,
         List<VisitPreInstructionDto> preInstructions,
         List<VisitDepartmentDto> childVisitDepartments,
+        VisitDepartmentNotesSummaryDto notes,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {}

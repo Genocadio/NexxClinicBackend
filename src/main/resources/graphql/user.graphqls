@@ -468,8 +468,47 @@ type VisitDepartment {
   diagnostics: [VisitDepartmentDiagnosis!]
   medications: [VisitDepartmentMedication!]
   preInstructions: [VisitPreInstruction!]!
+  notes: VisitDepartmentNotesSummary!
   createdAt: String!
   updatedAt: String!
+}
+
+type VisitDepartmentNotesSummary {
+  totalNotes: Int!
+  newNotes: Int!
+}
+
+type VisitDepartmentNoteViewer {
+  worker: Worker!
+  viewedAt: String!
+}
+
+type VisitDepartmentNote {
+  id: ID!
+  visitDepartmentId: ID!
+  content: String!
+  createdBy: Worker
+  viewers: [VisitDepartmentNoteViewer!]
+  isNew: Boolean!
+  createdAt: String!
+}
+
+type VisitDepartmentNoteResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: VisitDepartmentNote
+}
+
+type VisitDepartmentNotesListResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: [VisitDepartmentNote!]
+}
+
+type VisitDepartmentNotesSummaryResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: VisitDepartmentNotesSummary
 }
 
 type VisitPreInstructionMedication {
@@ -491,6 +530,14 @@ enum VisitPreInstructionProductStatus {
   REJECTED
 }
 
+
+enum NoteType {
+  BILLLING, # visible under billing only
+  FORMS, # visible to consultation can be assigned under admin
+  CONSULTATION, # visible to consultation can be assigned under billing
+  ADMIN      # visible to admins
+  PUBLIC #visible to every one
+}
 type VisitPreInstructionProduct {
   id: ID!
   product: Product
@@ -1349,6 +1396,7 @@ type Query {
   visit(visitId: ID!): VisitResponse!
   visits(input: SearchVisitsInput): PaginatedVisitResponse!
   getPatientHistory(patientId: ID!, input: SearchPatientHistoryInput): PaginatedVisitResponse!
+  visitDepartmentNotes(visitId: ID!, visitDepartmentId: ID): VisitDepartmentNotesListResponse!
   visitBilling(visitId: ID!): VisitBillingResponse!
   getInvoice(departmentInsuranceBillingId: ID!): InvoiceResponse!
   clinicProfile: ClinicProfileResponse!

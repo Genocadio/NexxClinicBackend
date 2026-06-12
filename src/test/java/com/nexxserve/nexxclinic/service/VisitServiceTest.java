@@ -6,6 +6,8 @@ import com.nexxserve.nexxclinic.dto.out.VisitDto;
 import com.nexxserve.nexxclinic.dto.out.VisitDepartmentProductDto;
 import com.nexxserve.nexxclinic.dto.out.VisitDepartmentDiagnosisDto;
 import com.nexxserve.nexxclinic.dto.out.VisitDepartmentMedicationDto;
+import com.nexxserve.nexxclinic.dto.out.VisitDepartmentNoteDto;
+import com.nexxserve.nexxclinic.dto.out.VisitDepartmentNotesSummaryDto;
 import com.nexxserve.nexxclinic.dto.out.WorkerDto;
 import com.nexxserve.nexxclinic.entity.Department;
 import com.nexxserve.nexxclinic.entity.InsuranceProvider;
@@ -25,6 +27,7 @@ import com.nexxserve.nexxclinic.graphql.input.CreateVisitDepartmentProductInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentStatusInput;
 import com.nexxserve.nexxclinic.graphql.input.AddChildVisitDepartmentInput;
 import com.nexxserve.nexxclinic.graphql.input.AddChildVisitDepartmentProductInput;
+import com.nexxserve.nexxclinic.graphql.input.AddVisitDepartmentNoteInput;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.AccountStatus;
 import com.nexxserve.nexxclinic.model.ResponseStatus;
@@ -342,7 +345,7 @@ class VisitServiceTest {
                 20
         );
 
-        ApiResponse<List<VisitDto>> response = visitService.getPatientHistory(requestedPatientId, input);
+        ApiResponse<List<VisitDto>> response = visitService.getPatientHistory(requestedPatientId, input, null);
         assertEquals(ResponseStatus.SUCCESS, response.status());
         assertNotNull(response.data());
 
@@ -531,5 +534,109 @@ class VisitServiceTest {
         assertEquals(ResponseStatus.SUCCESS, addChildWithProcessorResponse.status());
         assertEquals(2, visitDepartmentRepository.findByParentVisitDepartmentId(visitDepartment.getId()).size());
         assertEquals(1, visitDepartmentProductRepository.findByVisitDepartmentId(children.get(0).getId()).size());
+    }
+
+    @Test
+    void testVisitDepartmentNotesLifecycle() {
+        AuthenticatedUser author = new AuthenticatedUser(
+                processorOne.getId(),
+                processorOne.getUsername(),
+                Set.of(),
+                null,
+                null
+        );
+        AuthenticatedUser reader = new AuthenticatedUser(
+                processorTwo.getId(),
+                processorTwo.getUsername(),
+                Set.of(),
+                null,
+                null
+        );
+        UUID visitId = visitDepartment.getVisit().getId();
+
+        ApiResponse<VisitDepartmentNoteDto> addResponse = visitService.addVisitDepartmentNote(
+                new AddVisitDepartmentNoteInput(visitDepartment.getId(), "Please review labs."),
+                author
+        );
+        assertEquals(ResponseStatus.SUCCESS, addResponse.status());
+        assertEquals("Please review labs.", addResponse.data().content());
+        assertEquals(processorOne.getId(), addResponse.data().createdBy().id());
+        assertFalse(addResponse.data().isNew());
+
+        ApiResponse<VisitDto> visitResponse = visitService.visit(visitId, reader);
+        assertEquals(ResponseStatus.SUCCESS, visitResponse.status());
+        VisitDepartmentDto departmentData = visitResponse.data().departments().get(0);
+        assertEquals(1, departmentData.notes().totalNotes());
+        assertEquals(1, departmentData.notes().newNotes());
+
+        ApiResponse<List<VisitDepartmentNoteDto>> notesResponse = visitService.visitDepartmentNotes(
+                visitId,
+                visitDepartment.getId(),
+                reader
+        );
+        assertEquals(ResponseStatus.SUCCESS, notesResponse.status());
+        assertEquals(1, notesResponse.data().size());
+        assertTrue(notesResponse.data().get(0).isNew());
+
+        ApiResponse<VisitDepartmentNoteDto> viewedResponse = visitService.markVisitDepartmentNoteViewed(
+                addResponse.data().id(),
+                reader
+        );
+        assertEquals(ResponseStatus.SUCCESS, viewedResponse.status());
+        assertFalse(viewedResponse.data().isNew());
+        assertEquals(1, viewedResponse.data().viewers().size());
+        assertEquals(processorTwo.getId(), viewedResponse.data().viewers().get(0).worker().id());
+
+        ApiResponse<VisitDto> visitAfterView = visitService.visit(visitId, reader);
+        assertEquals(0, visitAfterView.data().departments().get(0).notes().newNotes());
+    }
+
+    @Test
+    void testMarkAllVisitDepartmentNotesViewed() {
+        AuthenticatedUser author = new AuthenticatedUser(
+                processorOne.getId(),
+                processorOne.getUsername(),
+                Set.of(),
+                null,
+                null
+        );
+        AuthenticatedUser reader = new AuthenticatedUser(
+                processorTwo.getId(),
+                processorTwo.getUsername(),
+                Set.of(),
+                null,
+                null
+        );
+
+        visitService.addVisitDepartmentNote(
+                new AddVisitDepartmentNoteInput(visitDepartment.getId(), "First note."),
+                author
+        );
+        visitService.addVisitDepartmentNote(
+                new AddVisitDepartmentNoteInput(visitDepartment.getId(), "Second note."),
+                author
+        );
+
+        ApiResponse<VisitDepartmentNotesSummaryDto> markAllResponse = visitService.markVisitDepartmentNotesViewed(
+                visitDepartment.getId(),
+                reader
+        );
+        assertEquals(ResponseStatus.SUCCESS, markAllResponse.status());
+        assertEquals(2, markAllResponse.data().totalNotes());
+        assertEquals(0, markAllResponse.data().newNotes());
+    }
+
+    @Test
+    void testCannotAddNoteToCancelledDepartment() {
+        visitDepartment.setStatus(VisitDepartmentStatus.CANCELLED);
+        visitDepartmentRepository.save(visitDepartment);
+
+        ApiResponse<VisitDepartmentNoteDto> response = visitService.addVisitDepartmentNote(
+                new AddVisitDepartmentNoteInput(visitDepartment.getId(), "Should fail."),
+                new AuthenticatedUser(processorOne.getId(), processorOne.getUsername(), Set.of(), null, null)
+        );
+
+        assertEquals(ResponseStatus.ERROR, response.status());
+        assertTrue(response.message().contains("cancelled"));
     }
 }

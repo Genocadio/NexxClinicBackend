@@ -88,5 +88,34 @@ extend type Mutation {
   For `MEDICATION` items each medication entry must include `medName` (mandatory); other fields are optional.
   """
   addVisitPreInstructions(input: AddVisitPreInstructionsInput!): VisitDepartmentResponse!
+
+  """
+  Add a note to a visit department.
+  Notes are exchanged between users and tracked with creator and viewer metadata.
+  """
+  addVisitDepartmentNote(input: AddVisitDepartmentNoteInput!): VisitDepartmentNoteResponse!
+
+  """
+  Mark a visit department note as viewed by the current user.
+  """
+  markVisitDepartmentNoteViewed(noteId: ID!): VisitDepartmentNoteResponse!
+
+  """
+  Mark all unviewed notes in a visit department as viewed by the current user.
+  """
+  markVisitDepartmentNotesViewed(visitDepartmentId: ID!): VisitDepartmentNotesSummaryResponse!
 }
 
+"""
+Input for adding a note to a visit department.
+"""
+
+input AddVisitDepartmentNoteInput {
+  visitDepartmentId: ID!     # the department where the note is added
+
+  content: String!
+  targetUserId: [ID!]!        # must contain at least one ID and at most 100
+
+  # NEW – explicit type for the note.
+  noteType: NoteType!         # mandatory in this example
+}
