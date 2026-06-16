@@ -67,7 +67,6 @@ public class VisitDepartmentNoteService {
      * @param visitId            required
      * @param visitDepartmentId  optional – narrows results to one department
      * @param noteType           optional – filter by {@link NoteType} enum value
-     * @param targetUserId       optional – return only notes where this worker is a target
      * @param authUser           used to compute the {@code isNew} flag per note
      */
     @Transactional(readOnly = true)
@@ -75,55 +74,52 @@ public class VisitDepartmentNoteService {
             UUID visitId,
             UUID visitDepartmentId,
             NoteType noteType,
-            UUID targetUserId,
             AuthenticatedUser authUser
     ) {
-        if (visitId == null) {
-            return ApiResponse.error("visitId is required.");
-        }
-
-        if (!visitRepository.existsById(visitId)) {
-            return ApiResponse.error("Visit not found.");
-        }
+        if (visitId == null) { return ApiResponse.error("visitId is required."); }
+        if (!visitRepository.existsById(visitId)) { return ApiResponse.error("Visit not found."); }
 
         List<VisitDepartmentNote> notes;
         if (visitDepartmentId != null) {
-            Optional<VisitDepartment> visitDepartmentOptional = visitDepartmentRepository.findById(visitDepartmentId);
-            if (visitDepartmentOptional.isEmpty()) {
-                return ApiResponse.error("Visit department not found.");
-            }
-
-            VisitDepartment visitDepartment = visitDepartmentOptional.get();
-            if (!visitId.equals(visitDepartment.getVisit().getId())) {
-                return ApiResponse.error("Visit department does not belong to the specified visit.");
-            }
-
-            notes = visitDepartmentNoteRepository.findByVisitDepartment_Visit_IdAndVisitDepartment_IdOrderByCreatedAtAsc(
-                    visitId,
-                    visitDepartmentId
-            );
+            VisitDepartment visitDepartment = visitDepartmentRepository.findById(visitDepartmentId)
+                    .filter(vd -> visitId.equals(vd.getVisit().getId()))
+                    .orElseThrow(() -> new RuntimeException("Visit department not found or does not belong to visit."));
+            notes = visitDepartmentNoteRepository
+                    .findByVisitDepartment_Visit_IdAndVisitDepartment_IdOrderByCreatedAtAsc(
+                            visitId, visitDepartmentId);
         } else {
             notes = visitDepartmentNoteRepository.findByVisitDepartment_Visit_IdOrderByCreatedAtAsc(visitId);
         }
 
-        // Apply optional enum filter for noteType
+        // Optional enum filter for noteType
         if (noteType != null) {
             notes = notes.stream()
                     .filter(n -> noteType.equals(n.getNoteType()))
                     .toList();
         }
 
-        // Apply optional targetUser filter
-        if (targetUserId != null) {
+        UUID viewerId = authUser == null ? null : authUser.userId();
+
+        // Visibility filtering: only include notes that are either public (no targetUsers)
+        // or the current user is creator / a member of the target list.
+        if (viewerId != null) {
             notes = notes.stream()
-                    .filter(n -> n.getTargetUsers() != null &&
-                            n.getTargetUsers().stream().anyMatch(w -> targetUserId.equals(w.getId())))
+                    .filter(n -> {
+                        List<Worker> targets = n.getTargetUsers();
+                        if (targets == null || targets.isEmpty()) return true;          // public note
+                        boolean creatorMatch = n.getCreatedBy() != null &&
+                                viewerId.equals(n.getCreatedBy().getId());
+                        boolean inTargets = targets.stream()
+                                .anyMatch(w -> viewerId.equals(w.getId()));
+                        return creatorMatch || inTargets;
+                    })
                     .toList();
         }
 
         List<VisitDepartmentNoteDto> noteDtos = notes.stream()
                 .map(note -> visitDepartmentNoteToDto(note, authUser))
                 .toList();
+
         return ApiResponse.success("Visit department notes fetched.", noteDtos);
     }
 
@@ -137,7 +133,7 @@ public class VisitDepartmentNoteService {
             UUID visitDepartmentId,
             AuthenticatedUser authUser
     ) {
-        return visitDepartmentNotes(visitId, visitDepartmentId, null, null, authUser);
+        return visitDepartmentNotes(visitId, visitDepartmentId, null, authUser);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -376,44 +372,39 @@ public class VisitDepartmentNoteService {
     //  DTO MAPPING
     // ─────────────────────────────────────────────────────────────
 
-    private VisitDepartmentNoteDto visitDepartmentNoteToDto(VisitDepartmentNote note,
-                                                            AuthenticatedUser authUser) {
+    private VisitDepartmentNoteDto visitDepartmentNoteToDto(
+            VisitDepartmentNote note,
+            AuthenticatedUser authUser) {
+
         UUID viewerId = (authUser == null) ? null : authUser.userId();
-        boolean isNew = false;
-        if (viewerId != null) {
-            boolean createdByCurrentUser =
-                    note.getCreatedBy() != null && viewerId.equals(note.getCreatedBy().getId());
-            boolean viewed =
-                    visitDepartmentNoteViewerRepository.existsByNoteIdAndViewerId(note.getId(), viewerId);
-            isNew = !createdByCurrentUser && !viewed;
+
+        // 1️⃣ Was the note explicitly viewed?
+        boolean hasViewed = false;
+        if (viewerId != null && !visitDepartmentNoteViewerRepository
+                .existsByNoteIdAndViewerId(note.getId(), viewerId)) {
+            // not found in the viewers table
+        } else if (viewerId != null) {
+            hasViewed = true;
         }
 
-        List<VisitDepartmentNoteViewerDto> viewers = note.getViewers() == null
-                ? List.of()
-                : note.getViewers().stream()
-                .map(v -> new VisitDepartmentNoteViewerDto(
-                        workerMapper.toDto(v.getViewer()),
-                        v.getViewedAt()))
-                .toList();
+        // 2️⃣ OR – is the current user the creator?
+        if (!hasViewed && viewerId != null
+                && note.getCreatedBy() != null
+                && viewerId.equals(note.getCreatedBy().getId())) {
+            hasViewed = true;          // creator automatically sees it as viewed
+        }
 
-        List<WorkerDto> targetUsers = note.getTargetUsers() == null
-                ? List.of()
-                : note.getTargetUsers().stream()
-                .map(workerMapper::toDto)
-                .toList();
-
-        // **Argument order matches the record declaration!**
         return new VisitDepartmentNoteDto(
                 note.getId(),
                 note.getVisitDepartment().getId(),
                 note.getContent(),
                 workerMapper.toDto(note.getCreatedBy()),
-                viewers,
-                note.getNoteType(),          // <- NoteType
-                targetUsers,                 // <- List<WorkerDto>
-                isNew,                       // <- boolean
-                note.getCreatedAt());         // <- LocalDateTime
+                note.getNoteType(),
+                hasViewed,               // <-- final viewed flag
+                note.getCreatedAt());
     }
+
+
 
 
     // ─────────────────────────────────────────────────────────────

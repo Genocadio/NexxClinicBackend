@@ -1,8 +1,9 @@
 package com.nexxserve.nexxclinic.model;
 
 public enum NoteType {
-    BILLLING,
+    BILLING,
     FORMS,
     CONSULTATION,
-    ADMIN
+    ADMIN,
+    PUBLIC
 }

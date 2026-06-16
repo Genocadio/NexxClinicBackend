@@ -13,7 +13,7 @@ public record AddVisitDepartmentNoteInput(
         UUID visitDepartmentId,
 
         List<UUID> targetUserId,
-        @Size(min = 1, max = 100)
+
         NoteType noteType,
 
         @NotBlank(message = "content is required")

@@ -487,9 +487,9 @@ type VisitDepartmentNote {
   id: ID!
   visitDepartmentId: ID!
   content: String!
-  createdBy: Worker
-  viewers: [VisitDepartmentNoteViewer!]
-  isNew: Boolean!
+  noteType: NoteType!
+  createdBy: Worker!
+  viewed: Boolean!
   createdAt: String!
 }
 
@@ -532,7 +532,7 @@ enum VisitPreInstructionProductStatus {
 
 
 enum NoteType {
-  BILLLING, # visible under billing only
+  BILLING, # visible under billing only
   FORMS, # visible to consultation can be assigned under admin
   CONSULTATION, # visible to consultation can be assigned under billing
   ADMIN      # visible to admins
