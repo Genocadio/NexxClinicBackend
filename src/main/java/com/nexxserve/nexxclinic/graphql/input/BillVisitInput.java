@@ -21,7 +21,9 @@ public record BillVisitInput(
             List<BillVisitDepartmentProductInput> products,
 
             @Valid
-            List<BillingPaymentInput> payments
+            List<BillingPaymentInput> payments,
+
+            String note
     ) {
     }
 

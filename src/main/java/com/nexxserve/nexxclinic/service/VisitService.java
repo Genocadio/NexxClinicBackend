@@ -277,6 +277,58 @@ public class VisitService {
     }
 
     // ─────────────────────────────────────────────────────────────
+    //  LAST PATIENT DEPARTMENT VISIT
+    // ─────────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public ApiResponse<LastPatientDepartmentVisitDto> lastPatientDepartmentVisit(
+            UUID patientId,
+            UUID departmentId,
+            AuthenticatedUser authUser
+    ) {
+        if (patientId == null) {
+            return ApiResponse.error("patientId is required.");
+        }
+        if (departmentId == null) {
+            return ApiResponse.error("departmentId is required.");
+        }
+
+        Optional<Patient> patientOptional = patientRepository.findById(patientId);
+        if (patientOptional.isEmpty()) {
+            return ApiResponse.error("Patient not found.");
+        }
+
+        if (!departmentRepository.existsById(departmentId)) {
+            return ApiResponse.error("Department not found.");
+        }
+
+        // Most recent visit for this patient (any status)
+        List<Visit> lastVisits = visitRepository.findLastVisitsByPatientId(
+                patientId, PageRequest.of(0, 1));
+        VisitDto lastVisitDto = lastVisits.isEmpty()
+                ? null
+                : visitToDto(lastVisits.get(0), Set.of(), authUser);
+
+        // Most recent visit department for this patient in the given department
+        List<VisitDepartment> lastDeptVisits = visitDepartmentRepository.findLastByPatientIdAndDepartmentId(
+                patientId, departmentId, PageRequest.of(0, 1));
+        LastDepartmentVisitInfoDto lastDeptVisitDto = null;
+        if (!lastDeptVisits.isEmpty()) {
+            VisitDepartment vd = lastDeptVisits.get(0);
+            lastDeptVisitDto = new LastDepartmentVisitInfoDto(
+                    vd.getVisit().getId(),
+                    visitDepartmentService.visitDepartmentToDto(vd)
+            );
+        }
+
+        return ApiResponse.success(
+                "Last patient department visit fetched.",
+                new LastPatientDepartmentVisitDto(lastVisitDto, lastDeptVisitDto)
+        );
+    }
+
+
+    // ─────────────────────────────────────────────────────────────
     //  VISIT STATUS TRANSITIONS
     // ─────────────────────────────────────────────────────────────
 

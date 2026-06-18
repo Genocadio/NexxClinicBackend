@@ -16,6 +16,9 @@ spring:
   graphql:
     graphql:
       enabled: true
+supabase:
+  url: https://supa.med.rw
+  service-key: YOUR_SERVICE_ROLE_KEY
 
 logging:
   level:

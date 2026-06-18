@@ -1,23 +1,25 @@
 package com.nexxserve.nexxclinic.service;
 
 import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
+import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.entity.ClinicProfile;
 import com.nexxserve.nexxclinic.entity.Department;
+import com.nexxserve.nexxclinic.entity.DepartmentInsuranceBilling;
 import com.nexxserve.nexxclinic.entity.PatientInsurance;
 import com.nexxserve.nexxclinic.entity.ProductInsuranceCoverage;
-import com.nexxserve.nexxclinic.entity.DepartmentInsuranceBilling;
 import com.nexxserve.nexxclinic.entity.Visit;
 import com.nexxserve.nexxclinic.entity.VisitBilling;
 import com.nexxserve.nexxclinic.entity.VisitBillingItem;
 import com.nexxserve.nexxclinic.entity.VisitBillingPayment;
 import com.nexxserve.nexxclinic.entity.VisitDepartment;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentBilling;
+import com.nexxserve.nexxclinic.entity.VisitDepartmentNote;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
 import com.nexxserve.nexxclinic.entity.VisitInsurance;
 import com.nexxserve.nexxclinic.entity.Worker;
 import com.nexxserve.nexxclinic.graphql.input.BillVisitInput;
 import com.nexxserve.nexxclinic.graphql.input.RecordVisitBillingPaymentInput;
-import com.nexxserve.nexxclinic.dto.out.ApiResponse;
+import com.nexxserve.nexxclinic.model.NoteType;
 import com.nexxserve.nexxclinic.model.VisitBillingStatus;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
 import com.nexxserve.nexxclinic.model.VisitStatus;
@@ -28,6 +30,7 @@ import com.nexxserve.nexxclinic.repository.ProductInsuranceCoverageRepository;
 import com.nexxserve.nexxclinic.repository.VisitBillingItemRepository;
 import com.nexxserve.nexxclinic.repository.VisitBillingRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentBillingRepository;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentNoteRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
 import com.nexxserve.nexxclinic.repository.VisitInsuranceRepository;
@@ -38,7 +41,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -55,10 +57,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class VisitBillingService {
 
-    private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-    private static final String INVOICE_DIR = "invoices";
-    private static final String INVOICE_URL_PATH = "/invoices/";
-    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(
+        2,
+        RoundingMode.HALF_UP
+    );
 
     private final VisitRepository visitRepository;
     private final VisitDepartmentRepository visitDepartmentRepository;
@@ -72,37 +74,50 @@ public class VisitBillingService {
     private final VisitBillingItemRepository visitBillingItemRepository;
     private final WorkerRepository workerRepository;
     private final ClinicProfileRepository clinicProfileRepository;
+    private final VisitDepartmentNoteRepository visitDepartmentNoteRepository;
+    private final SupabaseStorageService supabaseStorageService;
 
     public VisitBillingService(
-            VisitRepository visitRepository,
-            VisitDepartmentRepository visitDepartmentRepository,
-            VisitDepartmentProductRepository visitDepartmentProductRepository,
-            VisitInsuranceRepository visitInsuranceRepository,
-            PatientInsuranceRepository patientInsuranceRepository,
-            ProductInsuranceCoverageRepository productInsuranceCoverageRepository,
-            VisitBillingRepository visitBillingRepository,
-            VisitDepartmentBillingRepository visitDepartmentBillingRepository,
-            DepartmentInsuranceBillingRepository departmentInsuranceBillingRepository,
-            VisitBillingItemRepository visitBillingItemRepository,
-            WorkerRepository workerRepository,
-            ClinicProfileRepository clinicProfileRepository
+        VisitRepository visitRepository,
+        VisitDepartmentRepository visitDepartmentRepository,
+        VisitDepartmentProductRepository visitDepartmentProductRepository,
+        VisitInsuranceRepository visitInsuranceRepository,
+        PatientInsuranceRepository patientInsuranceRepository,
+        ProductInsuranceCoverageRepository productInsuranceCoverageRepository,
+        VisitBillingRepository visitBillingRepository,
+        VisitDepartmentBillingRepository visitDepartmentBillingRepository,
+        DepartmentInsuranceBillingRepository departmentInsuranceBillingRepository,
+        VisitBillingItemRepository visitBillingItemRepository,
+        WorkerRepository workerRepository,
+        ClinicProfileRepository clinicProfileRepository,
+        VisitDepartmentNoteRepository visitDepartmentNoteRepository,
+        SupabaseStorageService supabaseStorageService
     ) {
         this.visitRepository = visitRepository;
         this.visitDepartmentRepository = visitDepartmentRepository;
-        this.visitDepartmentProductRepository = visitDepartmentProductRepository;
+        this.visitDepartmentProductRepository =
+            visitDepartmentProductRepository;
         this.visitInsuranceRepository = visitInsuranceRepository;
         this.patientInsuranceRepository = patientInsuranceRepository;
-        this.productInsuranceCoverageRepository = productInsuranceCoverageRepository;
+        this.productInsuranceCoverageRepository =
+            productInsuranceCoverageRepository;
         this.visitBillingRepository = visitBillingRepository;
-        this.visitDepartmentBillingRepository = visitDepartmentBillingRepository;
-        this.departmentInsuranceBillingRepository = departmentInsuranceBillingRepository;
+        this.visitDepartmentBillingRepository =
+            visitDepartmentBillingRepository;
+        this.departmentInsuranceBillingRepository =
+            departmentInsuranceBillingRepository;
         this.visitBillingItemRepository = visitBillingItemRepository;
         this.workerRepository = workerRepository;
         this.clinicProfileRepository = clinicProfileRepository;
+        this.visitDepartmentNoteRepository = visitDepartmentNoteRepository;
+        this.supabaseStorageService = supabaseStorageService;
     }
 
     @Transactional
-    public ApiResponse billVisit(BillVisitInput input, AuthenticatedUser authUser) {
+    public ApiResponse billVisit(
+        BillVisitInput input,
+        AuthenticatedUser authUser
+    ) {
         if (input == null || input.visitId() == null) {
             return ApiResponse.error("visitId is required.");
         }
@@ -111,7 +126,9 @@ public class VisitBillingService {
             return ApiResponse.error("At least one department is required.");
         }
 
-        Optional<Visit> visitOptional = visitRepository.findById(input.visitId());
+        Optional<Visit> visitOptional = visitRepository.findById(
+            input.visitId()
+        );
         if (visitOptional.isEmpty()) {
             return ApiResponse.error("Visit not found.");
         }
@@ -121,135 +138,262 @@ public class VisitBillingService {
             return ApiResponse.error("Cancelled visits cannot be billed.");
         }
 
-        List<VisitDepartment> allVisitDepartments = visitDepartmentRepository.findByVisitId(visit.getId());
-        Map<UUID, VisitDepartment> visitDepartmentsById = allVisitDepartments.stream()
-                .collect(Collectors.toMap(VisitDepartment::getId, d -> d));
+        List<VisitDepartment> allVisitDepartments =
+            visitDepartmentRepository.findByVisitId(visit.getId());
+        Map<UUID, VisitDepartment> visitDepartmentsById = allVisitDepartments
+            .stream()
+            .collect(Collectors.toMap(VisitDepartment::getId, d -> d));
 
         Map<UUID, VisitDepartment> rootDepartments = new LinkedHashMap<>();
-        Map<UUID, List<BillVisitInput.BillingPaymentInput>> rootPaymentsByDepartment = new HashMap<>();
+        Map<
+            UUID,
+            List<BillVisitInput.BillingPaymentInput>
+        > rootPaymentsByDepartment = new HashMap<>();
         Map<UUID, BigDecimal> remainingPaidByDepartment = new HashMap<>();
 
         for (BillVisitInput.BillVisitDepartmentInput departmentInput : input.departments()) {
-            if (departmentInput == null || departmentInput.visitDepartmentId() == null) {
-                return ApiResponse.error("Each department entry requires a visitDepartmentId.");
+            if (
+                departmentInput == null ||
+                departmentInput.visitDepartmentId() == null
+            ) {
+                return ApiResponse.error(
+                    "Each department entry requires a visitDepartmentId."
+                );
             }
 
-            VisitDepartment rootVisitDepartment = visitDepartmentsById.get(departmentInput.visitDepartmentId());
+            VisitDepartment rootVisitDepartment = visitDepartmentsById.get(
+                departmentInput.visitDepartmentId()
+            );
             if (rootVisitDepartment == null) {
                 return ApiResponse.error("Visit department not found.");
             }
 
             if (!rootVisitDepartment.getVisit().getId().equals(visit.getId())) {
-                return ApiResponse.error("Visit department does not belong to the visit.");
+                return ApiResponse.error(
+                    "Visit department does not belong to the visit."
+                );
             }
 
             if (!isTopLevelDepartment(rootVisitDepartment)) {
-                return ApiResponse.error("visitDepartmentId must reference a top-level department.");
+                return ApiResponse.error(
+                    "visitDepartmentId must reference a top-level department."
+                );
             }
 
             if (rootDepartments.containsKey(rootVisitDepartment.getId())) {
-                return ApiResponse.error("Duplicate visitDepartmentId provided.");
+                return ApiResponse.error(
+                    "Duplicate visitDepartmentId provided."
+                );
             }
 
-            rootDepartments.put(rootVisitDepartment.getId(), rootVisitDepartment);
-            rootPaymentsByDepartment.put(rootVisitDepartment.getId(), departmentInput.payments());
+            rootDepartments.put(
+                rootVisitDepartment.getId(),
+                rootVisitDepartment
+            );
+            rootPaymentsByDepartment.put(
+                rootVisitDepartment.getId(),
+                departmentInput.payments()
+            );
 
             BigDecimal totalPaid = ZERO;
             if (departmentInput.payments() != null) {
                 for (BillVisitInput.BillingPaymentInput payment : departmentInput.payments()) {
-                    if (payment == null || payment.amount() == null || payment.paymentMethod() == null) {
-                        return ApiResponse.error("Each payment requires amount and paymentMethod.");
+                    if (
+                        payment == null ||
+                        payment.amount() == null ||
+                        payment.paymentMethod() == null
+                    ) {
+                        return ApiResponse.error(
+                            "Each payment requires amount and paymentMethod."
+                        );
                     }
                     if (payment.amount().compareTo(ZERO) <= 0) {
-                        return ApiResponse.error("Payment amount must be greater than 0.");
+                        return ApiResponse.error(
+                            "Payment amount must be greater than 0."
+                        );
                     }
                     totalPaid = toMoney(totalPaid.add(payment.amount()));
                 }
             }
 
             if (totalPaid.compareTo(ZERO) > 0) {
-                remainingPaidByDepartment.put(rootVisitDepartment.getId(), totalPaid);
+                remainingPaidByDepartment.put(
+                    rootVisitDepartment.getId(),
+                    totalPaid
+                );
             }
         }
 
-        List<VisitDepartmentProduct> allProducts = loadVisitDepartmentProducts(visit.getId());
-        Map<UUID, VisitDepartmentProduct> allProductsById = allProducts.stream()
-                .collect(Collectors.toMap(VisitDepartmentProduct::getId, p -> p));
+        // Collect notes keyed by visitDepartmentId for later validation and persistence
+        Map<UUID, String> noteByDepartmentId = new HashMap<>();
+        for (BillVisitInput.BillVisitDepartmentInput deptInput : input.departments()) {
+            if (hasText(deptInput.note())) {
+                noteByDepartmentId.put(
+                    deptInput.visitDepartmentId(),
+                    deptInput.note().trim()
+                );
+            }
+        }
+
+        List<VisitDepartmentProduct> allProducts = loadVisitDepartmentProducts(
+            visit.getId()
+        );
+        Map<UUID, VisitDepartmentProduct> allProductsById = allProducts
+            .stream()
+            .collect(Collectors.toMap(VisitDepartmentProduct::getId, p -> p));
 
         Map<UUID, UUID> requestedInsuranceByItem = new LinkedHashMap<>();
-        Map<UUID, java.math.BigDecimal> requestedUnitPriceByItem = new LinkedHashMap<>();
-        Map<UUID, java.math.BigDecimal> requestedQuantityByItem = new LinkedHashMap<>();
+        Map<UUID, java.math.BigDecimal> requestedUnitPriceByItem =
+            new LinkedHashMap<>();
+        Map<UUID, java.math.BigDecimal> requestedQuantityByItem =
+            new LinkedHashMap<>();
         Map<UUID, Boolean> requestedExemptedByItem = new LinkedHashMap<>();
         Set<UUID> requestedProductIds = new LinkedHashSet<>();
 
-        List<VisitInsurance> visitInsurances = visitInsuranceRepository.findByVisitId(visit.getId());
-        Set<UUID> visitInsurancePatientInsuranceIds = visitInsurances.stream()
-                .map(v -> v.getPatientInsurance().getId())
-                .collect(Collectors.toSet());
+        List<VisitInsurance> visitInsurances =
+            visitInsuranceRepository.findByVisitId(visit.getId());
+        Set<UUID> visitInsurancePatientInsuranceIds = visitInsurances
+            .stream()
+            .map(v -> v.getPatientInsurance().getId())
+            .collect(Collectors.toSet());
 
         Worker actingUser = resolveWorker(authUser);
         Map<UUID, PatientInsurance> appliedInsuranceByItem = new HashMap<>();
-        Map<BillingGroup, List<VisitDepartmentProduct>> grouping = new LinkedHashMap<>();
+        Map<BillingGroup, List<VisitDepartmentProduct>> grouping =
+            new LinkedHashMap<>();
 
         for (BillVisitInput.BillVisitDepartmentInput departmentInput : input.departments()) {
-            if (departmentInput.products() == null || departmentInput.products().isEmpty()) {
-                return ApiResponse.error("Each department must contain at least one product to bill.");
+            if (
+                departmentInput.products() == null ||
+                departmentInput.products().isEmpty()
+            ) {
+                return ApiResponse.error(
+                    "Each department must contain at least one product to bill."
+                );
             }
 
             UUID rootVisitDepartmentId = departmentInput.visitDepartmentId();
             for (BillVisitInput.BillVisitDepartmentProductInput productInput : departmentInput.products()) {
-                if (productInput == null || productInput.visitDepartmentProductId() == null) {
-                    return ApiResponse.error("Each product entry requires visitDepartmentProductId.");
+                if (
+                    productInput == null ||
+                    productInput.visitDepartmentProductId() == null
+                ) {
+                    return ApiResponse.error(
+                        "Each product entry requires visitDepartmentProductId."
+                    );
                 }
 
-                if (requestedProductIds.contains(productInput.visitDepartmentProductId())) {
-                    return ApiResponse.error("Duplicate visitDepartmentProductId provided in request.");
+                if (
+                    requestedProductIds.contains(
+                        productInput.visitDepartmentProductId()
+                    )
+                ) {
+                    return ApiResponse.error(
+                        "Duplicate visitDepartmentProductId provided in request."
+                    );
                 }
-                requestedProductIds.add(productInput.visitDepartmentProductId());
+                requestedProductIds.add(
+                    productInput.visitDepartmentProductId()
+                );
 
-                VisitDepartmentProduct item = allProductsById.get(productInput.visitDepartmentProductId());
+                VisitDepartmentProduct item = allProductsById.get(
+                    productInput.visitDepartmentProductId()
+                );
                 if (item == null || !requiresBilling(item)) {
-                    return ApiResponse.error("Invalid billing selection. Ensure product ids exist and are billable.");
+                    return ApiResponse.error(
+                        "Invalid billing selection. Ensure product ids exist and are billable."
+                    );
                 }
 
-                if (productInput.parentVisitDepartmentId() != null
-                        && !item.getVisitDepartment().getId().equals(productInput.parentVisitDepartmentId())) {
-                    return ApiResponse.error("Selected product does not belong to the provided parent visit department.");
+                if (
+                    productInput.parentVisitDepartmentId() != null &&
+                    !item
+                        .getVisitDepartment()
+                        .getId()
+                        .equals(productInput.parentVisitDepartmentId())
+                ) {
+                    return ApiResponse.error(
+                        "Selected product does not belong to the provided parent visit department."
+                    );
                 }
 
-                if (!isProductUnderRootDepartment(item, rootVisitDepartmentId)) {
-                    return ApiResponse.error("Selected product is not under the requested visit department.");
+                if (
+                    !isProductUnderRootDepartment(item, rootVisitDepartmentId)
+                ) {
+                    return ApiResponse.error(
+                        "Selected product is not under the requested visit department."
+                    );
                 }
 
-                if (productInput.quantity() != null && productInput.quantity().compareTo(ZERO) <= 0) {
-                    return ApiResponse.error("quantity must be greater than 0.");
+                if (
+                    productInput.quantity() != null &&
+                    productInput.quantity().compareTo(ZERO) <= 0
+                ) {
+                    return ApiResponse.error(
+                        "quantity must be greater than 0."
+                    );
                 }
-                if (productInput.unitPrice() != null && productInput.unitPrice().compareTo(ZERO) < 0) {
-                    return ApiResponse.error("unitPrice must be zero or positive.");
+                if (
+                    productInput.unitPrice() != null &&
+                    productInput.unitPrice().compareTo(ZERO) < 0
+                ) {
+                    return ApiResponse.error(
+                        "unitPrice must be zero or positive."
+                    );
                 }
 
                 if (productInput.patientInsuranceId() != null) {
-                    requestedInsuranceByItem.put(item.getId(), productInput.patientInsuranceId());
+                    requestedInsuranceByItem.put(
+                        item.getId(),
+                        productInput.patientInsuranceId()
+                    );
                 }
                 if (productInput.quantity() != null) {
-                    requestedQuantityByItem.put(item.getId(), productInput.quantity());
+                    requestedQuantityByItem.put(
+                        item.getId(),
+                        productInput.quantity()
+                    );
                 }
                 if (productInput.unitPrice() != null) {
-                    requestedUnitPriceByItem.put(item.getId(), productInput.unitPrice());
+                    requestedUnitPriceByItem.put(
+                        item.getId(),
+                        productInput.unitPrice()
+                    );
                 }
                 if (productInput.isExempted() != null) {
-                    requestedExemptedByItem.put(item.getId(), productInput.isExempted());
+                    requestedExemptedByItem.put(
+                        item.getId(),
+                        productInput.isExempted()
+                    );
                 }
 
-                UUID requestedPatientInsuranceId = requestedInsuranceByItem.get(item.getId());
-                PatientInsurance appliedInsurance = resolveAppliedInsurance(item, requestedPatientInsuranceId, visitInsurancePatientInsuranceIds, visitInsurances);
-                if (requestedPatientInsuranceId != null && appliedInsurance == null) {
-                    return ApiResponse.error("Selected patientInsuranceId is invalid for the visit or does not cover the product.");
+                UUID requestedPatientInsuranceId = requestedInsuranceByItem.get(
+                    item.getId()
+                );
+                PatientInsurance appliedInsurance = resolveAppliedInsurance(
+                    item,
+                    requestedPatientInsuranceId,
+                    visitInsurancePatientInsuranceIds,
+                    visitInsurances
+                );
+                if (
+                    requestedPatientInsuranceId != null &&
+                    appliedInsurance == null
+                ) {
+                    return ApiResponse.error(
+                        "Selected patientInsuranceId is invalid for the visit or does not cover the product."
+                    );
                 }
 
-                UUID appliedPatientInsuranceId = appliedInsurance == null ? null : appliedInsurance.getId();
-                BillingGroup group = new BillingGroup(rootVisitDepartmentId, appliedPatientInsuranceId);
-                grouping.computeIfAbsent(group, key -> new ArrayList<>()).add(item);
+                UUID appliedPatientInsuranceId =
+                    appliedInsurance == null ? null : appliedInsurance.getId();
+                BillingGroup group = new BillingGroup(
+                    rootVisitDepartmentId,
+                    appliedPatientInsuranceId
+                );
+                grouping
+                    .computeIfAbsent(group, key -> new ArrayList<>())
+                    .add(item);
                 appliedInsuranceByItem.put(item.getId(), appliedInsurance);
             }
         }
@@ -258,36 +402,57 @@ public class VisitBillingService {
             return ApiResponse.error("No products eligible for billing.");
         }
 
-        Map<UUID, VisitDepartmentBilling> departmentBillingByRoot = new HashMap<>();
+        Set<UUID> exemptedRootDepartmentIds = new LinkedHashSet<>();
+        Map<UUID, VisitDepartmentBilling> departmentBillingByRoot =
+            new HashMap<>();
         List<VisitDepartmentProduct> productsToSave = new ArrayList<>();
 
         VisitBilling visitBilling = new VisitBilling();
         visitBilling.setVisit(visit);
 
-        for (Map.Entry<BillingGroup, List<VisitDepartmentProduct>> entry : grouping.entrySet()) {
+        for (Map.Entry<
+            BillingGroup,
+            List<VisitDepartmentProduct>
+        > entry : grouping.entrySet()) {
             BillingGroup group = entry.getKey();
-            VisitDepartment rootVisitDepartment = visitDepartmentRepository.findById(group.rootVisitDepartmentId()).orElse(null);
+            VisitDepartment rootVisitDepartment = visitDepartmentRepository
+                .findById(group.rootVisitDepartmentId())
+                .orElse(null);
             if (rootVisitDepartment == null) {
-                return ApiResponse.error("Root visit department could not be resolved.");
+                return ApiResponse.error(
+                    "Root visit department could not be resolved."
+                );
             }
 
-            VisitDepartmentBilling departmentBilling = departmentBillingByRoot.computeIfAbsent(rootVisitDepartment.getId(), key -> {
-                VisitDepartmentBilling billing = new VisitDepartmentBilling();
-                billing.setVisitBilling(visitBilling);
-                billing.setVisitDepartment(rootVisitDepartment);
-                billing.setStatus(VisitBillingStatus.UNPAID);
-                billing.setTotalAmount(ZERO);
-                billing.setInsuranceCoveredAmount(ZERO);
-                billing.setPatientPayableAmount(ZERO);
-                billing.setPaidAmount(ZERO);
-                billing.setOutstandingAmount(ZERO);
-                visitBilling.getDepartments().add(billing);
-                return billing;
-            });
+            VisitDepartmentBilling departmentBilling =
+                departmentBillingByRoot.computeIfAbsent(
+                    rootVisitDepartment.getId(),
+                    key -> {
+                        VisitDepartmentBilling billing =
+                            new VisitDepartmentBilling();
+                        billing.setVisitBilling(visitBilling);
+                        billing.setVisitDepartment(rootVisitDepartment);
+                        billing.setStatus(VisitBillingStatus.UNPAID);
+                        billing.setTotalAmount(ZERO);
+                        billing.setInsuranceCoveredAmount(ZERO);
+                        billing.setPatientPayableAmount(ZERO);
+                        billing.setPaidAmount(ZERO);
+                        billing.setOutstandingAmount(ZERO);
+                        visitBilling.getDepartments().add(billing);
+                        return billing;
+                    }
+                );
 
-            DepartmentInsuranceBilling insuranceBilling = new DepartmentInsuranceBilling();
+            DepartmentInsuranceBilling insuranceBilling =
+                new DepartmentInsuranceBilling();
             insuranceBilling.setVisitDepartmentBilling(departmentBilling);
-            insuranceBilling.setPatientInsurance(group.patientInsuranceId() == null ? null : patientInsuranceRepository.findById(group.patientInsuranceId()).orElse(null));
+            insuranceBilling.setPatientInsurance(
+                group.patientInsuranceId() == null
+                    ? null
+                    : patientInsuranceRepository
+                          .findById(group.patientInsuranceId())
+                          .orElse(null)
+            );
             insuranceBilling.setStatus(VisitBillingStatus.UNPAID);
             insuranceBilling.setTotalAmount(ZERO);
             insuranceBilling.setInsuranceCoveredAmount(ZERO);
@@ -296,10 +461,12 @@ public class VisitBillingService {
             insuranceBilling.setOutstandingAmount(ZERO);
             departmentBilling.getInsuranceBillings().add(insuranceBilling);
 
-            List<BillVisitInput.BillingPaymentInput> payments = rootPaymentsByDepartment.get(rootVisitDepartment.getId());
+            List<BillVisitInput.BillingPaymentInput> payments =
+                rootPaymentsByDepartment.get(rootVisitDepartment.getId());
             if (payments != null) {
                 for (BillVisitInput.BillingPaymentInput payment : payments) {
-                    VisitBillingPayment billingPayment = new VisitBillingPayment();
+                    VisitBillingPayment billingPayment =
+                        new VisitBillingPayment();
                     billingPayment.setVisitDepartmentBilling(departmentBilling);
                     billingPayment.setAmount(toMoney(payment.amount()));
                     billingPayment.setPaymentMethod(payment.paymentMethod());
@@ -313,14 +480,27 @@ public class VisitBillingService {
             BigDecimal patientPayable = ZERO;
 
             for (VisitDepartmentProduct item : entry.getValue()) {
-                PatientInsurance appliedInsurance = appliedInsuranceByItem.get(item.getId());
-                boolean isExempted = Boolean.TRUE.equals(requestedExemptedByItem.get(item.getId()));
-                BigDecimal unitPrice = requestedUnitPriceByItem.containsKey(item.getId())
-                        ? toMoney(requestedUnitPriceByItem.get(item.getId()))
-                        : toMoney(item.getPrice());
-                BigDecimal quantity = requestedQuantityByItem.containsKey(item.getId())
-                        ? toQuantity(requestedQuantityByItem.get(item.getId()))
-                        : toQuantity(item.getQuantity());
+                PatientInsurance appliedInsurance = appliedInsuranceByItem.get(
+                    item.getId()
+                );
+                boolean isExempted = Boolean.TRUE.equals(
+                    requestedExemptedByItem.get(item.getId())
+                );
+                if (isExempted) {
+                    exemptedRootDepartmentIds.add(
+                        group.rootVisitDepartmentId()
+                    );
+                }
+                BigDecimal unitPrice = requestedUnitPriceByItem.containsKey(
+                    item.getId()
+                )
+                    ? toMoney(requestedUnitPriceByItem.get(item.getId()))
+                    : toMoney(item.getPrice());
+                BigDecimal quantity = requestedQuantityByItem.containsKey(
+                    item.getId()
+                )
+                    ? toQuantity(requestedQuantityByItem.get(item.getId()))
+                    : toQuantity(item.getQuantity());
 
                 BigDecimal lineTotal;
                 BigDecimal coveredAmount;
@@ -334,7 +514,12 @@ public class VisitBillingService {
                     patientAmount = ZERO;
                 } else {
                     lineTotal = toMoney(unitPrice.multiply(quantity));
-                    coveredAmount = calculateCoveredAmount(item, appliedInsurance, quantity, lineTotal);
+                    coveredAmount = calculateCoveredAmount(
+                        item,
+                        appliedInsurance,
+                        quantity,
+                        lineTotal
+                    );
                     patientAmount = toMoney(lineTotal.subtract(coveredAmount));
                 }
 
@@ -362,33 +547,112 @@ public class VisitBillingService {
                 productsToSave.add(item);
             }
 
-            BigDecimal remainingPaidAmount = remainingPaidByDepartment.getOrDefault(group.rootVisitDepartmentId(), ZERO);
+            BigDecimal remainingPaidAmount =
+                remainingPaidByDepartment.getOrDefault(
+                    group.rootVisitDepartmentId(),
+                    ZERO
+                );
             BigDecimal paidAmount = ZERO;
             if (remainingPaidAmount.compareTo(ZERO) > 0) {
-                paidAmount = remainingPaidAmount.compareTo(patientPayable) >= 0
+                paidAmount =
+                    remainingPaidAmount.compareTo(patientPayable) >= 0
                         ? patientPayable
                         : remainingPaidAmount;
-                remainingPaidByDepartment.put(group.rootVisitDepartmentId(), toMoney(remainingPaidAmount.subtract(paidAmount)));
+                remainingPaidByDepartment.put(
+                    group.rootVisitDepartmentId(),
+                    toMoney(remainingPaidAmount.subtract(paidAmount))
+                );
             }
 
-            BigDecimal outstanding = toMoney(patientPayable.subtract(paidAmount));
+            BigDecimal outstanding = toMoney(
+                patientPayable.subtract(paidAmount)
+            );
             insuranceBilling.setTotalAmount(total);
             insuranceBilling.setInsuranceCoveredAmount(insuranceCovered);
             insuranceBilling.setPatientPayableAmount(patientPayable);
             insuranceBilling.setPaidAmount(paidAmount);
             insuranceBilling.setOutstandingAmount(outstanding);
-            insuranceBilling.setStatus(resolveBillingStatus(paidAmount, patientPayable));
+            insuranceBilling.setStatus(
+                resolveBillingStatus(paidAmount, patientPayable)
+            );
 
-            departmentBilling.setTotalAmount(toMoney(departmentBilling.getTotalAmount().add(total)));
-            departmentBilling.setInsuranceCoveredAmount(toMoney(departmentBilling.getInsuranceCoveredAmount().add(insuranceCovered)));
-            departmentBilling.setPatientPayableAmount(toMoney(departmentBilling.getPatientPayableAmount().add(patientPayable)));
-            departmentBilling.setPaidAmount(toMoney(departmentBilling.getPaidAmount().add(paidAmount)));
-            departmentBilling.setOutstandingAmount(toMoney(departmentBilling.getOutstandingAmount().add(outstanding)));
-            departmentBilling.setStatus(resolveBillingStatus(departmentBilling.getPaidAmount(), departmentBilling.getPatientPayableAmount()));
+            departmentBilling.setTotalAmount(
+                toMoney(departmentBilling.getTotalAmount().add(total))
+            );
+            departmentBilling.setInsuranceCoveredAmount(
+                toMoney(
+                    departmentBilling
+                        .getInsuranceCoveredAmount()
+                        .add(insuranceCovered)
+                )
+            );
+            departmentBilling.setPatientPayableAmount(
+                toMoney(
+                    departmentBilling
+                        .getPatientPayableAmount()
+                        .add(patientPayable)
+                )
+            );
+            departmentBilling.setPaidAmount(
+                toMoney(departmentBilling.getPaidAmount().add(paidAmount))
+            );
+            departmentBilling.setOutstandingAmount(
+                toMoney(
+                    departmentBilling.getOutstandingAmount().add(outstanding)
+                )
+            );
+            departmentBilling.setStatus(
+                resolveBillingStatus(
+                    departmentBilling.getPaidAmount(),
+                    departmentBilling.getPatientPayableAmount()
+                )
+            );
         }
 
-        VisitBilling savedVisitBilling = visitBillingRepository.save(visitBilling);
+        // Validate billing notes before persisting: required when any product is exempted
+        // or when the patient payment is less than the full payable amount.
+        for (Map.Entry<
+            UUID,
+            VisitDepartmentBilling
+        > noteEntry : departmentBillingByRoot.entrySet()) {
+            UUID rootDeptId = noteEntry.getKey();
+            VisitDepartmentBilling deptBilling = noteEntry.getValue();
+            boolean requiresNote =
+                exemptedRootDepartmentIds.contains(rootDeptId) ||
+                deptBilling.getOutstandingAmount().compareTo(ZERO) > 0;
+            if (requiresNote && !hasText(noteByDepartmentId.get(rootDeptId))) {
+                return ApiResponse.error(
+                    "A billing note is required when items are exempted or the patient payment is less than the payable amount."
+                );
+            }
+        }
+
+        VisitBilling savedVisitBilling = visitBillingRepository.save(
+            visitBilling
+        );
         visitDepartmentProductRepository.saveAll(productsToSave);
+
+        // Persist billing notes attached to the relevant visit department
+        for (Map.Entry<
+            UUID,
+            VisitDepartmentBilling
+        > noteEntry : departmentBillingByRoot.entrySet()) {
+            UUID rootDeptId = noteEntry.getKey();
+            String note = noteByDepartmentId.get(rootDeptId);
+            if (hasText(note)) {
+                VisitDepartment dept = visitDepartmentRepository
+                    .findById(rootDeptId)
+                    .orElse(null);
+                if (dept != null) {
+                    VisitDepartmentNote billingNote = new VisitDepartmentNote();
+                    billingNote.setVisitDepartment(dept);
+                    billingNote.setContent(note);
+                    billingNote.setCreatedBy(actingUser);
+                    billingNote.setNoteType(NoteType.BILLING);
+                    visitDepartmentNoteRepository.save(billingNote);
+                }
+            }
+        }
 
         boolean fullyBilled = isVisitFullyBilled(visit.getId());
         if (fullyBilled) {
@@ -397,41 +661,97 @@ public class VisitBillingService {
             generateInvoicesWhenVisitFullyBilled(visit.getId());
         }
 
-        return ApiResponse.success("Visit billed successfully.", visitBillingToMap(savedVisitBilling));
+        return ApiResponse.success(
+            "Visit billed successfully.",
+            visitBillingToMap(savedVisitBilling)
+        );
     }
 
     @Transactional
-    public ApiResponse recordVisitBillingPayment(RecordVisitBillingPaymentInput input, AuthenticatedUser authUser) {
-        if (input == null || input.departmentInsuranceBillingId() == null || input.amount() == null || input.paymentMethod() == null) {
-            return ApiResponse.error("departmentInsuranceBillingId, amount and paymentMethod are required.");
+    public ApiResponse recordVisitBillingPayment(
+        RecordVisitBillingPaymentInput input,
+        AuthenticatedUser authUser
+    ) {
+        if (
+            input == null ||
+            input.departmentInsuranceBillingId() == null ||
+            input.amount() == null ||
+            input.paymentMethod() == null
+        ) {
+            return ApiResponse.error(
+                "departmentInsuranceBillingId, amount and paymentMethod are required."
+            );
         }
 
         if (input.amount().compareTo(BigDecimal.ZERO) <= 0) {
             return ApiResponse.error("amount must be greater than 0.");
         }
 
-        Optional<DepartmentInsuranceBilling> billingOptional = departmentInsuranceBillingRepository
-                .findByIdWithDepartmentBillingAndVisit(input.departmentInsuranceBillingId());
+        Optional<DepartmentInsuranceBilling> billingOptional =
+            departmentInsuranceBillingRepository.findByIdWithDepartmentBillingAndVisit(
+                input.departmentInsuranceBillingId()
+            );
         if (billingOptional.isEmpty()) {
             return ApiResponse.error("Department insurance billing not found.");
         }
 
         DepartmentInsuranceBilling insuranceBilling = billingOptional.get();
-        Visit visit = insuranceBilling.getVisitDepartmentBilling().getVisitBilling().getVisit();
+        Visit visit = insuranceBilling
+            .getVisitDepartmentBilling()
+            .getVisitBilling()
+            .getVisit();
         if (visit != null && visit.getStatus() == VisitStatus.CANCELLED) {
-            return ApiResponse.error("Cancelled visits cannot accept billing payments.");
+            return ApiResponse.error(
+                "Cancelled visits cannot accept billing payments."
+            );
         }
 
-        BigDecimal nextPaid = toMoney(insuranceBilling.getPaidAmount().add(input.amount()));
-        if (nextPaid.compareTo(insuranceBilling.getPatientPayableAmount()) > 0) {
+        // Validate note requirement: mandatory when payment leaves an outstanding balance
+        BigDecimal candidatePaid = toMoney(
+            insuranceBilling.getPaidAmount().add(input.amount())
+        );
+        if (
+            candidatePaid.compareTo(
+                insuranceBilling.getPatientPayableAmount()
+            ) > 0
+        ) {
+            candidatePaid = insuranceBilling.getPatientPayableAmount();
+        }
+        if (
+            candidatePaid.compareTo(
+                insuranceBilling.getPatientPayableAmount()
+            ) < 0 &&
+            !hasText(input.note())
+        ) {
+            return ApiResponse.error(
+                "A billing note is required when the payment does not cover the full outstanding amount."
+            );
+        }
+
+        BigDecimal nextPaid = toMoney(
+            insuranceBilling.getPaidAmount().add(input.amount())
+        );
+        if (
+            nextPaid.compareTo(insuranceBilling.getPatientPayableAmount()) > 0
+        ) {
             nextPaid = insuranceBilling.getPatientPayableAmount();
         }
 
         insuranceBilling.setPaidAmount(nextPaid);
-        insuranceBilling.setOutstandingAmount(toMoney(insuranceBilling.getPatientPayableAmount().subtract(nextPaid)));
-        insuranceBilling.setStatus(resolveBillingStatus(nextPaid, insuranceBilling.getPatientPayableAmount()));
+        insuranceBilling.setOutstandingAmount(
+            toMoney(
+                insuranceBilling.getPatientPayableAmount().subtract(nextPaid)
+            )
+        );
+        insuranceBilling.setStatus(
+            resolveBillingStatus(
+                nextPaid,
+                insuranceBilling.getPatientPayableAmount()
+            )
+        );
 
-        VisitDepartmentBilling departmentBilling = insuranceBilling.getVisitDepartmentBilling();
+        VisitDepartmentBilling departmentBilling =
+            insuranceBilling.getVisitDepartmentBilling();
         VisitBillingPayment billingPayment = new VisitBillingPayment();
         billingPayment.setVisitDepartmentBilling(departmentBilling);
         billingPayment.setAmount(toMoney(input.amount()));
@@ -447,11 +767,21 @@ public class VisitBillingService {
         BigDecimal outstandingAmount = ZERO;
 
         for (DepartmentInsuranceBilling childBilling : departmentBilling.getInsuranceBillings()) {
-            totalAmount = toMoney(totalAmount.add(childBilling.getTotalAmount()));
-            insuranceCoveredAmount = toMoney(insuranceCoveredAmount.add(childBilling.getInsuranceCoveredAmount()));
-            patientPayableAmount = toMoney(patientPayableAmount.add(childBilling.getPatientPayableAmount()));
+            totalAmount = toMoney(
+                totalAmount.add(childBilling.getTotalAmount())
+            );
+            insuranceCoveredAmount = toMoney(
+                insuranceCoveredAmount.add(
+                    childBilling.getInsuranceCoveredAmount()
+                )
+            );
+            patientPayableAmount = toMoney(
+                patientPayableAmount.add(childBilling.getPatientPayableAmount())
+            );
             paidAmount = toMoney(paidAmount.add(childBilling.getPaidAmount()));
-            outstandingAmount = toMoney(outstandingAmount.add(childBilling.getOutstandingAmount()));
+            outstandingAmount = toMoney(
+                outstandingAmount.add(childBilling.getOutstandingAmount())
+            );
         }
 
         departmentBilling.setTotalAmount(totalAmount);
@@ -459,10 +789,27 @@ public class VisitBillingService {
         departmentBilling.setPatientPayableAmount(patientPayableAmount);
         departmentBilling.setPaidAmount(paidAmount);
         departmentBilling.setOutstandingAmount(outstandingAmount);
-        departmentBilling.setStatus(resolveBillingStatus(paidAmount, patientPayableAmount));
+        departmentBilling.setStatus(
+            resolveBillingStatus(paidAmount, patientPayableAmount)
+        );
         visitDepartmentBillingRepository.save(departmentBilling);
 
-        return ApiResponse.success("Payment recorded.", visitBillingToMap(departmentBilling.getVisitBilling()));
+        // Persist billing note if provided
+        if (hasText(input.note())) {
+            VisitDepartment noteDept = departmentBilling.getVisitDepartment();
+            Worker paymentWorker = resolveWorker(authUser);
+            VisitDepartmentNote billingNote = new VisitDepartmentNote();
+            billingNote.setVisitDepartment(noteDept);
+            billingNote.setContent(input.note().trim());
+            billingNote.setCreatedBy(paymentWorker);
+            billingNote.setNoteType(NoteType.BILLING);
+            visitDepartmentNoteRepository.save(billingNote);
+        }
+
+        return ApiResponse.success(
+            "Payment recorded.",
+            visitBillingToMap(departmentBilling.getVisitBilling())
+        );
     }
 
     @Transactional(readOnly = true)
@@ -471,12 +818,16 @@ public class VisitBillingService {
             return ApiResponse.error("visitId is required.");
         }
 
-        List<VisitBilling> billings = visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId);
+        List<VisitBilling> billings =
+            visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId);
         if (billings.isEmpty()) {
             return ApiResponse.error("Visit billing not found.");
         }
 
-        return ApiResponse.success("Visit billing fetched.", visitBillingToMap(billings.get(0)));
+        return ApiResponse.success(
+            "Visit billing fetched.",
+            visitBillingToMap(billings.get(0))
+        );
     }
 
     @Transactional(readOnly = true)
@@ -489,54 +840,89 @@ public class VisitBillingService {
             return ApiResponse.error("Visit not found.");
         }
 
-        List<Map<String, Object>> billings = visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId)
-                .stream()
-                .map(this::visitBillingToMap)
-                .toList();
+        List<Map<String, Object>> billings = visitBillingRepository
+            .findByVisitIdOrderByCreatedAtDesc(visitId)
+            .stream()
+            .map(this::visitBillingToMap)
+            .toList();
 
         return ApiResponse.success("Visit billings fetched.", billings);
     }
 
     @Transactional
-    public ApiResponse generateInvoice(UUID departmentInsuranceBillingId, AuthenticatedUser authUser) {
+    public ApiResponse generateInvoice(
+        UUID departmentInsuranceBillingId,
+        AuthenticatedUser authUser
+    ) {
         if (departmentInsuranceBillingId == null) {
-            return ApiResponse.error("departmentInsuranceBillingId is required.");
+            return ApiResponse.error(
+                "departmentInsuranceBillingId is required."
+            );
         }
 
-        Optional<DepartmentInsuranceBilling> billingOptional = departmentInsuranceBillingRepository
-                .findByIdWithDepartmentBillingAndVisit(departmentInsuranceBillingId);
+        Optional<DepartmentInsuranceBilling> billingOptional =
+            departmentInsuranceBillingRepository.findByIdWithDepartmentBillingAndVisit(
+                departmentInsuranceBillingId
+            );
         if (billingOptional.isEmpty()) {
             return ApiResponse.error("Department insurance billing not found.");
         }
 
         DepartmentInsuranceBilling billing = billingOptional.get();
-        Visit visit = billing.getVisitDepartmentBilling().getVisitBilling().getVisit();
+        Visit visit = billing
+            .getVisitDepartmentBilling()
+            .getVisitBilling()
+            .getVisit();
         if (visit == null) {
             return ApiResponse.error("Visit not found for billing.");
         }
 
         if (!isVisitFullyBilled(visit.getId())) {
-            return ApiResponse.error("Invoice can only be generated after all visit products are billed.");
+            return ApiResponse.error(
+                "Invoice can only be generated after all visit products are billed."
+            );
         }
 
         if (hasText(billing.getInvoiceUrl())) {
-            Map<String, Object> data = Map.of("invoiceUrl", billing.getInvoiceUrl());
-            return ApiResponse.success("Invoice already exists.", data);
+            // Invoice already stored — return a fresh signed URL
+            try {
+                String signed = supabaseStorageService.signedUrl(
+                    billing.getInvoiceUrl(),
+                    300
+                );
+                return ApiResponse.success(
+                    "Invoice already exists.",
+                    Map.of("signedUrl", signed)
+                );
+            } catch (IOException e) {
+                return ApiResponse.error(
+                    "Invoice exists but could not generate download URL."
+                );
+            }
         }
 
         try {
-            ClinicProfile clinicProfile = clinicProfileRepository.findFirstByOrderByCreatedAtAsc().orElse(null);
-            String invoiceUrl = generateInvoicePdfFile(billing, clinicProfile);
-            Map<String, Object> data = Map.of("invoiceUrl", invoiceUrl);
-            return ApiResponse.success("Invoice generated successfully.", data);
+            ClinicProfile clinicProfile = clinicProfileRepository
+                .findFirstByOrderByCreatedAtAsc()
+                .orElse(null);
+            String objectPath = generateInvoicePdfFile(billing, clinicProfile);
+            String signed = supabaseStorageService.signedUrl(objectPath, 300);
+            return ApiResponse.success(
+                "Invoice generated successfully.",
+                Map.of("signedUrl", signed)
+            );
         } catch (IOException e) {
-            return ApiResponse.error("Failed to generate invoice PDF.");
+            return ApiResponse.error("Failed to generate or upload invoice.");
         }
     }
 
     private void generateInvoicesWhenVisitFullyBilled(UUID visitId) {
-        ClinicProfile clinicProfile = clinicProfileRepository.findFirstByOrderByCreatedAtAsc().orElse(null);
-        for (DepartmentInsuranceBilling billing : departmentInsuranceBillingRepository.findAllByVisitIdWithDetails(visitId)) {
+        ClinicProfile clinicProfile = clinicProfileRepository
+            .findFirstByOrderByCreatedAtAsc()
+            .orElse(null);
+        for (DepartmentInsuranceBilling billing : departmentInsuranceBillingRepository.findAllByVisitIdWithDetails(
+            visitId
+        )) {
             if (hasText(billing.getInvoiceUrl())) {
                 continue;
             }
@@ -548,59 +934,74 @@ public class VisitBillingService {
         }
     }
 
-    private String generateInvoicePdfFile(DepartmentInsuranceBilling billing, ClinicProfile clinicProfile) throws IOException {
-        Path invoiceDirectory = Path.of(INVOICE_DIR).toAbsolutePath();
-        Files.createDirectories(invoiceDirectory);
-        String filename = "invoice-" + billing.getId() + ".pdf";
-        Path invoiceFile = invoiceDirectory.resolve(filename);
-
-        List<Map<String, Object>> items = visitBillingItemRepository.findByDepartmentInsuranceBillingIdWithProduct(billing.getId())
+    /**
+     * Generates the invoice PDF, uploads it to Supabase Storage, persists the
+     * object path in {@code billing.invoiceUrl}, and returns that path.
+     * The caller is responsible for turning the path into a signed URL.
+     */
+    private String generateInvoicePdfFile(
+        DepartmentInsuranceBilling billing,
+        ClinicProfile clinicProfile
+    ) throws IOException {
+        // Render PDF to a temp file
+        Path tempFile = Files.createTempFile("invoice-", ".pdf");
+        try {
+            List<Map<String, Object>> items = visitBillingItemRepository
+                .findByDepartmentInsuranceBillingIdWithProduct(billing.getId())
                 .stream()
                 .map(this::visitBillingItemToMap)
                 .toList();
 
-        InvoicePdfGenerator.createInvoicePdf(invoiceFile, billing, items, clinicProfile);
-        String invoiceUrl = INVOICE_URL_PATH + filename;
-        billing.setInvoiceUrl(invoiceUrl);
-        departmentInsuranceBillingRepository.save(billing);
-        return invoiceUrl;
+            InvoicePdfGenerator.createInvoicePdf(
+                tempFile,
+                billing,
+                items,
+                clinicProfile
+            );
+
+            // Upload to Supabase Storage  data/{invoices}/{clinicName?}/invoice-{id}.pdf
+            byte[] pdfBytes = Files.readAllBytes(tempFile);
+            String clinicName = (clinicProfile != null)
+                ? clinicProfile.getName()
+                : null;
+            String objectPath = supabaseStorageService.buildObjectPath(
+                clinicName,
+                billing.getId().toString()
+            );
+            supabaseStorageService.upload(pdfBytes, objectPath);
+
+            // Persist the object path (not a URL) so getInvoice can sign it later
+            billing.setInvoiceUrl(objectPath);
+            departmentInsuranceBillingRepository.save(billing);
+            return objectPath;
+        } finally {
+            Files.deleteIfExists(tempFile);
+        }
     }
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
     }
 
-    @Transactional(readOnly = true)
-    public ApiResponse getInvoice(UUID departmentInsuranceBillingId) {
-        if (departmentInsuranceBillingId == null) {
-            return ApiResponse.error("departmentInsuranceBillingId is required.");
-        }
-
-        Optional<DepartmentInsuranceBilling> billingOptional = departmentInsuranceBillingRepository.findById(departmentInsuranceBillingId);
-        if (billingOptional.isEmpty()) {
-            return ApiResponse.error("Department insurance billing not found.");
-        }
-
-        String filename = "invoice-" + departmentInsuranceBillingId + ".pdf";
-        Path invoiceFile = Path.of(INVOICE_DIR).toAbsolutePath().resolve(filename);
-        if (Files.exists(invoiceFile)) {
-            Map<String, Object> data = Map.of("invoiceUrl", INVOICE_URL_PATH + filename);
-            return ApiResponse.success("Invoice fetched.", data);
-        }
-
-        return ApiResponse.error("Invoice not found. Generate it first.");
+    private List<VisitDepartmentProduct> loadVisitDepartmentProducts(
+        UUID visitId
+    ) {
+        return visitDepartmentRepository
+            .findByVisitId(visitId)
+            .stream()
+            .flatMap(vd ->
+                visitDepartmentProductRepository
+                    .findByVisitDepartmentId(vd.getId())
+                    .stream()
+            )
+            .toList();
     }
 
-    private List<VisitDepartmentProduct> loadVisitDepartmentProducts(UUID visitId) {
-        return visitDepartmentRepository.findByVisitId(visitId)
-                .stream()
-                .flatMap(vd -> visitDepartmentProductRepository.findByVisitDepartmentId(vd.getId()).stream())
-                .toList();
-    }
-
-        private boolean requiresBilling(VisitDepartmentProduct item) {
-        return item.getStatus() != VisitProductStatus.BILLED
-                && item.getStatus() != VisitProductStatus.EXEMPTED;
+    private boolean requiresBilling(VisitDepartmentProduct item) {
+        return (
+            item.getStatus() != VisitProductStatus.BILLED &&
+            item.getStatus() != VisitProductStatus.EXEMPTED
+        );
     }
 
     private UUID resolveRootVisitDepartmentId(VisitDepartment visitDepartment) {
@@ -615,30 +1016,48 @@ public class VisitBillingService {
         return department.getParentVisitDepartment() == null;
     }
 
-    private boolean isProductUnderRootDepartment(VisitDepartmentProduct item, UUID rootVisitDepartmentId) {
-        return resolveRootVisitDepartmentId(item.getVisitDepartment()).equals(rootVisitDepartmentId);
+    private boolean isProductUnderRootDepartment(
+        VisitDepartmentProduct item,
+        UUID rootVisitDepartmentId
+    ) {
+        return resolveRootVisitDepartmentId(item.getVisitDepartment()).equals(
+            rootVisitDepartmentId
+        );
     }
 
-    private record BillingGroup(UUID rootVisitDepartmentId, UUID patientInsuranceId) {
-    }
+    private record BillingGroup(
+        UUID rootVisitDepartmentId,
+        UUID patientInsuranceId
+    ) {}
 
     private PatientInsurance resolveAppliedInsurance(
-            VisitDepartmentProduct item,
-            UUID requestedPatientInsuranceId,
-            Set<UUID> visitInsurancePatientInsuranceIds,
-            List<VisitInsurance> visitInsurances
+        VisitDepartmentProduct item,
+        UUID requestedPatientInsuranceId,
+        Set<UUID> visitInsurancePatientInsuranceIds,
+        List<VisitInsurance> visitInsurances
     ) {
         if (requestedPatientInsuranceId != null) {
-            if (!visitInsurancePatientInsuranceIds.contains(requestedPatientInsuranceId)) {
+            if (
+                !visitInsurancePatientInsuranceIds.contains(
+                    requestedPatientInsuranceId
+                )
+            ) {
                 return null;
             }
-            Optional<PatientInsurance> insuranceOptional = patientInsuranceRepository.findById(requestedPatientInsuranceId);
+            Optional<PatientInsurance> insuranceOptional =
+                patientInsuranceRepository.findById(
+                    requestedPatientInsuranceId
+                );
             if (insuranceOptional.isEmpty()) {
                 return null;
             }
             PatientInsurance insurance = insuranceOptional.get();
-            ProductInsuranceCoverage coverage = productInsuranceCoverageRepository
-                    .findByProductIdAndInsuranceProviderId(item.getProduct().getId(), insurance.getInsuranceProvider().getId())
+            ProductInsuranceCoverage coverage =
+                productInsuranceCoverageRepository
+                    .findByProductIdAndInsuranceProviderId(
+                        item.getProduct().getId(),
+                        insurance.getInsuranceProvider().getId()
+                    )
                     .orElse(null);
             if (coverage == null || !coverage.isCovered()) {
                 return null;
@@ -648,8 +1067,12 @@ public class VisitBillingService {
 
         for (VisitInsurance visitInsurance : visitInsurances) {
             PatientInsurance insurance = visitInsurance.getPatientInsurance();
-            ProductInsuranceCoverage coverage = productInsuranceCoverageRepository
-                    .findByProductIdAndInsuranceProviderId(item.getProduct().getId(), insurance.getInsuranceProvider().getId())
+            ProductInsuranceCoverage coverage =
+                productInsuranceCoverageRepository
+                    .findByProductIdAndInsuranceProviderId(
+                        item.getProduct().getId(),
+                        insurance.getInsuranceProvider().getId()
+                    )
                     .orElse(null);
             if (coverage != null && coverage.isCovered()) {
                 return insurance;
@@ -659,22 +1082,26 @@ public class VisitBillingService {
     }
 
     private BigDecimal calculateCoveredAmount(
-            VisitDepartmentProduct item,
-            PatientInsurance appliedInsurance,
-            BigDecimal quantity,
-            BigDecimal lineTotal
+        VisitDepartmentProduct item,
+        PatientInsurance appliedInsurance,
+        BigDecimal quantity,
+        BigDecimal lineTotal
     ) {
         if (appliedInsurance == null) {
             return ZERO;
         }
 
-        Optional<ProductInsuranceCoverage> coverageOptional = productInsuranceCoverageRepository
-                .findByProductIdAndInsuranceProviderId(item.getProduct().getId(), appliedInsurance.getInsuranceProvider().getId());
+        Optional<ProductInsuranceCoverage> coverageOptional =
+            productInsuranceCoverageRepository.findByProductIdAndInsuranceProviderId(
+                item.getProduct().getId(),
+                appliedInsurance.getInsuranceProvider().getId()
+            );
         if (coverageOptional.isEmpty() || !coverageOptional.get().isCovered()) {
             return ZERO;
         }
 
-        BigDecimal coverageAmount = coverageOptional.get().getCost() == null
+        BigDecimal coverageAmount =
+            coverageOptional.get().getCost() == null
                 ? ZERO
                 : toMoney(coverageOptional.get().getCost().multiply(quantity));
 
@@ -685,7 +1112,10 @@ public class VisitBillingService {
         return toMoney(coverageAmount);
     }
 
-    private VisitBillingStatus resolveBillingStatus(BigDecimal paidAmount, BigDecimal patientPayableAmount) {
+    private VisitBillingStatus resolveBillingStatus(
+        BigDecimal paidAmount,
+        BigDecimal patientPayableAmount
+    ) {
         if (patientPayableAmount.compareTo(ZERO) == 0) {
             return VisitBillingStatus.PAID;
         }
@@ -699,15 +1129,20 @@ public class VisitBillingService {
     }
 
     private boolean isVisitFullyBilled(UUID visitId) {
-        List<VisitDepartmentProduct> items = loadVisitDepartmentProducts(visitId);
+        List<VisitDepartmentProduct> items = loadVisitDepartmentProducts(
+            visitId
+        );
         if (items.isEmpty()) {
             return false;
         }
 
-        return items.stream().allMatch(item ->
-                item.getStatus() == VisitProductStatus.BILLED
-                        || item.getStatus() == VisitProductStatus.EXEMPTED
-        );
+        return items
+            .stream()
+            .allMatch(
+                item ->
+                    item.getStatus() == VisitProductStatus.BILLED ||
+                    item.getStatus() == VisitProductStatus.EXEMPTED
+            );
     }
 
     private Map<String, Object> visitBillingToMap(VisitBilling billing) {
@@ -717,18 +1152,25 @@ public class VisitBillingService {
         data.put("createdAt", billing.getCreatedAt());
         data.put("updatedAt", billing.getUpdatedAt());
         data.put(
-                "departments",
-                billing.getDepartments().stream()
-                        .map(this::visitDepartmentBillingToMap)
-                        .toList()
+            "departments",
+            billing
+                .getDepartments()
+                .stream()
+                .map(this::visitDepartmentBillingToMap)
+                .toList()
         );
         return data;
     }
 
-    private Map<String, Object> visitDepartmentBillingToMap(VisitDepartmentBilling billing) {
+    private Map<String, Object> visitDepartmentBillingToMap(
+        VisitDepartmentBilling billing
+    ) {
         Map<String, Object> data = new HashMap<>();
         data.put("id", billing.getId());
-        data.put("visitDepartment", visitDepartmentToMap(billing.getVisitDepartment()));
+        data.put(
+            "visitDepartment",
+            visitDepartmentToMap(billing.getVisitDepartment())
+        );
         data.put("status", billing.getStatus());
         data.put("totalAmount", billing.getTotalAmount());
         data.put("insuranceCoveredAmount", billing.getInsuranceCoveredAmount());
@@ -736,51 +1178,68 @@ public class VisitBillingService {
         data.put("paidAmount", billing.getPaidAmount());
         data.put("outstandingAmount", billing.getOutstandingAmount());
         data.put(
-                "payments",
-                billing.getPayments().stream()
-                        .map(this::visitBillingPaymentToMap)
-                        .toList()
+            "payments",
+            billing
+                .getPayments()
+                .stream()
+                .map(this::visitBillingPaymentToMap)
+                .toList()
         );
         data.put(
-                "insuranceBillings",
-                billing.getInsuranceBillings().stream()
-                        .map(this::departmentInsuranceBillingToMap)
-                        .toList()
+            "insuranceBillings",
+            billing
+                .getInsuranceBillings()
+                .stream()
+                .map(this::departmentInsuranceBillingToMap)
+                .toList()
         );
         data.put("createdAt", billing.getCreatedAt());
         data.put("updatedAt", billing.getUpdatedAt());
         return data;
     }
 
-    private Map<String, Object> departmentInsuranceBillingToMap(DepartmentInsuranceBilling billing) {
+    private Map<String, Object> departmentInsuranceBillingToMap(
+        DepartmentInsuranceBilling billing
+    ) {
         Map<String, Object> data = new HashMap<>();
         data.put("id", billing.getId());
-        data.put("patientInsurance", billing.getPatientInsurance() == null ? null : patientInsuranceToMap(billing.getPatientInsurance()));
+        data.put(
+            "patientInsurance",
+            billing.getPatientInsurance() == null
+                ? null
+                : patientInsuranceToMap(billing.getPatientInsurance())
+        );
         data.put("status", billing.getStatus());
         data.put("totalAmount", billing.getTotalAmount());
         data.put("insuranceCoveredAmount", billing.getInsuranceCoveredAmount());
         data.put("patientPayableAmount", billing.getPatientPayableAmount());
         data.put("paidAmount", billing.getPaidAmount());
         data.put("outstandingAmount", billing.getOutstandingAmount());
-        data.put("invoiceUrl", billing.getInvoiceUrl());
         data.put(
-                "items",
-                billing.getItems().stream()
-                        .map(this::visitBillingItemToMap)
-                        .toList()
+            "items",
+            billing
+                .getItems()
+                .stream()
+                .map(this::visitBillingItemToMap)
+                .toList()
         );
         data.put("createdAt", billing.getCreatedAt());
         data.put("updatedAt", billing.getUpdatedAt());
         return data;
     }
 
-    private Map<String, Object> visitDepartmentToMap(VisitDepartment visitDepartment) {
+    private Map<String, Object> visitDepartmentToMap(
+        VisitDepartment visitDepartment
+    ) {
         if (visitDepartment == null) {
             return null;
         }
         Map<String, Object> data = new HashMap<>();
         data.put("id", visitDepartment.getId());
-        data.put("department", departmentToMap(visitDepartment.getDepartment()));
+        data.put(
+            "department",
+            departmentToMap(visitDepartment.getDepartment())
+        );
         data.put("status", visitDepartment.getStatus());
         data.put("createdAt", visitDepartment.getCreatedAt());
         data.put("updatedAt", visitDepartment.getUpdatedAt());
@@ -797,13 +1256,20 @@ public class VisitBillingService {
         return data;
     }
 
-    private Map<String, Object> patientInsuranceToMap(PatientInsurance insurance) {
+    private Map<String, Object> patientInsuranceToMap(
+        PatientInsurance insurance
+    ) {
         if (insurance == null) {
             return null;
         }
         Map<String, Object> data = new HashMap<>();
         data.put("id", insurance.getId());
-        data.put("insuranceProviderId", insurance.getInsuranceProvider() == null ? null : insurance.getInsuranceProvider().getId());
+        data.put(
+            "insuranceProviderId",
+            insurance.getInsuranceProvider() == null
+                ? null
+                : insurance.getInsuranceProvider().getId()
+        );
         data.put("insuranceCardNumber", insurance.getInsuranceCardNumber());
         data.put("principalMemberName", insurance.getPrincipalMemberName());
         return data;
@@ -812,9 +1278,18 @@ public class VisitBillingService {
     private Map<String, Object> visitBillingItemToMap(VisitBillingItem item) {
         Map<String, Object> data = new HashMap<>();
         data.put("id", item.getId());
-        data.put("visitDepartmentProductId", item.getVisitDepartmentProduct().getId());
-        data.put("productId", item.getVisitDepartmentProduct().getProduct().getId());
-        data.put("productName", item.getVisitDepartmentProduct().getProduct().getName());
+        data.put(
+            "visitDepartmentProductId",
+            item.getVisitDepartmentProduct().getId()
+        );
+        data.put(
+            "productId",
+            item.getVisitDepartmentProduct().getProduct().getId()
+        );
+        data.put(
+            "productName",
+            item.getVisitDepartmentProduct().getProduct().getName()
+        );
         data.put("unitPriceSnapshot", item.getUnitPriceSnapshot());
         data.put("quantitySnapshot", item.getQuantitySnapshot());
         data.put("lineTotal", item.getLineTotal());
@@ -825,7 +1300,9 @@ public class VisitBillingService {
         return data;
     }
 
-    private Map<String, Object> visitBillingPaymentToMap(VisitBillingPayment payment) {
+    private Map<String, Object> visitBillingPaymentToMap(
+        VisitBillingPayment payment
+    ) {
         Map<String, Object> data = new HashMap<>();
         data.put("id", payment.getId());
         data.put("amount", payment.getAmount());

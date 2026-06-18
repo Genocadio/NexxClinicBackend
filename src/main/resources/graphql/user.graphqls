@@ -456,6 +456,22 @@ type VitalMeasurement {
   createdAt: String!
 }
 
+type LastDepartmentVisitInfo {
+  visitId: ID!
+  visitDepartment: VisitDepartment!
+}
+
+type LastPatientDepartmentVisitOutput {
+  lastVisit: Visit
+  lastDepartmentVisit: LastDepartmentVisitInfo
+}
+
+type LastPatientDepartmentVisitResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: LastPatientDepartmentVisitOutput
+}
+
 type VisitDepartment {
   id: ID!
   department: Department!
@@ -614,7 +630,6 @@ type DepartmentInsuranceBilling {
   patientPayableAmount: Float!
   paidAmount: Float!
   outstandingAmount: Float!
-  invoiceUrl: String
   items: [VisitBillingItem!]!
   createdAt: String!
   updatedAt: String!
@@ -684,7 +699,10 @@ type ClinicProfileResponse implements ApiResponse {
 }
 
 type Invoice {
-  invoiceUrl: String!
+  """
+  Short-lived signed URL for immediate download. Valid for a limited time only.
+  """
+  signedUrl: String!
 }
 
 type InvoiceResponse implements ApiResponse {
@@ -1213,6 +1231,11 @@ input BillVisitDepartmentInput {
   visitDepartmentId: ID!
   products: [BillVisitDepartmentProductInput!]!
   payments: [BillingPaymentInput!]
+  """
+  Required when any product is exempted or the patient payment does not cover the full payable amount.
+  Optional otherwise.
+  """
+  note: String
 }
 
 input BillVisitInput {
@@ -1225,6 +1248,11 @@ input RecordVisitBillingPaymentInput {
   amount: Float!
   paymentMethod: PaymentMethod!
   reference: String
+  """
+  Required when the payment does not fully cover the outstanding patient payable amount.
+  Optional otherwise.
+  """
+  note: String
 }
 
 enum PaymentMethod {
@@ -1398,7 +1426,6 @@ type Query {
   getPatientHistory(patientId: ID!, input: SearchPatientHistoryInput): PaginatedVisitResponse!
   visitDepartmentNotes(visitId: ID!, visitDepartmentId: ID): VisitDepartmentNotesListResponse!
   visitBilling(visitId: ID!): VisitBillingResponse!
-  getInvoice(departmentInsuranceBillingId: ID!): InvoiceResponse!
   clinicProfile: ClinicProfileResponse!
 }
 
@@ -1436,6 +1463,8 @@ type Mutation {
   createVisit(input: CreateVisitInput!): VisitResponse!
   changeVisitDate(input: ChangeVisitDateInput!): VisitResponse!
   addVisitDepartment(visitId: ID!, departmentId: ID!, encounterType: EncounterType): VisitResponse!
+  lastPatientDepartmentVisit(patientId: ID!, departmentId: ID!): LastPatientDepartmentVisitResponse!
+
   """
   Add a child visit department with products. Validations occur before creation:
   - If any product validation fails, the child department is NOT created

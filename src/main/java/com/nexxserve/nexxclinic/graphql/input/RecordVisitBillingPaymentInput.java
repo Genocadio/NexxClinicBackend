@@ -14,6 +14,7 @@ public record RecordVisitBillingPaymentInput(
 
         @NotNull(message = "paymentMethod is required")
         PaymentMethod paymentMethod,
-        String reference
+        String reference,
+        String note
 ) {
 }

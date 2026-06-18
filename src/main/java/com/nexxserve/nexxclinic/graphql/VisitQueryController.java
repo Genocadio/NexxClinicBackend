@@ -55,6 +55,17 @@ public class VisitQueryController {
         return visitService.visits(input, authUser);
     }
 
+        @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
+    @QueryMapping
+    public ApiResponse lastPatientDepartmentVisit(
+            @Argument UUID patientId,
+            @Argument UUID departmentId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.lastPatientDepartmentVisit(patientId, departmentId, authUser);
+    }
+
+
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
     @QueryMapping
     public ApiResponse getPatientHistory(
