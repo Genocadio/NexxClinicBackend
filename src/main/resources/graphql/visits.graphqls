@@ -82,7 +82,7 @@ extend type Mutation {
   Each vital sign item must include measurementName, value, and unit.
   """
   addVisitVitalSigns(input: AddVisitVitalSignsInput!): VisitResponse!
-  
+
   """
   Add pre-instructions to a visit. Items can be of type `NOTE` or `MEDICATION`.
   For `MEDICATION` items each medication entry must include `medName` (mandatory); other fields are optional.
@@ -91,6 +91,7 @@ extend type Mutation {
 
   """
   Add a note to a visit department.
+  The `visitDepartmentId` may reference either a top-level visit department or a child visit department.
   Notes are exchanged between users and tracked with creator and viewer metadata.
   """
   addVisitDepartmentNote(input: AddVisitDepartmentNoteInput!): VisitDepartmentNoteResponse!
@@ -108,10 +109,11 @@ extend type Mutation {
 
 """
 Input for adding a note to a visit department.
+`visitDepartmentId` may be either a parent visit department ID or a child visit department ID.
 """
 
 input AddVisitDepartmentNoteInput {
-  visitDepartmentId: ID!     # the department where the note is added
+  visitDepartmentId: ID!     # the target visit department (parent or child)
 
   content: String!
   targetUserId: [ID!]!        # must contain at least one ID and at most 100

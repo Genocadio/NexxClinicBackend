@@ -142,6 +142,8 @@ public class VisitDepartmentNoteService {
 
     /**
      * Adds a note to a visit department.
+     * Supports both top-level visit departments and child visit departments,
+     * because child departments are also stored as {@link VisitDepartment} records.
      *
      * <p>Supported fields on {@link AddVisitDepartmentNoteInput}:
      * <ul>
