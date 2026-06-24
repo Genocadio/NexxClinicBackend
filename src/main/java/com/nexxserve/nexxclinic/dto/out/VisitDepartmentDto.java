@@ -19,6 +19,7 @@ public record VisitDepartmentDto(
         List<VisitPreInstructionDto> preInstructions,
         List<VisitDepartmentDto> childVisitDepartments,
         VisitDepartmentNotesSummaryDto notes,
+        UUID answerId,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {}

@@ -749,6 +749,7 @@ public class VisitDepartmentService {
                     List.of(),
                     List.of(),
                     visitDepartmentNoteService.buildNotesSummary(visitDepartment.getId(), authUser),
+                    visitDepartment.getAnswerId(),
                     visitDepartment.getCreatedAt(),
                     visitDepartment.getUpdatedAt()
             );
@@ -798,6 +799,7 @@ public class VisitDepartmentService {
                 preInstructions,
                 childVisitDepartments,
                 visitDepartmentNoteService.buildNotesSummary(visitDepartment.getId(), authUser),
+                visitDepartment.getAnswerId(),
                 visitDepartment.getCreatedAt(),
                 visitDepartment.getUpdatedAt()
         );

@@ -83,6 +83,9 @@ public class VisitDepartment {
     )
     private List<Worker> processors = new ArrayList<>();
 
+    @Column(name = "answer_id")
+    private UUID answerId;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -210,6 +213,14 @@ public class VisitDepartment {
 
     public void setEncounterType(EncounterType encounterType) {
         this.encounterType = encounterType;
+    }
+
+    public UUID getAnswerId() {
+        return answerId;
+    }
+
+    public void setAnswerId(UUID answerId) {
+        this.answerId = answerId;
     }
 
     public LocalDateTime getCreatedAt() {

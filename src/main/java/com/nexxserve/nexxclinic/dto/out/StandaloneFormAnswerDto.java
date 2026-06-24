@@ -7,6 +7,7 @@ import java.util.UUID;
 
 public record StandaloneFormAnswerDto(
         UUID id,
+        StandaloneFormDto form,
         StandaloneFormVersionDto formVersion,
         Object answers,
         BigDecimal score,

@@ -2,10 +2,17 @@ package com.nexxserve.nexxclinic.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.dto.out.StandaloneFormAnswerDto;
 import com.nexxserve.nexxclinic.dto.out.StandaloneFormDto;
 import com.nexxserve.nexxclinic.dto.out.StandaloneFormVersionDto;
+import com.nexxserve.nexxclinic.dto.out.VisitDepartmentDto;
+import com.nexxserve.nexxclinic.dto.out.VisitStandaloneAnswerDto;
+import com.nexxserve.nexxclinic.entity.Department;
+import com.nexxserve.nexxclinic.entity.DepartmentStandaloneForm;
+import com.nexxserve.nexxclinic.entity.Visit;
+import com.nexxserve.nexxclinic.entity.VisitDepartment;
 import com.nexxserve.nexxclinic.entity.StandaloneForm;
 import com.nexxserve.nexxclinic.entity.StandaloneFormAnswer;
 import com.nexxserve.nexxclinic.entity.StandaloneFormVersion;
@@ -13,9 +20,14 @@ import com.nexxserve.nexxclinic.graphql.input.StandaloneFormInput;
 import com.nexxserve.nexxclinic.mappers.out.StandaloneFormMapper;
 import com.nexxserve.nexxclinic.model.AnswerStatus;
 import com.nexxserve.nexxclinic.model.FormStatus;
+import com.nexxserve.nexxclinic.repository.DepartmentRepository;
+import com.nexxserve.nexxclinic.repository.DepartmentStandaloneFormRepository;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
+import com.nexxserve.nexxclinic.repository.VisitRepository;
 import com.nexxserve.nexxclinic.repository.StandaloneFormAnswerRepository;
 import com.nexxserve.nexxclinic.repository.StandaloneFormRepository;
 import com.nexxserve.nexxclinic.repository.StandaloneFormVersionRepository;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +35,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -31,16 +44,31 @@ public class StandaloneFormService {
     private final StandaloneFormRepository formRepository;
     private final StandaloneFormVersionRepository versionRepository;
     private final StandaloneFormAnswerRepository answerRepository;
+    private final DepartmentStandaloneFormRepository departmentStandaloneFormRepository;
+    private final DepartmentRepository departmentRepository;
+    private final VisitRepository visitRepository;
+    private final VisitDepartmentRepository visitDepartmentRepository;
+    private final VisitDepartmentService visitDepartmentService;
     private final StandaloneFormMapper mapper;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public StandaloneFormService(StandaloneFormRepository formRepository,
                                  StandaloneFormVersionRepository versionRepository,
                                  StandaloneFormAnswerRepository answerRepository,
+                                 DepartmentStandaloneFormRepository departmentStandaloneFormRepository,
+                                 DepartmentRepository departmentRepository,
+                                 VisitRepository visitRepository,
+                                 VisitDepartmentRepository visitDepartmentRepository,
+                                 @Lazy VisitDepartmentService visitDepartmentService,
                                  StandaloneFormMapper mapper) {
         this.formRepository = formRepository;
         this.versionRepository = versionRepository;
         this.answerRepository = answerRepository;
+        this.departmentStandaloneFormRepository = departmentStandaloneFormRepository;
+        this.departmentRepository = departmentRepository;
+        this.visitRepository = visitRepository;
+        this.visitDepartmentRepository = visitDepartmentRepository;
+        this.visitDepartmentService = visitDepartmentService;
         this.mapper = mapper;
     }
 
@@ -307,6 +335,108 @@ public class StandaloneFormService {
         return ApiResponse.success("Answer deleted successfully", true);
     }
 
+    @Transactional
+    public ApiResponse<VisitStandaloneAnswerDto> saveVisitStandaloneAnswer(
+            UUID visitId,
+            UUID departmentId,
+            UUID versionId,
+            Object answers,
+            AnswerStatus status,
+            Double score,
+            UUID workerId,
+            AuthenticatedUser authUser
+    ) {
+        Optional<StandaloneFormVersion> versionOpt = versionRepository.findById(versionId);
+        if (versionOpt.isEmpty()) {
+            return ApiResponse.error("Form version not found");
+        }
+
+        Optional<Visit> visitOpt = visitRepository.findById(visitId);
+        if (visitOpt.isEmpty()) {
+            return ApiResponse.error("Visit not found");
+        }
+
+        Optional<VisitDepartment> visitDeptOpt = visitDepartmentRepository.findByVisitIdAndDepartmentId(visitId, departmentId);
+        if (visitDeptOpt.isEmpty()) {
+            return ApiResponse.error("Visit Department not found for this visit and department");
+        }
+
+        VisitDepartment visitDept = visitDeptOpt.get();
+
+        StandaloneFormAnswer answer = new StandaloneFormAnswer();
+        answer.setFormVersion(versionOpt.get());
+        answer.setVisitId(visitId);
+        answer.setPatientId(visitOpt.get().getPatient() != null ? visitOpt.get().getPatient().getId() : null);
+        answer.setAnswers(serializeJson(answers));
+        answer.setStatus(status != null ? status : AnswerStatus.DRAFT);
+        if (score != null) {
+            answer.setScore(BigDecimal.valueOf(score));
+        }
+        answer.setSubmittedBy(workerId);
+        if (status == AnswerStatus.FINAL) {
+            answer.setSubmittedAt(LocalDateTime.now());
+        }
+
+        StandaloneFormAnswer savedAnswer = answerRepository.save(answer);
+
+        // Link to VisitDepartment
+        visitDept.setAnswerId(savedAnswer.getId());
+        visitDepartmentRepository.save(visitDept);
+
+        StandaloneFormAnswerDto answerDto = mapper.toDto(savedAnswer);
+        VisitDepartmentDto visitDeptDto = visitDepartmentService.visitDepartmentToDto(visitDept, Set.of(), authUser);
+
+        return ApiResponse.success("Visit answer saved successfully", new VisitStandaloneAnswerDto(answerDto, visitDeptDto));
+    }
+
+    @Transactional
+    public ApiResponse<StandaloneFormDto> linkFormToDepartment(UUID departmentId, UUID formId) {
+        Optional<Department> departmentOpt = departmentRepository.findById(departmentId);
+        if (departmentOpt.isEmpty()) {
+            return ApiResponse.error("Department not found");
+        }
+
+        Optional<StandaloneForm> formOpt = formRepository.findById(formId);
+        if (formOpt.isEmpty() || formOpt.get().isDeleted()) {
+            return ApiResponse.error("Form not found");
+        }
+
+        Optional<DepartmentStandaloneForm> existingLink = departmentStandaloneFormRepository.findByDepartmentIdAndStandaloneFormId(departmentId, formId);
+        if (existingLink.isPresent()) {
+            return getForm(formId);
+        }
+
+        DepartmentStandaloneForm link = new DepartmentStandaloneForm();
+        link.setDepartment(departmentOpt.get());
+        link.setStandaloneForm(formOpt.get());
+        link.setDefault(false);
+        departmentStandaloneFormRepository.save(link);
+
+        return getForm(formId);
+    }
+
+    @Transactional
+    public ApiResponse<Boolean> unlinkFormFromDepartment(UUID departmentId, UUID formId) {
+        departmentStandaloneFormRepository.deleteByDepartmentIdAndStandaloneFormId(departmentId, formId);
+        return ApiResponse.success("Form unlinked from department", true);
+    }
+
+    @Transactional
+    public ApiResponse<StandaloneFormDto> setDefaultFormForDepartment(UUID departmentId, UUID formId) {
+        Optional<DepartmentStandaloneForm> linkOpt = departmentStandaloneFormRepository.findByDepartmentIdAndStandaloneFormId(departmentId, formId);
+        if (linkOpt.isEmpty()) {
+            return ApiResponse.error("Form is not linked to this department");
+        }
+
+        departmentStandaloneFormRepository.clearDefaultByDepartmentId(departmentId);
+
+        DepartmentStandaloneForm link = linkOpt.get();
+        link.setDefault(true);
+        departmentStandaloneFormRepository.save(link);
+
+        return getForm(formId);
+    }
+
     private String serializeJson(Object obj) {
         if (obj == null) return null;
         try {
@@ -317,19 +447,19 @@ public class StandaloneFormService {
     }
 
     private StandaloneFormDto mapToDto(StandaloneForm form, StandaloneFormVersion version) {
-        StandaloneFormDto dto = mapper.toDto(form);
+        StandaloneFormDto baseDto = mapper.toDto(form);
         StandaloneFormVersionDto versionDto = version != null ? mapper.toDto(version) : null;
         return new StandaloneFormDto(
-                dto.id(),
-                dto.name(),
-                dto.description(),
-                dto.type(),
-                dto.category(),
-                dto.isTemplate(),
-                dto.createdBy(),
+                baseDto.id(),
+                baseDto.name(),
+                baseDto.description(),
+                baseDto.type(),
+                baseDto.category(),
+                baseDto.isTemplate(),
+                baseDto.createdBy(),
                 versionDto,
-                dto.createdAt(),
-                dto.updatedAt()
+                baseDto.createdAt(),
+                baseDto.updatedAt()
         );
     }
 }

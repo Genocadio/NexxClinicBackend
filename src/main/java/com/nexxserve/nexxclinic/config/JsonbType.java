@@ -51,10 +51,21 @@ public class JsonbType implements UserType<String> {
         if (value == null) {
             st.setNull(index, Types.OTHER);
         } else {
-            PGobject pgo = new PGobject();
-            pgo.setType("jsonb");
-            pgo.setValue(value);
-            st.setObject(index, pgo, Types.OTHER);
+            try {
+                // Check if we are using H2 or Postgres
+                String databaseProductName = st.getConnection().getMetaData().getDatabaseProductName();
+                if ("H2".equalsIgnoreCase(databaseProductName)) {
+                    st.setObject(index, value);
+                } else {
+                    PGobject pgo = new PGobject();
+                    pgo.setType("jsonb");
+                    pgo.setValue(value);
+                    st.setObject(index, pgo, Types.OTHER);
+                }
+            } catch (SQLException e) {
+                // Fallback
+                st.setObject(index, value);
+            }
         }
     }
 

@@ -90,7 +90,7 @@ type StandaloneForm {
   category: String
   isTemplate: Boolean!
   createdBy: ID
-  latestVersion: StandaloneFormVersion
+  activeVersion: StandaloneFormVersion
   createdAt: String!
   updatedAt: String!
 }
@@ -109,6 +109,7 @@ type StandaloneFormVersion {
 
 type StandaloneFormAnswer {
   id: ID!
+  form: StandaloneForm!
   formVersion: StandaloneFormVersion!
   answers: JSON!
   score: Float

@@ -20,7 +20,7 @@ public abstract class StandaloneFormMapper {
 
     protected final ObjectMapper objectMapper = new ObjectMapper();
 
-    @Mapping(target = "latestVersion", ignore = true)
+    @Mapping(target = "activeVersion", ignore = true)
     public abstract StandaloneFormDto toDto(StandaloneForm entity);
 
     @Mapping(source = "form.id", target = "formId")
@@ -29,7 +29,27 @@ public abstract class StandaloneFormMapper {
     public abstract StandaloneFormVersionDto toDto(StandaloneFormVersion entity);
 
     @Mapping(target = "answers", qualifiedByName = "jsonToObject")
+    @Mapping(target = "form", expression = "java(mapFormFromVersion(entity.getFormVersion()))")
     public abstract StandaloneFormAnswerDto toDto(StandaloneFormAnswer entity);
+
+    protected StandaloneFormDto mapFormFromVersion(StandaloneFormVersion version) {
+        if (version == null || version.getForm() == null) return null;
+        StandaloneForm form = version.getForm();
+        StandaloneFormDto formDto = toDto(form);
+        StandaloneFormVersionDto versionDto = toDto(version);
+        return new StandaloneFormDto(
+                formDto.id(),
+                formDto.name(),
+                formDto.description(),
+                formDto.type(),
+                formDto.category(),
+                formDto.isTemplate(),
+                formDto.createdBy(),
+                versionDto,
+                formDto.createdAt(),
+                formDto.updatedAt()
+        );
+    }
 
     public abstract List<StandaloneFormDto> toDtoList(List<StandaloneForm> entities);
 

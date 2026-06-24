@@ -15,6 +15,8 @@ public record DepartmentDto(
         boolean nursing,
         boolean supportRequests,
         boolean requestsProducts,
+        List<StandaloneFormDto> standaloneForms,
+        StandaloneFormDto defaultStandaloneForm,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {}

@@ -12,7 +12,7 @@ extend type Query {
 }
 
 extend type Mutation {
-  createForm(departmentId: ID!, input: FormInput!): FormResponse!
+  createForm(departmentId: ID!, input: FormInput!): FormResponse! @deprecated(reason: "Use linkStandaloneFormToDepartment instead")
   updateForm(departmentId: ID!, formId: ID!, input: FormInput!): FormResponse!
   finalizeForm(departmentId: ID!, formId: ID!): FormResponse!
   upsertConsultationAnswers(input: ConsultationAnswersInput!): ConsultationAnswersResponse!

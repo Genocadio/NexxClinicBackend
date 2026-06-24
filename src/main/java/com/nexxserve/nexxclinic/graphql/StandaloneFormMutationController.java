@@ -4,6 +4,7 @@ import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.dto.out.StandaloneFormAnswerDto;
 import com.nexxserve.nexxclinic.dto.out.StandaloneFormDto;
+import com.nexxserve.nexxclinic.dto.out.VisitStandaloneAnswerDto;
 import com.nexxserve.nexxclinic.graphql.input.StandaloneFormInput;
 import com.nexxserve.nexxclinic.model.AnswerStatus;
 import com.nexxserve.nexxclinic.model.RoleName;
@@ -109,5 +110,47 @@ public class StandaloneFormMutationController {
     ) {
         // Placeholder as per requirements
         return ApiResponse.success("PDF generation triggered", "https://example.com/pdf/" + answerId);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
+    public ApiResponse<VisitStandaloneAnswerDto> saveVisitStandaloneAnswer(
+            @Argument UUID visitId,
+            @Argument UUID departmentId,
+            @Argument UUID formVersionId,
+            @Argument Object answers,
+            @Argument AnswerStatus status,
+            @Argument Double score,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        UUID workerId = authUser != null ? authUser.userId() : null;
+        return formService.saveVisitStandaloneAnswer(visitId, departmentId, formVersionId, answers, status, score, workerId, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN})
+    @MutationMapping
+    public ApiResponse<StandaloneFormDto> linkStandaloneFormToDepartment(
+            @Argument UUID departmentId,
+            @Argument UUID formId
+    ) {
+        return formService.linkFormToDepartment(departmentId, formId);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN})
+    @MutationMapping
+    public ApiResponse<Boolean> unlinkStandaloneFormFromDepartment(
+            @Argument UUID departmentId,
+            @Argument UUID formId
+    ) {
+        return formService.unlinkFormFromDepartment(departmentId, formId);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN})
+    @MutationMapping
+    public ApiResponse<StandaloneFormDto> setDefaultStandaloneFormForDepartment(
+            @Argument UUID departmentId,
+            @Argument UUID formId
+    ) {
+        return formService.setDefaultFormForDepartment(departmentId, formId);
     }
 }

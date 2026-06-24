@@ -72,45 +72,7 @@ public class DepartmentFormService {
 
     @Transactional
     public ApiResponse createForm(UUID departmentId, FormInput input) {
-        if (departmentId == null || input == null) {
-            return ApiResponse.error("departmentId and input are required.");
-        }
-
-        Optional<Department> departmentOptional = departmentRepository.findById(departmentId);
-        if (departmentOptional.isEmpty()) {
-            return ApiResponse.error("Department not found.");
-        }
-
-        String title = requiredTrim(input.title());
-        if (title == null) {
-            return ApiResponse.error("title is required.");
-        }
-
-        String serializedFormData = serializeFormData(input);
-        if (serializedFormData == null) {
-            return ApiResponse.error("Form definition is invalid.");
-        }
-
-        DepartmentForm form = new DepartmentForm();
-        form.setDepartment(departmentOptional.get());
-        form.setTitle(title);
-        form.setDescription(blankToNull(input.description()));
-        form.setStatus(FormStatus.DRAFT);
-        form.setCurrentVersionNumber("1.0.0");
-        form.setFormData(serializedFormData);
-
-        DepartmentForm saved = departmentFormRepository.save(form);
-
-        DepartmentFormVersion version = new DepartmentFormVersion();
-        version.setForm(saved);
-        version.setVersionNumber(saved.getCurrentVersionNumber());
-        version.setStatus(FormStatus.DRAFT);
-        version.setTitle(saved.getTitle());
-        version.setDescription(saved.getDescription());
-        version.setFormData(saved.getFormData());
-        departmentFormVersionRepository.save(version);
-
-        return ApiResponse.success("Form created.", formToMap(saved));
+        return ApiResponse.error("Older form creation is disabled. Please use Standalone Forms instead.");
     }
 
     @Transactional

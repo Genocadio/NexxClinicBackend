@@ -8,7 +8,7 @@ type StandaloneForm {
   category: String
   isTemplate: Boolean!
   createdBy: ID
-  latestVersion: StandaloneFormVersion
+  activeVersion: StandaloneFormVersion
   createdAt: String!
   updatedAt: String!
 }
@@ -27,6 +27,7 @@ type StandaloneFormVersion {
 
 type StandaloneFormAnswer {
   id: ID!
+  form: StandaloneForm!
   formVersion: StandaloneFormVersion!
   answers: JSON!
   score: Float
@@ -56,6 +57,17 @@ type StandaloneFormAnswerResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
   data: StandaloneFormAnswer
+}
+
+type VisitStandaloneAnswerData {
+  answer: StandaloneFormAnswer!
+  visitDepartment: VisitDepartment!
+}
+
+type VisitStandaloneAnswerResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: VisitStandaloneAnswerData
 }
 
 input StandaloneFormInput {
@@ -91,4 +103,11 @@ extend type Mutation {
   updateStandaloneAnswer(answerId: ID!, answers: JSON!, status: AnswerStatus, score: Float): StandaloneFormAnswerResponse!
   deleteStandaloneAnswer(answerId: ID!): BooleanResponse!
   generateStandaloneFormPdf(answerId: ID!): StringResponse! # Returns signed URL
+
+  saveVisitStandaloneAnswer(visitId: ID!, departmentId: ID!, formVersionId: ID!, answers: JSON!, status: AnswerStatus, score: Float): VisitStandaloneAnswerResponse!
+
+  # Department-Form Linking
+  linkStandaloneFormToDepartment(departmentId: ID!, formId: ID!): StandaloneFormResponse!
+  unlinkStandaloneFormFromDepartment(departmentId: ID!, formId: ID!): BooleanResponse!
+  setDefaultStandaloneFormForDepartment(departmentId: ID!, formId: ID!): StandaloneFormResponse!
 }

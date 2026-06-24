@@ -26,6 +26,14 @@ import com.nexxserve.nexxclinic.repository.DepartmentRepository;
 import com.nexxserve.nexxclinic.repository.InsuranceProviderRepository;
 import com.nexxserve.nexxclinic.repository.ProductInsuranceCoverageRepository;
 import com.nexxserve.nexxclinic.repository.ProductRepository;
+import com.nexxserve.nexxclinic.dto.out.StandaloneFormDto;
+import com.nexxserve.nexxclinic.dto.out.StandaloneFormVersionDto;
+import com.nexxserve.nexxclinic.entity.DepartmentStandaloneForm;
+import com.nexxserve.nexxclinic.entity.StandaloneForm;
+import com.nexxserve.nexxclinic.entity.StandaloneFormVersion;
+import com.nexxserve.nexxclinic.mappers.out.StandaloneFormMapper;
+import com.nexxserve.nexxclinic.repository.DepartmentStandaloneFormRepository;
+import com.nexxserve.nexxclinic.repository.StandaloneFormVersionRepository;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -51,9 +59,12 @@ public class DepartmentService {
     private final InsuranceProviderRepository insuranceProviderRepository;
     private final ProductRepository productRepository;
     private final ProductInsuranceCoverageRepository productInsuranceCoverageRepository;
+    private final DepartmentStandaloneFormRepository departmentStandaloneFormRepository;
+    private final StandaloneFormVersionRepository standaloneFormVersionRepository;
     private final DepartmentMapper departmentMapper;
     private final InsuranceProviderMapper insuranceProviderMapper;
     private final ProductMapper productMapper;
+    private final StandaloneFormMapper standaloneFormMapper;
 
     public DepartmentService(
             DepartmentRepository departmentRepository,
@@ -62,9 +73,12 @@ public class DepartmentService {
             InsuranceProviderRepository insuranceProviderRepository,
             ProductRepository productRepository,
             ProductInsuranceCoverageRepository productInsuranceCoverageRepository,
+            DepartmentStandaloneFormRepository departmentStandaloneFormRepository,
+            StandaloneFormVersionRepository standaloneFormVersionRepository,
             DepartmentMapper departmentMapper,
             InsuranceProviderMapper insuranceProviderMapper,
-            ProductMapper productMapper
+            ProductMapper productMapper,
+            StandaloneFormMapper standaloneFormMapper
     ) {
         this.departmentRepository = departmentRepository;
         this.departmentInsurancePolicyRepository = departmentInsurancePolicyRepository;
@@ -72,9 +86,12 @@ public class DepartmentService {
         this.insuranceProviderRepository = insuranceProviderRepository;
         this.productRepository = productRepository;
         this.productInsuranceCoverageRepository = productInsuranceCoverageRepository;
+        this.departmentStandaloneFormRepository = departmentStandaloneFormRepository;
+        this.standaloneFormVersionRepository = standaloneFormVersionRepository;
         this.departmentMapper = departmentMapper;
         this.insuranceProviderMapper = insuranceProviderMapper;
         this.productMapper = productMapper;
+        this.standaloneFormMapper = standaloneFormMapper;
     }
 
     @Transactional
@@ -340,13 +357,54 @@ public class DepartmentService {
                 .stream()
                 .map(policy -> insuranceProviderMapper.toDto(policy.getInsuranceProvider()))
                 .toList();
-        
+
         List<ProductDto> products = departmentDefaultProductRepository.findByDepartmentId(department.getId())
                 .stream()
                 .map(link -> productMapper.toDto(link.getProduct()))
                 .toList();
-                
-        return departmentMapper.toDtoWithDetails(department, policies, products);
+
+        List<DepartmentStandaloneForm> formLinks = departmentStandaloneFormRepository.findByDepartmentId(department.getId());
+
+        List<StandaloneFormDto> standaloneForms = formLinks.stream()
+                .map(link -> {
+                    StandaloneForm form = link.getStandaloneForm();
+                    StandaloneFormVersion latest = standaloneFormVersionRepository
+                            .findTopByFormIdOrderByMajorVersionDescMinorVersionDesc(form.getId())
+                            .orElse(null);
+                    return mapToStandaloneFormDto(form, latest);
+                })
+                .toList();
+
+        StandaloneFormDto defaultForm = formLinks.stream()
+                .filter(DepartmentStandaloneForm::isDefault)
+                .findFirst()
+                .map(link -> {
+                    StandaloneForm form = link.getStandaloneForm();
+                    StandaloneFormVersion latest = standaloneFormVersionRepository
+                            .findTopByFormIdOrderByMajorVersionDescMinorVersionDesc(form.getId())
+                            .orElse(null);
+                    return mapToStandaloneFormDto(form, latest);
+                })
+                .orElse(null);
+
+        return departmentMapper.toDtoWithDetails(department, policies, products, standaloneForms, defaultForm);
+    }
+
+    private StandaloneFormDto mapToStandaloneFormDto(StandaloneForm form, StandaloneFormVersion version) {
+        StandaloneFormDto baseDto = standaloneFormMapper.toDto(form);
+        StandaloneFormVersionDto versionDto = version != null ? standaloneFormMapper.toDto(version) : null;
+        return new StandaloneFormDto(
+                baseDto.id(),
+                baseDto.name(),
+                baseDto.description(),
+                baseDto.type(),
+                baseDto.category(),
+                baseDto.isTemplate(),
+                baseDto.createdBy(),
+                versionDto,
+                baseDto.createdAt(),
+                baseDto.updatedAt()
+        );
     }
 
     private List<UUID> normalizeUuidList(List<UUID> ids) {

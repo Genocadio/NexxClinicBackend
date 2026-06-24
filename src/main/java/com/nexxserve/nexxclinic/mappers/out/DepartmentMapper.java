@@ -12,6 +12,8 @@ public interface DepartmentMapper {
 
     @Mapping(target = "insurancePolicies", ignore = true) // Handled dynamically/manually via custom logic in WorkerService if required
     @Mapping(target = "defaultProducts", ignore = true)     // Handled dynamically/manually via custom logic in WorkerService if required
+    @Mapping(target = "standaloneForms", ignore = true)
+    @Mapping(target = "defaultStandaloneForm", ignore = true)
     DepartmentDto toDto(Department department);
 
     @Mapping(target = "id", source = "department.id")
@@ -24,7 +26,15 @@ public interface DepartmentMapper {
     @Mapping(target = "updatedAt", source = "department.updatedAt")
     @Mapping(target = "insurancePolicies", source = "insurancePolicies")
     @Mapping(target = "defaultProducts", source = "defaultProducts")
-    DepartmentDto toDtoWithDetails(Department department, List<com.nexxserve.nexxclinic.dto.out.InsuranceProviderDto> insurancePolicies, List<com.nexxserve.nexxclinic.dto.out.ProductDto> defaultProducts);
+    @Mapping(target = "standaloneForms", source = "standaloneForms")
+    @Mapping(target = "defaultStandaloneForm", source = "defaultStandaloneForm")
+    DepartmentDto toDtoWithDetails(
+            Department department,
+            List<com.nexxserve.nexxclinic.dto.out.InsuranceProviderDto> insurancePolicies,
+            List<com.nexxserve.nexxclinic.dto.out.ProductDto> defaultProducts,
+            List<com.nexxserve.nexxclinic.dto.out.StandaloneFormDto> standaloneForms,
+            com.nexxserve.nexxclinic.dto.out.StandaloneFormDto defaultStandaloneForm
+    );
 
     List<DepartmentDto> toDtoList(List<Department> departments);
 }

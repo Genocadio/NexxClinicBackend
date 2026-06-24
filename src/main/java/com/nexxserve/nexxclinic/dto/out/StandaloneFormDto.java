@@ -11,7 +11,7 @@ public record StandaloneFormDto(
         String category,
         boolean isTemplate,
         UUID createdBy,
-        StandaloneFormVersionDto latestVersion,
+        StandaloneFormVersionDto activeVersion,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {}
