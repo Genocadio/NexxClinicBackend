@@ -185,6 +185,7 @@ enum ConditionalCondition {
 enum AnswerStatus {
   DRAFT
   FINAL
+  SUBMITTED
 }
 
 interface ApiResponse {

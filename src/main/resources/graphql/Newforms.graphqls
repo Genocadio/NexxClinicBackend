@@ -1,0 +1,94 @@
+# Standalone Form Builder GraphQL Schema
+
+type StandaloneForm {
+  id: ID!
+  name: String!
+  description: String
+  type: String!
+  category: String
+  isTemplate: Boolean!
+  createdBy: ID
+  latestVersion: StandaloneFormVersion
+  createdAt: String!
+  updatedAt: String!
+}
+
+type StandaloneFormVersion {
+  id: ID!
+  formId: ID!
+  versionLabel: String!
+  majorVersion: Int!
+  minorVersion: Int!
+  blocks: JSON!
+  theme: JSON
+  status: FormStatus!
+  createdAt: String!
+}
+
+type StandaloneFormAnswer {
+  id: ID!
+  formVersion: StandaloneFormVersion!
+  answers: JSON!
+  score: Float
+  status: AnswerStatus!
+  patientId: ID
+  visitId: ID
+  submittedBy: ID
+  submittedAt: String
+  createdAt: String!
+  updatedAt: String!
+}
+
+# Response types following project patterns
+type StandaloneFormResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: StandaloneForm
+}
+
+type StandaloneFormListResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: [StandaloneForm!]
+}
+
+type StandaloneFormAnswerResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: StandaloneFormAnswer
+}
+
+input StandaloneFormInput {
+  name: String!
+  description: String
+  type: String!
+  category: String
+  isTemplate: Boolean
+  blocks: JSON!
+  theme: JSON
+}
+
+extend type Query {
+  # Form CRUD
+  getStandaloneForms(isTemplate: Boolean, category: String): StandaloneFormListResponse!
+  getStandaloneForm(id: ID!): StandaloneFormResponse!
+  getStandaloneFormVersion(versionId: ID!): StandaloneFormVersion # For historical rendering
+  
+  # Answer CRUD
+  getStandaloneAnswers(formId: ID, patientId: ID): [StandaloneFormAnswer!]!
+  getStandaloneAnswer(id: ID!): StandaloneFormAnswerResponse!
+}
+
+extend type Mutation {
+  # Form Management
+  createStandaloneForm(input: StandaloneFormInput!): StandaloneFormResponse!
+  updateStandaloneForm(id: ID!, input: StandaloneFormInput!, markFinal: Boolean): StandaloneFormResponse!
+  duplicateStandaloneForm(sourceFormId: ID!): StandaloneFormResponse!
+  deleteStandaloneForm(id: ID!, confirmDeleteAnswers: Boolean): BooleanResponse!
+
+  # Answer Management
+  saveStandaloneAnswer(formVersionId: ID!, answers: JSON!, status: AnswerStatus, score: Float): StandaloneFormAnswerResponse!
+  updateStandaloneAnswer(answerId: ID!, answers: JSON!, status: AnswerStatus, score: Float): StandaloneFormAnswerResponse!
+  deleteStandaloneAnswer(answerId: ID!): BooleanResponse!
+  generateStandaloneFormPdf(answerId: ID!): StringResponse! # Returns signed URL
+}
