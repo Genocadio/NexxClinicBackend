@@ -3,12 +3,7 @@ package com.nexxserve.nexxclinic.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
-import com.nexxserve.nexxclinic.dto.out.ApiResponse;
-import com.nexxserve.nexxclinic.dto.out.StandaloneFormAnswerDto;
-import com.nexxserve.nexxclinic.dto.out.StandaloneFormDto;
-import com.nexxserve.nexxclinic.dto.out.StandaloneFormVersionDto;
-import com.nexxserve.nexxclinic.dto.out.VisitDepartmentDto;
-import com.nexxserve.nexxclinic.dto.out.VisitStandaloneAnswerDto;
+import com.nexxserve.nexxclinic.dto.out.*;
 import com.nexxserve.nexxclinic.entity.Department;
 import com.nexxserve.nexxclinic.entity.DepartmentStandaloneForm;
 import com.nexxserve.nexxclinic.entity.Visit;
@@ -390,7 +385,7 @@ public class StandaloneFormService {
     }
 
     @Transactional
-    public ApiResponse<StandaloneFormDto> linkFormToDepartment(UUID departmentId, UUID formId) {
+    public ApiResponse<StandaloneFormDto>  linkFormToDepartment(UUID departmentId, UUID formId) {
         Optional<Department> departmentOpt = departmentRepository.findById(departmentId);
         if (departmentOpt.isEmpty()) {
             return ApiResponse.error("Department not found");
@@ -413,6 +408,44 @@ public class StandaloneFormService {
         departmentStandaloneFormRepository.save(link);
 
         return getForm(formId);
+    }
+
+    public ApiResponse<List<DepartmentFormDto>> getDepartmentFormsWithDefault(UUID departmentId) {
+        List<DepartmentStandaloneForm> links = departmentStandaloneFormRepository.findByDepartmentId(departmentId);
+
+        if (links.isEmpty()) {
+            return ApiResponse.success("No forms linked to this department", List.of());
+        }
+
+        // Check if any form is marked as default
+        boolean hasDefault = links.stream().anyMatch(DepartmentStandaloneForm::isDefault);
+
+        // If no default is set, mark the first one as default
+        if (!hasDefault && !links.isEmpty()) {
+            DepartmentStandaloneForm firstLink = links.get(0);
+            firstLink.setDefault(true);
+            departmentStandaloneFormRepository.save(firstLink);
+
+            // Refresh the list to get updated default status
+            links = departmentStandaloneFormRepository.findByDepartmentId(departmentId);
+        }
+
+        List<DepartmentFormDto> dtos = links.stream()
+                .map(link -> {
+                    StandaloneForm form = link.getStandaloneForm();
+                    if (form.isDeleted()) {
+                        return null;
+                    }
+                    StandaloneFormVersion latest = versionRepository
+                            .findTopByFormIdOrderByMajorVersionDescMinorVersionDesc(form.getId())
+                            .orElse(null);
+                    StandaloneFormDto formDto = mapToDto(form, latest);
+                    return new DepartmentFormDto(formDto, link.isDefault());
+                })
+                .filter(dto -> dto != null)
+                .toList();
+
+        return ApiResponse.success("Department forms fetched successfully", dtos);
     }
 
     @Transactional

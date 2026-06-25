@@ -1,10 +1,7 @@
 package com.nexxserve.nexxclinic.graphql;
 
 import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
-import com.nexxserve.nexxclinic.dto.out.ApiResponse;
-import com.nexxserve.nexxclinic.dto.out.StandaloneFormAnswerDto;
-import com.nexxserve.nexxclinic.dto.out.StandaloneFormDto;
-import com.nexxserve.nexxclinic.dto.out.StandaloneFormVersionDto;
+import com.nexxserve.nexxclinic.dto.out.*;
 import com.nexxserve.nexxclinic.entity.StandaloneFormVersion;
 import com.nexxserve.nexxclinic.mappers.out.StandaloneFormMapper;
 import com.nexxserve.nexxclinic.model.RoleName;
@@ -29,13 +26,23 @@ public class StandaloneFormQueryController {
         this.mapper = mapper;
     }
 
-//    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
     @QueryMapping
     public ApiResponse<List<StandaloneFormDto>> getStandaloneForms(
             @Argument Boolean isTemplate,
-            @Argument String category
+            @Argument String category,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         return formService.getForms(isTemplate, category);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @QueryMapping
+    public ApiResponse<List<DepartmentFormDto>> getDepartmentForms(
+            @Argument UUID departmentId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return formService.getDepartmentFormsWithDefault(departmentId);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})

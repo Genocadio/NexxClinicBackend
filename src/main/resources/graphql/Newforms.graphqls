@@ -80,6 +80,23 @@ input StandaloneFormInput {
   theme: JSON
 }
 
+type DepartmentForm {
+  form: StandaloneForm!
+  isDefault: Boolean!
+}
+
+type DepartmentFormResult {
+  forms: [DepartmentForm!]!
+  defaultForm: StandaloneForm
+}
+
+type DepartmentFormResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: DepartmentFormResult
+}
+
+
 extend type Query {
   # Form CRUD
   getStandaloneForms(isTemplate: Boolean, category: String): StandaloneFormListResponse!
@@ -89,6 +106,7 @@ extend type Query {
   # Answer CRUD
   getStandaloneAnswers(formId: ID, patientId: ID): [StandaloneFormAnswer!]!
   getStandaloneAnswer(id: ID!): StandaloneFormAnswerResponse!
+  getDepartmentForms(departmentId: ID!): DepartmentFormResponse!
 }
 
 extend type Mutation {
