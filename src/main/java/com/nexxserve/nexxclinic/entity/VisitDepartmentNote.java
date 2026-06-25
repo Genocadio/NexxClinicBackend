@@ -30,7 +30,8 @@ public class VisitDepartmentNote {
     private Worker createdBy;
 
     @NotNull
-    NoteType noteType;
+    @Enumerated(EnumType.STRING)
+    private NoteType noteType;
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(

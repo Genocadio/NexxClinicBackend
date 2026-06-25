@@ -5,6 +5,7 @@ import com.nexxserve.nexxclinic.dto.out.VisitStandaloneAnswerDto;
 import com.nexxserve.nexxclinic.entity.*;
 import com.nexxserve.nexxclinic.model.*;
 import com.nexxserve.nexxclinic.repository.*;
+import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -66,6 +67,9 @@ class StandaloneFormServiceTest {
         Patient patient = new Patient();
         patient.setFirstName("John");
         patient.setLastName("Doe");
+        patient.setFullName("John Doe");
+        patient.setDateOfBirth(LocalDate.of(1990, 1, 1));
+        patient.setGender(Gender.MALE);
         patient = patientRepository.save(patient);
 
         Visit visit = new Visit();
