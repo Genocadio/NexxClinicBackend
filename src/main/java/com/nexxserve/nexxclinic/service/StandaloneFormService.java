@@ -28,10 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 public class StandaloneFormService {
@@ -422,7 +419,7 @@ public class StandaloneFormService {
 
         // If no default is set, mark the first one as default
         if (!hasDefault && !links.isEmpty()) {
-            DepartmentStandaloneForm firstLink = links.get(0);
+            DepartmentStandaloneForm firstLink = links.getFirst();
             firstLink.setDefault(true);
             departmentStandaloneFormRepository.save(firstLink);
 
@@ -442,7 +439,7 @@ public class StandaloneFormService {
                     StandaloneFormDto formDto = mapToDto(form, latest);
                     return new DepartmentFormDto(formDto, link.isDefault());
                 })
-                .filter(dto -> dto != null)
+                .filter(Objects::nonNull)
                 .toList();
 
         return ApiResponse.success("Department forms fetched successfully", dtos);
