@@ -22,6 +22,8 @@ import com.nexxserve.nexxclinic.repository.VisitRepository;
 import com.nexxserve.nexxclinic.repository.StandaloneFormAnswerRepository;
 import com.nexxserve.nexxclinic.repository.StandaloneFormRepository;
 import com.nexxserve.nexxclinic.repository.StandaloneFormVersionRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +44,7 @@ public class StandaloneFormService {
     private final VisitDepartmentRepository visitDepartmentRepository;
     private final VisitDepartmentService visitDepartmentService;
     private final StandaloneFormMapper mapper;
+    private static final Logger log = LoggerFactory.getLogger(StandaloneFormService.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public StandaloneFormService(StandaloneFormRepository formRepository,
@@ -298,20 +301,18 @@ public class StandaloneFormService {
         return ApiResponse.success("Answer updated successfully", mapper.toDto(saved));
     }
 
+    @Transactional(readOnly = true)
     public ApiResponse<StandaloneFormAnswerDto> getAnswer(UUID id) {
         return answerRepository.findById(id)
                 .map(a -> ApiResponse.success("Answer fetched successfully", mapper.toDto(a)))
                 .orElse(ApiResponse.error("Answer not found"));
     }
 
-    public List<StandaloneFormAnswerDto> getAnswers(UUID formId, UUID patientId) {
+    @Transactional(readOnly = true)
+    public List<StandaloneFormAnswerDto> getAnswers(UUID formId) {
         List<StandaloneFormAnswer> answers;
-        if (formId != null && patientId != null) {
-            answers = answerRepository.findByFormVersionFormIdAndPatientId(formId, patientId);
-        } else if (formId != null) {
+        if (formId != null) {
             answers = answerRepository.findByFormVersionFormId(formId);
-        } else if (patientId != null) {
-            answers = answerRepository.findByPatientId(patientId);
         } else {
             answers = answerRepository.findAll();
         }
@@ -357,8 +358,6 @@ public class StandaloneFormService {
 
         StandaloneFormAnswer answer = new StandaloneFormAnswer();
         answer.setFormVersion(versionOpt.get());
-        answer.setVisitId(visitId);
-        answer.setPatientId(visitOpt.get().getPatient() != null ? visitOpt.get().getPatient().getId() : null);
         answer.setAnswers(serializeJson(answers));
         answer.setStatus(status != null ? status : AnswerStatus.DRAFT);
         if (score != null) {
@@ -407,44 +406,98 @@ public class StandaloneFormService {
         return getForm(formId);
     }
 
-    public ApiResponse<List<DepartmentFormDto>> getDepartmentFormsWithDefault(UUID departmentId) {
+    @Transactional(readOnly = true)
+    public ApiResponse<DepartmentFormsResult> getDepartmentFormsWithDefault(UUID departmentId) {
+        log.info("Fetching department forms for departmentId: {}", departmentId);
+
         List<DepartmentStandaloneForm> links = departmentStandaloneFormRepository.findByDepartmentId(departmentId);
+        log.info("Found {} links for department {}", links.size(), departmentId);
+
+        // Log each link details
+        for (DepartmentStandaloneForm link : links) {
+            StandaloneForm form = link.getStandaloneForm();
+            log.debug("Link - formId: {}, formName: {}, isDeleted: {}, isDefault: {}, departmentId: {}",
+                    form != null ? form.getId() : "null",
+                    form != null ? form.getName() : "null",
+                    form != null ? form.isDeleted() : "unknown",
+                    link.isDefault(),
+                    link.getDepartment() != null ? link.getDepartment().getId() : "null"
+            );
+        }
 
         if (links.isEmpty()) {
-            return ApiResponse.success("No forms linked to this department", List.of());
+            log.warn("No forms linked to department: {}", departmentId);
+            DepartmentFormsResult emptyResult = new DepartmentFormsResult(List.of(), null);
+            return ApiResponse.success("No forms linked to this department", emptyResult);
         }
 
         // Check if any form is marked as default
         boolean hasDefault = links.stream().anyMatch(DepartmentStandaloneForm::isDefault);
+        log.info("Has default form: {}", hasDefault);
 
         // If no default is set, mark the first one as default
         if (!hasDefault && !links.isEmpty()) {
+            log.info("No default found, marking first link as default");
             DepartmentStandaloneForm firstLink = links.getFirst();
+            log.debug("Setting default for formId: {}, formName: {}",
+                    firstLink.getStandaloneForm().getId(),
+                    firstLink.getStandaloneForm().getName()
+            );
             firstLink.setDefault(true);
             departmentStandaloneFormRepository.save(firstLink);
+            log.info("Saved default flag for formId: {}", firstLink.getStandaloneForm().getId());
 
             // Refresh the list to get updated default status
             links = departmentStandaloneFormRepository.findByDepartmentId(departmentId);
+            log.info("Refreshed links, now have {} links", links.size());
         }
 
         List<DepartmentFormDto> dtos = links.stream()
                 .map(link -> {
                     StandaloneForm form = link.getStandaloneForm();
-                    if (form.isDeleted()) {
+                    log.debug("Processing link - formId: {}, formName: {}, isDeleted: {}, isDefault: {}",
+                            form != null ? form.getId() : "null",
+                            form != null ? form.getName() : "null",
+                            form != null ? form.isDeleted() : "null",
+                            link.isDefault()
+                    );
+
+                    if (form == null) {
+                        log.warn("Link has null form reference: {}", link.getId());
                         return null;
                     }
+
+                    if (form.isDeleted()) {
+                        log.warn("Form is deleted, skipping: formId={}, formName={}", form.getId(), form.getName());
+                        return null;
+                    }
+
                     StandaloneFormVersion latest = versionRepository
                             .findTopByFormIdOrderByMajorVersionDescMinorVersionDesc(form.getId())
                             .orElse(null);
+                    if (latest == null) {
+                        log.warn("No version found for form: formId={}, formName={}", form.getId(), form.getName());
+                    }
+
                     StandaloneFormDto formDto = mapToDto(form, latest);
-                    return new DepartmentFormDto(formDto, link.isDefault());
+                    DepartmentFormDto dto = new DepartmentFormDto(formDto, link.isDefault());
+                    log.debug("Created DepartmentFormDto - formId: {}, isDefault: {}", formDto.id(), link.isDefault());
+                    return dto;
                 })
                 .filter(Objects::nonNull)
                 .toList();
 
-        return ApiResponse.success("Department forms fetched successfully", dtos);
-    }
+        // Find the default form
+        StandaloneFormDto defaultForm = dtos.stream()
+                .filter(DepartmentFormDto::isDefault)
+                .map(DepartmentFormDto::form)
+                .findFirst()
+                .orElse(null);
 
+        log.info("Returning {} department forms for departmentId: {}", dtos.size(), departmentId);
+        DepartmentFormsResult result = new DepartmentFormsResult(dtos, defaultForm);
+        return ApiResponse.success("Department forms fetched successfully", result);
+    }
     @Transactional
     public ApiResponse<Boolean> unlinkFormFromDepartment(UUID departmentId, UUID formId) {
         departmentStandaloneFormRepository.deleteByDepartmentIdAndStandaloneFormId(departmentId, formId);

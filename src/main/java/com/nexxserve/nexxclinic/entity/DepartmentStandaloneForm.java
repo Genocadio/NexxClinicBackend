@@ -1,11 +1,13 @@
 package com.nexxserve.nexxclinic.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
 @Table(name = "department_standalone_forms", uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"department_id", "standalone_form_id"})
+        @UniqueConstraint(columnNames = {"department_id", "standalone_form_id"})
 })
 public class DepartmentStandaloneForm {
 
@@ -23,6 +25,13 @@ public class DepartmentStandaloneForm {
 
     @Column(name = "is_default", nullable = false)
     private boolean isDefault = false;
+
+    // ADD THIS FIELD - it was missing!
+    @Column(name = "added_at", nullable = false, updatable = false)
+    @CreationTimestamp
+    private LocalDateTime addedAt;
+
+    // Getters and setters...
 
     public UUID getId() {
         return id;
@@ -54,5 +63,14 @@ public class DepartmentStandaloneForm {
 
     public void setDefault(boolean aDefault) {
         isDefault = aDefault;
+    }
+
+    // ADD THIS GETTER/SETTER
+    public LocalDateTime getAddedAt() {
+        return addedAt;
+    }
+
+    public void setAddedAt(LocalDateTime addedAt) {
+        this.addedAt = addedAt;
     }
 }

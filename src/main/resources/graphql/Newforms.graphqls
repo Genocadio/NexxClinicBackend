@@ -86,7 +86,7 @@ type DepartmentForm {
 }
 
 type DepartmentFormResult {
-  forms: [DepartmentForm!]!
+  forms: [DepartmentForm!]
   defaultForm: StandaloneForm
 }
 
@@ -104,7 +104,6 @@ extend type Query {
   getStandaloneFormVersion(versionId: ID!): StandaloneFormVersion # For historical rendering
   
   # Answer CRUD
-  getStandaloneAnswers(formId: ID, patientId: ID): [StandaloneFormAnswer!]!
   getStandaloneAnswer(id: ID!): StandaloneFormAnswerResponse!
   getDepartmentForms(departmentId: ID!): DepartmentFormResponse!
 }

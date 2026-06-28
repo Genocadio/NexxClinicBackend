@@ -27,11 +27,6 @@ public class StandaloneFormAnswer {
     @JoinColumn(name = "form_version_id", nullable = false)
     private StandaloneFormVersion formVersion;
 
-    @Column(name = "patient_id")
-    private UUID patientId;
-
-    @Column(name = "visit_id")
-    private UUID visitId;
 
     @Type(JsonbType.class)
     @Column(columnDefinition = "jsonb", nullable = false)
@@ -89,21 +84,6 @@ public class StandaloneFormAnswer {
         this.formVersion = formVersion;
     }
 
-    public UUID getPatientId() {
-        return patientId;
-    }
-
-    public void setPatientId(UUID patientId) {
-        this.patientId = patientId;
-    }
-
-    public UUID getVisitId() {
-        return visitId;
-    }
-
-    public void setVisitId(UUID visitId) {
-        this.visitId = visitId;
-    }
 
     public String getAnswers() {
         return answers;

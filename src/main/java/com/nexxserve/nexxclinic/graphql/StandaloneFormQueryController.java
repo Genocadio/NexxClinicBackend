@@ -38,7 +38,7 @@ public class StandaloneFormQueryController {
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
     @QueryMapping
-    public ApiResponse<List<DepartmentFormDto>> getDepartmentForms(
+    public ApiResponse<DepartmentFormsResult> getDepartmentForms(
             @Argument UUID departmentId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
@@ -68,10 +68,9 @@ public class StandaloneFormQueryController {
     @QueryMapping
     public List<StandaloneFormAnswerDto> getStandaloneAnswers(
             @Argument UUID formId,
-            @Argument UUID patientId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return formService.getAnswers(formId, patientId);
+        return formService.getAnswers(formId);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})

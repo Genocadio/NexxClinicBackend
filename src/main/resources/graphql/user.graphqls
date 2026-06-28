@@ -682,10 +682,10 @@ type ClinicProfile {
   name: String
   username: String
   address: String
-  contacts: [ClinicContact!]!
+  contacts: [ClinicContact!]
   tinNumber: String
   logoUrl: String
-  metadata: [ClinicMetadata!]!
+  metadata: [ClinicMetadata!]
   createdAt: String!
   updatedAt: String!
 }

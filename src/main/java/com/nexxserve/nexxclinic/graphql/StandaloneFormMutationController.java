@@ -131,7 +131,8 @@ public class StandaloneFormMutationController {
     @MutationMapping
     public ApiResponse<StandaloneFormDto> linkStandaloneFormToDepartment(
             @Argument UUID departmentId,
-            @Argument UUID formId
+            @Argument UUID formId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         return formService.linkFormToDepartment(departmentId, formId);
     }
@@ -140,7 +141,8 @@ public class StandaloneFormMutationController {
     @MutationMapping
     public ApiResponse<Boolean> unlinkStandaloneFormFromDepartment(
             @Argument UUID departmentId,
-            @Argument UUID formId
+            @Argument UUID formId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         return formService.unlinkFormFromDepartment(departmentId, formId);
     }

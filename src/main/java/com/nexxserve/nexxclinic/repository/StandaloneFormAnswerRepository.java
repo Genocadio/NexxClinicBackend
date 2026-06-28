@@ -10,7 +10,5 @@ import java.util.UUID;
 @Repository
 public interface StandaloneFormAnswerRepository extends JpaRepository<StandaloneFormAnswer, UUID> {
     List<StandaloneFormAnswer> findByFormVersionFormId(UUID formId);
-    List<StandaloneFormAnswer> findByPatientId(UUID patientId);
-    List<StandaloneFormAnswer> findByFormVersionFormIdAndPatientId(UUID formId, UUID patientId);
     boolean existsByFormVersionId(UUID formVersionId);
 }
