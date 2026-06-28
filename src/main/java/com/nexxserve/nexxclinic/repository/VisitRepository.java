@@ -19,4 +19,21 @@ public interface VisitRepository extends JpaRepository<Visit, UUID>, JpaSpecific
 
 	@Query("SELECT v FROM Visit v WHERE v.patient.id = :patientId ORDER BY v.visitDate DESC, v.createdAt DESC")
 	List<Visit> findLastVisitsByPatientId(@Param("patientId") UUID patientId, Pageable pageable);
+
+	@Query("""
+		SELECT v FROM Visit v
+		WHERE v.patient.id = :patientId
+		AND (
+			v.visitDate < :referenceVisitDate
+			OR (v.visitDate = :referenceVisitDate AND v.createdAt < :referenceCreatedAt)
+			OR (v.visitDate = :referenceVisitDate AND v.createdAt = :referenceCreatedAt AND v.id <> :referenceVisitId)
+		)
+		ORDER BY v.visitDate DESC, v.createdAt DESC
+		""")
+	List<Visit> findPreviousVisitsByPatientId(
+			@Param("patientId") UUID patientId,
+			@Param("referenceVisitDate") LocalDateTime referenceVisitDate,
+			@Param("referenceCreatedAt") LocalDateTime referenceCreatedAt,
+			@Param("referenceVisitId") UUID referenceVisitId,
+			Pageable pageable);
 }

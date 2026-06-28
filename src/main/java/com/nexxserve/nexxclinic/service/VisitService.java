@@ -303,14 +303,30 @@ public class VisitService {
         }
 
         Visit referenceVisit = visitOptional.get();
-        VisitDto referenceVisitDto = visitToDto(referenceVisit, Set.of(), authUser);
         UUID patientId = referenceVisit.getPatient() == null ? null : referenceVisit.getPatient().getId();
         if (patientId == null) {
             return ApiResponse.error("Patient not found for visit.");
         }
 
-        List<VisitDepartment> lastDeptVisits = visitDepartmentRepository.findLastByPatientIdAndDepartmentId(
-                patientId, departmentId, PageRequest.of(0, 1));
+        List<Visit> previousVisits = visitRepository.findPreviousVisitsByPatientId(
+                patientId,
+                referenceVisit.getVisitDate(),
+                referenceVisit.getCreatedAt(),
+                referenceVisit.getId(),
+                PageRequest.of(0, 1)
+        );
+        VisitDto previousVisitDto = previousVisits.isEmpty()
+                ? null
+                : visitToDto(previousVisits.get(0), Set.of(), authUser);
+
+        List<VisitDepartment> lastDeptVisits = visitDepartmentRepository.findPreviousByPatientIdAndDepartmentId(
+                patientId,
+                departmentId,
+                referenceVisit.getVisitDate(),
+                referenceVisit.getCreatedAt(),
+                referenceVisit.getId(),
+                PageRequest.of(0, 1)
+        );
         LastDepartmentVisitInfoDto lastDeptVisitDto = null;
         if (!lastDeptVisits.isEmpty()) {
             VisitDepartment vd = lastDeptVisits.get(0);
@@ -322,7 +338,7 @@ public class VisitService {
 
         return ApiResponse.success(
                 "Last patient department visit fetched.",
-                new LastPatientDepartmentVisitDto(referenceVisitDto, lastDeptVisitDto)
+                new LastPatientDepartmentVisitDto(previousVisitDto, lastDeptVisitDto)
         );
     }
 

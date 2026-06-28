@@ -39,4 +39,24 @@ public interface VisitDepartmentRepository extends JpaRepository<VisitDepartment
             @Param("patientId") UUID patientId,
             @Param("departmentId") UUID departmentId,
             Pageable pageable);
+
+    @Query("""
+            SELECT vd FROM VisitDepartment vd
+            WHERE vd.visit.patient.id = :patientId
+            AND vd.department.id = :departmentId
+            AND vd.parentVisitDepartment IS NULL
+            AND (
+                vd.visit.visitDate < :referenceVisitDate
+                OR (vd.visit.visitDate = :referenceVisitDate AND vd.visit.createdAt < :referenceCreatedAt)
+                OR (vd.visit.visitDate = :referenceVisitDate AND vd.visit.createdAt = :referenceCreatedAt AND vd.visit.id <> :referenceVisitId)
+            )
+            ORDER BY vd.visit.visitDate DESC, vd.visit.createdAt DESC
+            """)
+    List<VisitDepartment> findPreviousByPatientIdAndDepartmentId(
+            @Param("patientId") UUID patientId,
+            @Param("departmentId") UUID departmentId,
+            @Param("referenceVisitDate") java.time.LocalDateTime referenceVisitDate,
+            @Param("referenceCreatedAt") java.time.LocalDateTime referenceCreatedAt,
+            @Param("referenceVisitId") UUID referenceVisitId,
+            Pageable pageable);
 }
