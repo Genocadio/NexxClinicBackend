@@ -1431,6 +1431,7 @@ type Query {
   visitDepartmentNotes(visitId: ID!, visitDepartmentId: ID): VisitDepartmentNotesListResponse!
   visitBilling(visitId: ID!): VisitBillingResponse!
   clinicProfile: ClinicProfileResponse!
+  lastPatientDepartmentVisit(patientId: ID!, departmentId: ID!): LastPatientDepartmentVisitResponse!
 }
 
 type Mutation {
@@ -1467,7 +1468,6 @@ type Mutation {
   createVisit(input: CreateVisitInput!): VisitResponse!
   changeVisitDate(input: ChangeVisitDateInput!): VisitResponse!
   addVisitDepartment(visitId: ID!, departmentId: ID!, encounterType: EncounterType): VisitResponse!
-  lastPatientDepartmentVisit(patientId: ID!, departmentId: ID!): LastPatientDepartmentVisitResponse!
 
   """
   Add a child visit department with products. Validations occur before creation:
