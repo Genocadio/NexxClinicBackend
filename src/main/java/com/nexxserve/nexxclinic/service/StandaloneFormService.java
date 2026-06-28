@@ -321,7 +321,7 @@ public class StandaloneFormService {
     @Transactional
     public ApiResponse<VisitStandaloneAnswerDto> saveVisitStandaloneAnswer(
             UUID visitId,
-            UUID departmentId,
+            UUID visitDepartmentId,
             UUID versionId,
             Object answers,
             AnswerStatus status,
@@ -339,9 +339,10 @@ public class StandaloneFormService {
             return ApiResponse.error("Visit not found");
         }
 
-        Optional<VisitDepartment> visitDeptOpt = visitDepartmentRepository.findByVisitIdAndDepartmentId(visitId, departmentId);
+        Optional<VisitDepartment> visitDeptOpt = visitDepartmentRepository.findById(visitDepartmentId)
+                .filter(vd -> vd.getVisit() != null && visitId.equals(vd.getVisit().getId()));
         if (visitDeptOpt.isEmpty()) {
-            return ApiResponse.error("Visit Department not found for this visit and department");
+            return ApiResponse.error("Visit department not found for this visit.");
         }
 
         VisitDepartment visitDept = visitDeptOpt.get();
@@ -361,9 +362,9 @@ public class StandaloneFormService {
 
         StandaloneFormAnswer savedAnswer = answerRepository.save(answer);
 
-        // Link to VisitDepartment
+        // Link to the specific VisitDepartment (parent or child)
         visitDept.setAnswerId(savedAnswer.getId());
-        visitDepartmentRepository.save(visitDept);
+        VisitDepartment savedVisitDepartment = visitDepartmentRepository.save(visitDept);
 
         StandaloneFormAnswerDto mappedAnswerDto = mapper.toDto(savedAnswer);
         StandaloneFormAnswerDto answerDto = new StandaloneFormAnswerDto(
@@ -380,7 +381,7 @@ public class StandaloneFormService {
                 mappedAnswerDto.createdAt(),
                 mappedAnswerDto.updatedAt()
         );
-        VisitDepartmentDto visitDeptDto = visitDepartmentService.visitDepartmentToDto(visitDept, Set.of(), authUser);
+        VisitDepartmentDto visitDeptDto = visitDepartmentService.visitDepartmentToDto(savedVisitDepartment, Set.of(), authUser);
 
         return ApiResponse.success("Visit answer saved successfully", new VisitStandaloneAnswerDto(answerDto, visitDeptDto));
     }

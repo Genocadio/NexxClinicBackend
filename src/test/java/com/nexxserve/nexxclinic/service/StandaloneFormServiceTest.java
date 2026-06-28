@@ -88,7 +88,7 @@ class StandaloneFormServiceTest {
         Map<String, Object> answers = Map.of("q1", "a1");
         ApiResponse<VisitStandaloneAnswerDto> response = standaloneFormService.saveVisitStandaloneAnswer(
                 visit.getId(),
-                department.getId(),
+                visitDept.getId(),
                 version.getId(),
                 answers,
                 AnswerStatus.FINAL,
@@ -103,12 +103,12 @@ class StandaloneFormServiceTest {
         assertNotNull(response.data().answer());
         assertNotNull(response.data().visitDepartment());
         assertEquals(department.getId(), response.data().visitDepartment().department().id());
-        
+
         // Check if answerId is updated in VisitDepartment
         VisitDepartment updatedVisitDept = visitDepartmentRepository.findById(visitDept.getId()).orElseThrow();
         assertNotNull(updatedVisitDept.getAnswerId());
         assertEquals(response.data().answer().id(), updatedVisitDept.getAnswerId());
-        
+
         // Check if answer is saved with correct data
         assertEquals(visit.getId(), response.data().answer().visitId());
         assertEquals(patient.getId(), response.data().answer().patientId());

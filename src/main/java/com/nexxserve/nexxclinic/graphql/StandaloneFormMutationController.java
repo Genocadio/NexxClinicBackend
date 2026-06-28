@@ -116,7 +116,7 @@ public class StandaloneFormMutationController {
     @MutationMapping
     public ApiResponse<VisitStandaloneAnswerDto> saveVisitStandaloneAnswer(
             @Argument UUID visitId,
-            @Argument UUID departmentId,
+            @Argument UUID visitDepartmentId,
             @Argument UUID formVersionId,
             @Argument Object answers,
             @Argument AnswerStatus status,
@@ -124,7 +124,7 @@ public class StandaloneFormMutationController {
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         UUID workerId = authUser != null ? authUser.userId() : null;
-        return formService.saveVisitStandaloneAnswer(visitId, departmentId, formVersionId, answers, status, score, workerId, authUser);
+        return formService.saveVisitStandaloneAnswer(visitId, visitDepartmentId, formVersionId, answers, status, score, workerId, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN})

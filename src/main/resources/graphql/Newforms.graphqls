@@ -128,7 +128,7 @@ extend type Mutation {
   deleteStandaloneAnswer(answerId: ID!): BooleanResponse!
   generateStandaloneFormPdf(answerId: ID!): StringResponse! # Returns signed URL
 
-  saveVisitStandaloneAnswer(visitId: ID!, departmentId: ID!, formVersionId: ID!, answers: JSON!, status: AnswerStatus, score: Float): VisitStandaloneAnswerResponse!
+  saveVisitStandaloneAnswer(visitId: ID!, visitDepartmentId: ID!, formVersionId: ID!, answers: JSON!, status: AnswerStatus, score: Float): VisitStandaloneAnswerResponse!
 
   # Department-Form Linking
   linkStandaloneFormToDepartment(departmentId: ID!, formId: ID!): StandaloneFormResponse!
