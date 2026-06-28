@@ -349,8 +349,6 @@ public class StandaloneFormService {
 
         StandaloneFormAnswer answer = new StandaloneFormAnswer();
         answer.setFormVersion(versionOpt.get());
-        answer.setVisitId(visit.getId());
-        answer.setPatientId(visit.getPatient() != null ? visit.getPatient().getId() : null);
         answer.setAnswers(serializeJson(answers));
         answer.setStatus(status != null ? status : AnswerStatus.DRAFT);
         if (score != null) {
@@ -367,7 +365,21 @@ public class StandaloneFormService {
         visitDept.setAnswerId(savedAnswer.getId());
         visitDepartmentRepository.save(visitDept);
 
-        StandaloneFormAnswerDto answerDto = mapper.toDto(savedAnswer);
+        StandaloneFormAnswerDto mappedAnswerDto = mapper.toDto(savedAnswer);
+        StandaloneFormAnswerDto answerDto = new StandaloneFormAnswerDto(
+                mappedAnswerDto.id(),
+                mappedAnswerDto.form(),
+                mappedAnswerDto.formVersion(),
+                mappedAnswerDto.answers(),
+                mappedAnswerDto.score(),
+                mappedAnswerDto.status(),
+                visit.getPatient() != null ? visit.getPatient().getId() : null,
+                visit.getId(),
+                mappedAnswerDto.submittedBy(),
+                mappedAnswerDto.submittedAt(),
+                mappedAnswerDto.createdAt(),
+                mappedAnswerDto.updatedAt()
+        );
         VisitDepartmentDto visitDeptDto = visitDepartmentService.visitDepartmentToDto(visitDept, Set.of(), authUser);
 
         return ApiResponse.success("Visit answer saved successfully", new VisitStandaloneAnswerDto(answerDto, visitDeptDto));

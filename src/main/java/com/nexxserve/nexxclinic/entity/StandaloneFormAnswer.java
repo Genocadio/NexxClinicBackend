@@ -39,12 +39,6 @@ public class StandaloneFormAnswer {
     @Column(nullable = false)
     private AnswerStatus status = AnswerStatus.DRAFT;
 
-    @Column(name = "patient_id")
-    private UUID patientId;
-
-    @Column(name = "visit_id")
-    private UUID visitId;
-
     @Column(name = "submitted_by")
     private UUID submittedBy; // Worker ID who filled the form
 
@@ -113,22 +107,6 @@ public class StandaloneFormAnswer {
 
     public void setStatus(AnswerStatus status) {
         this.status = status;
-    }
-
-    public UUID getPatientId() {
-        return patientId;
-    }
-
-    public void setPatientId(UUID patientId) {
-        this.patientId = patientId;
-    }
-
-    public UUID getVisitId() {
-        return visitId;
-    }
-
-    public void setVisitId(UUID visitId) {
-        this.visitId = visitId;
     }
 
     public UUID getSubmittedBy() {

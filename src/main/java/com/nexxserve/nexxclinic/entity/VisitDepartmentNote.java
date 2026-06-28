@@ -1,6 +1,7 @@
 package com.nexxserve.nexxclinic.entity;
 
 import com.nexxserve.nexxclinic.model.NoteType;
+import com.nexxserve.nexxclinic.persistence.NoteTypeConverter;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 
@@ -30,7 +31,8 @@ public class VisitDepartmentNote {
     private Worker createdBy;
 
     @NotNull
-    @Enumerated(EnumType.STRING)
+    @Convert(converter = NoteTypeConverter.class)
+    @Column(name = "note_type", nullable = false)
     private NoteType noteType;
 
     @ManyToMany(fetch = FetchType.LAZY)
