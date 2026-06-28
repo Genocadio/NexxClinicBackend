@@ -1,6 +1,7 @@
 package com.nexxserve.nexxclinic.repository;
 
 import com.nexxserve.nexxclinic.entity.StandaloneForm;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.stereotype.Repository;
@@ -14,4 +15,23 @@ public interface StandaloneFormRepository extends JpaRepository<StandaloneForm, 
     List<StandaloneForm> findByCategoryAndIsDeletedFalse(String category);
     List<StandaloneForm> findByIsTemplateAndCategoryAndIsDeletedFalse(boolean isTemplate, String category);
     List<StandaloneForm> findByIsDeletedFalse();
+
+    static Specification<StandaloneForm> filter(Boolean isTemplate, String category, String name) {
+        return (root, query, cb) -> {
+            var predicates = new java.util.ArrayList<jakarta.persistence.criteria.Predicate>();
+            predicates.add(cb.isFalse(root.get("isDeleted")));
+
+            if (isTemplate != null) {
+                predicates.add(cb.equal(root.get("isTemplate"), isTemplate));
+            }
+            if (category != null && !category.trim().isEmpty()) {
+                predicates.add(cb.equal(cb.lower(root.get("category")), category.trim().toLowerCase()));
+            }
+            if (name != null && !name.trim().isEmpty()) {
+                predicates.add(cb.like(cb.lower(root.get("name")), "%" + name.trim().toLowerCase() + "%"));
+            }
+
+            return cb.and(predicates.toArray(new jakarta.persistence.criteria.Predicate[0]));
+        };
+    }
 }

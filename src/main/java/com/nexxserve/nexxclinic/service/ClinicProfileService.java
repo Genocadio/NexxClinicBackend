@@ -62,6 +62,7 @@ public class ClinicProfileService {
         }
 
         ClinicProfile profile = resolveClinicProfile();
+        boolean isNewProfile = isProfileIncomplete(profile);
 
         if (input.name() != null) profile.setName(blankToNull(input.name()));
         if (input.username() != null) profile.setUsername(blankToNull(input.username()));
@@ -75,6 +76,11 @@ public class ClinicProfileService {
 
         if (input.metadata() != null) {
             updateMetadata(profile, input.metadata());
+        }
+
+        String validationError = validateRequiredClinicProfile(profile, isNewProfile);
+        if (validationError != null) {
+            return ApiResponse.error(validationError);
         }
 
         ClinicProfile saved = clinicProfileRepository.save(profile);
@@ -155,6 +161,7 @@ public class ClinicProfileService {
                     contact.setDescription(blankToNull(input.description()));
                     return contact;
                 })
+                .filter(contact -> contact.getContactType() != null && contact.getValue() != null)
                 .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
     }
 
@@ -199,6 +206,29 @@ public class ClinicProfileService {
                     ClinicProfile p = new ClinicProfile();
                     return clinicProfileRepository.save(p);
                 });
+    }
+
+    private boolean isProfileIncomplete(ClinicProfile profile) {
+        return blankToNull(profile.getName()) == null
+                || blankToNull(profile.getTinNumber()) == null
+                || resolveContacts(profile).isEmpty();
+    }
+
+    private String validateRequiredClinicProfile(ClinicProfile profile, boolean enforceRequiredFields) {
+        if (!enforceRequiredFields) {
+            return null;
+        }
+
+        if (blankToNull(profile.getName()) == null) {
+            return "Clinic name is required.";
+        }
+        if (blankToNull(profile.getTinNumber()) == null) {
+            return "Clinic TIN is required.";
+        }
+        if (resolveContacts(profile).isEmpty()) {
+            return "At least one clinic contact is required.";
+        }
+        return null;
     }
 
     private String blankToNull(String value) {

@@ -1396,7 +1396,7 @@ input UpdateClinicProfileInput {
 }
 type ClinicMetadata {
   key: String!
-  value: String!
+  value: String
 }
 
 input ClinicMetadataInput {

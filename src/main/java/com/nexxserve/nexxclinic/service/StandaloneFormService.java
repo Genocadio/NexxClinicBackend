@@ -122,17 +122,17 @@ public class StandaloneFormService {
             // Create new version because latest is FINAL
             targetVersion = new StandaloneFormVersion();
             targetVersion.setForm(form);
-            
+
             int major = latest.getMajorVersion();
             int minor = latest.getMinorVersion();
-            
+
             if (minor >= 10) {
                 major++;
                 minor = 0;
             } else {
                 minor++;
             }
-            
+
             targetVersion.setMajorVersion(major);
             targetVersion.setMinorVersion(minor);
             targetVersion.setVersionLabel(major + "." + minor);
@@ -217,17 +217,8 @@ public class StandaloneFormService {
         return ApiResponse.success("Form deleted successfully", true);
     }
 
-    public ApiResponse<List<StandaloneFormDto>> getForms(Boolean isTemplate, String category) {
-        List<StandaloneForm> forms;
-        if (isTemplate != null && category != null) {
-            forms = formRepository.findByIsTemplateAndCategoryAndIsDeletedFalse(isTemplate, category);
-        } else if (isTemplate != null) {
-            forms = formRepository.findByIsTemplateAndIsDeletedFalse(isTemplate);
-        } else if (category != null) {
-            forms = formRepository.findByCategoryAndIsDeletedFalse(category);
-        } else {
-            forms = formRepository.findByIsDeletedFalse();
-        }
+    public ApiResponse<List<StandaloneFormDto>> getForms(Boolean isTemplate, String category, String name) {
+        List<StandaloneForm> forms = formRepository.findAll(StandaloneFormRepository.filter(isTemplate, category, name));
 
         List<StandaloneFormDto> dtos = forms.stream().map(f -> {
             StandaloneFormVersion latest = versionRepository.findTopByFormIdOrderByMajorVersionDescMinorVersionDesc(f.getId()).orElse(null);
@@ -355,9 +346,12 @@ public class StandaloneFormService {
         }
 
         VisitDepartment visitDept = visitDeptOpt.get();
+        Visit visit = visitOpt.get();
 
         StandaloneFormAnswer answer = new StandaloneFormAnswer();
         answer.setFormVersion(versionOpt.get());
+        answer.setVisitId(visit.getId());
+        answer.setPatientId(visit.getPatient() != null ? visit.getPatient().getId() : null);
         answer.setAnswers(serializeJson(answers));
         answer.setStatus(status != null ? status : AnswerStatus.DRAFT);
         if (score != null) {

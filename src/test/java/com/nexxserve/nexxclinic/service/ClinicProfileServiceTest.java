@@ -33,10 +33,10 @@ class ClinicProfileServiceTest {
 
         UpdateClinicProfileInput input = new UpdateClinicProfileInput(
                 "Nexx Clinic",
+                null,
                 "Plot 12",
                 null,
-                null,
-                null,
+                "TIN-12345",
                 List.of(
                         new ClinicContactInput(ClinicContactType.PHONE, "+255700000001", "support"),
                         new ClinicContactInput(ClinicContactType.EMAIL, "finance@nexxclinic.com", "finance"),

@@ -31,9 +31,10 @@ public class StandaloneFormQueryController {
     public ApiResponse<List<StandaloneFormDto>> getStandaloneForms(
             @Argument Boolean isTemplate,
             @Argument String category,
+            @Argument String name,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return formService.getForms(isTemplate, category);
+        return formService.getForms(isTemplate, category, name);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})

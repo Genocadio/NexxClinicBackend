@@ -99,10 +99,10 @@ type DepartmentFormResponse implements ApiResponse {
 
 extend type Query {
   # Form CRUD
-  getStandaloneForms(isTemplate: Boolean, category: String): StandaloneFormListResponse!
+  getStandaloneForms(isTemplate: Boolean, category: String, name: String): StandaloneFormListResponse!
   getStandaloneForm(id: ID!): StandaloneFormResponse!
   getStandaloneFormVersion(versionId: ID!): StandaloneFormVersion # For historical rendering
-  
+
   # Answer CRUD
   getStandaloneAnswer(id: ID!): StandaloneFormAnswerResponse!
   getDepartmentForms(departmentId: ID!): DepartmentFormResponse!
