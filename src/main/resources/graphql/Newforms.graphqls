@@ -59,6 +59,12 @@ type StandaloneFormAnswerResponse implements ApiResponse {
   data: StandaloneFormAnswer
 }
 
+ type StandaloneFormAnswerListResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: [StandaloneFormAnswer!]
+}
+
 type VisitStandaloneAnswerData {
   answer: StandaloneFormAnswer!
   visitDepartment: VisitDepartment!
@@ -104,6 +110,7 @@ extend type Query {
   getStandaloneFormVersion(versionId: ID!): StandaloneFormVersion # For historical rendering
 
   # Answer CRUD
+  getStandaloneFormAnswers(formId: ID!): StandaloneFormAnswerListResponse!
   getStandaloneAnswer(id: ID!): StandaloneFormAnswerResponse!
   getDepartmentForms(departmentId: ID!): DepartmentFormResponse!
 }

@@ -300,14 +300,13 @@ public class StandaloneFormService {
     }
 
     @Transactional(readOnly = true)
-    public List<StandaloneFormAnswerDto> getAnswers(UUID formId) {
-        List<StandaloneFormAnswer> answers;
-        if (formId != null) {
-            answers = answerRepository.findByFormVersionFormId(formId);
-        } else {
-            answers = answerRepository.findAll();
+    public ApiResponse<List<StandaloneFormAnswerDto>> getStandaloneFormAnswers(UUID formId) {
+        if (formId == null) {
+            return ApiResponse.error("formId is required.");
         }
-        return mapper.toAnswerDtoList(answers);
+
+        List<StandaloneFormAnswer> answers = answerRepository.findByFormVersionFormId(formId);
+        return ApiResponse.success("Standalone form answers fetched successfully", mapper.toAnswerDtoList(answers));
     }
 
     @Transactional
