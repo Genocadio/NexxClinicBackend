@@ -17,6 +17,7 @@ public interface PatientMapper {
 
     // 1. Tell MapStruct exactly where to map fields when multiple sources are provided
     @Mapping(source = "patient.id", target = "id")
+    @Mapping(source = "patient.patientIdentifier", target = "patientIdentifier")
     @Mapping(source = "patient.createdAt", target = "createdAt")
     @Mapping(source = "patient.updatedAt", target = "updatedAt")
     @Mapping(source = "insurances", target = "patientInsurances")

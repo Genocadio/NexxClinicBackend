@@ -204,6 +204,7 @@ public class PatientService {
 
         // Create and save patient
         Patient patient = new Patient();
+        patient.setPatientIdentifier(generateUniquePatientIdentifier(input));
         applyPatientInput(patient, input);
         Patient savedPatient = patientRepository.save(patient);
 
@@ -689,6 +690,43 @@ public class PatientService {
         }
 
         return ApiResponse.success("Insurances validated and created.", createdInsurances);
+    }
+
+    private String generateUniquePatientIdentifier(CreatePatientInput input) {
+        String firstName = requiredTrim(input.firstName());
+        String lastName = blankToNull(input.lastName());
+        int birthMonth = input.dateOfBirth() == null ? LocalDate.now().getMonthValue() : input.dateOfBirth().getMonthValue();
+
+        String seed = "" + toDigit(firstName, 0) + toDigit(firstName, 1) + toDigit(lastName, 0);
+        String monthPart = String.format("%02d", birthMonth);
+
+        for (int attempt = 0; attempt < 100; attempt++) {
+            int suffix = java.util.concurrent.ThreadLocalRandom.current().nextInt(0, 1000);
+            String identifier = seed + monthPart + String.format("%03d", suffix);
+            if (!patientRepository.existsByPatientIdentifier(identifier)) {
+                return identifier;
+            }
+        }
+
+        for (int attempt = 0; attempt < 1000; attempt++) {
+            String identifier = String.format("%06d", java.util.concurrent.ThreadLocalRandom.current().nextInt(0, 1_000_000));
+            if (!patientRepository.existsByPatientIdentifier(identifier)) {
+                return identifier;
+            }
+        }
+
+        throw new IllegalStateException("Unable to generate a unique patient identifier.");
+    }
+
+    private int toDigit(String value, int index) {
+        if (value == null || value.isBlank() || index >= value.trim().length()) {
+            return 0;
+        }
+        char c = Character.toUpperCase(value.trim().charAt(index));
+        if (c < 'A' || c > 'Z') {
+            return 0;
+        }
+        return ((c - 'A') % 10);
     }
 
     private void applyPatientInput(Patient patient, CreatePatientInput input) {

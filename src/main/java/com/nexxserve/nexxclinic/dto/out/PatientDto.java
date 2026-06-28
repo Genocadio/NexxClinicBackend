@@ -9,6 +9,7 @@ import java.util.UUID;
 
 public record PatientDto(
         UUID id,
+        String patientIdentifier,
         String firstName,
         String middleName,
         String lastName,

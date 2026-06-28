@@ -22,6 +22,9 @@ public class Patient {
     @GeneratedValue
     private UUID id;
 
+    @Column(nullable = false, unique = true, length = 6)
+    private String patientIdentifier;
+
     @Column(nullable = false)
     private String firstName;
 
@@ -68,6 +71,9 @@ public class Patient {
         LocalDateTime now = LocalDateTime.now();
         this.createdAt = now;
         this.updatedAt = now;
+        if (this.patientIdentifier == null || this.patientIdentifier.isBlank()) {
+            this.patientIdentifier = String.format("%06d", Math.abs(java.util.UUID.randomUUID().hashCode()) % 1_000_000);
+        }
     }
 
     @PreUpdate
@@ -81,6 +87,14 @@ public class Patient {
 
     public void setId(UUID id) {
         this.id = id;
+    }
+
+    public String getPatientIdentifier() {
+        return patientIdentifier;
+    }
+
+    public void setPatientIdentifier(String patientIdentifier) {
+        this.patientIdentifier = patientIdentifier;
     }
 
     public String getFirstName() {

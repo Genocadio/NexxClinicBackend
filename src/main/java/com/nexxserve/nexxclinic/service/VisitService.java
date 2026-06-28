@@ -282,34 +282,33 @@ public class VisitService {
 
     @Transactional(readOnly = true)
     public ApiResponse<LastPatientDepartmentVisitDto> lastPatientDepartmentVisit(
-            UUID patientId,
+            UUID visitId,
             UUID departmentId,
             AuthenticatedUser authUser
     ) {
-        if (patientId == null) {
-            return ApiResponse.error("patientId is required.");
+        if (visitId == null) {
+            return ApiResponse.error("visitId is required.");
         }
         if (departmentId == null) {
             return ApiResponse.error("departmentId is required.");
         }
 
-        Optional<Patient> patientOptional = patientRepository.findById(patientId);
-        if (patientOptional.isEmpty()) {
-            return ApiResponse.error("Patient not found.");
+        Optional<Visit> visitOptional = visitRepository.findById(visitId);
+        if (visitOptional.isEmpty()) {
+            return ApiResponse.error("Visit not found.");
         }
 
         if (!departmentRepository.existsById(departmentId)) {
             return ApiResponse.error("Department not found.");
         }
 
-        // Most recent visit for this patient (any status)
-        List<Visit> lastVisits = visitRepository.findLastVisitsByPatientId(
-                patientId, PageRequest.of(0, 1));
-        VisitDto lastVisitDto = lastVisits.isEmpty()
-                ? null
-                : visitToDto(lastVisits.get(0), Set.of(), authUser);
+        Visit referenceVisit = visitOptional.get();
+        VisitDto referenceVisitDto = visitToDto(referenceVisit, Set.of(), authUser);
+        UUID patientId = referenceVisit.getPatient() == null ? null : referenceVisit.getPatient().getId();
+        if (patientId == null) {
+            return ApiResponse.error("Patient not found for visit.");
+        }
 
-        // Most recent visit department for this patient in the given department
         List<VisitDepartment> lastDeptVisits = visitDepartmentRepository.findLastByPatientIdAndDepartmentId(
                 patientId, departmentId, PageRequest.of(0, 1));
         LastDepartmentVisitInfoDto lastDeptVisitDto = null;
@@ -323,7 +322,7 @@ public class VisitService {
 
         return ApiResponse.success(
                 "Last patient department visit fetched.",
-                new LastPatientDepartmentVisitDto(lastVisitDto, lastDeptVisitDto)
+                new LastPatientDepartmentVisitDto(referenceVisitDto, lastDeptVisitDto)
         );
     }
 

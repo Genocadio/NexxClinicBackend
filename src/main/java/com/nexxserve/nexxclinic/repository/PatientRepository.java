@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 public interface PatientRepository extends JpaRepository<Patient, UUID>, JpaSpecificationExecutor<Patient> {
 
+    boolean existsByPatientIdentifier(String patientIdentifier);
+
     boolean existsByNationalIdNumber(String nationalIdNumber);
 
     boolean existsByPassportNumber(String passportNumber);

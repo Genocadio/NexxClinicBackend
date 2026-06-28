@@ -289,10 +289,13 @@ type PaginatedInsuranceProviderResponse implements ApiResponse {
 
 type Patient {
   id: ID!
+  patientIdentifier: String!
   firstName: String!
   middleName: String
   lastName: String
+  fullName: String!
   dateOfBirth: String!
+  age: Int
   gender: Gender!
   primaryPhoneNumber: String
   alternativePhone: String
@@ -305,8 +308,7 @@ type Patient {
   emergencyContactName: String
   emergencyContactRelationship: String
   emergencyContactPhoneNumber: String
-  patientInsurances: [PatientInsurance!]!
-  lastVisit: Visit
+  patientInsurances: [PatientInsurance!]
   createdAt: String!
   updatedAt: String!
 }
@@ -1431,7 +1433,7 @@ type Query {
   visitDepartmentNotes(visitId: ID!, visitDepartmentId: ID): VisitDepartmentNotesListResponse!
   visitBilling(visitId: ID!): VisitBillingResponse!
   clinicProfile: ClinicProfileResponse!
-  lastPatientDepartmentVisit(patientId: ID!, departmentId: ID!): LastPatientDepartmentVisitResponse!
+  lastPatientDepartmentVisit(visitId: ID!, departmentId: ID!): LastPatientDepartmentVisitResponse!
 }
 
 type Mutation {

@@ -58,11 +58,11 @@ public class VisitQueryController {
         @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
     @QueryMapping
     public ApiResponse lastPatientDepartmentVisit(
-            @Argument UUID patientId,
+            @Argument UUID visitId,
             @Argument UUID departmentId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.lastPatientDepartmentVisit(patientId, departmentId, authUser);
+        return visitService.lastPatientDepartmentVisit(visitId, departmentId, authUser);
     }
 
 
