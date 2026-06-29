@@ -14,6 +14,8 @@ public record CreateVisitDepartmentInput(
 
         EncounterType encounterType,
 
+        UUID processorId,
+
         @Valid
         List<CreateVisitDepartmentProductItemInput> products
 ) {

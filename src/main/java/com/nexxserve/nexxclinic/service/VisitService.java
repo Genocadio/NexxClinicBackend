@@ -655,6 +655,15 @@ public class VisitService {
                 visitDepartment.setEncounterType(departmentInput.encounterType());
             }
             visitDepartment.setStatus(VisitDepartmentStatus.PENDING);
+
+            if (departmentInput.processorId() != null) {
+                Optional<Worker> processorOptional = workerRepository.findById(departmentInput.processorId());
+                if (processorOptional.isEmpty()) {
+                    return ApiResponse.error("Processor not found.");
+                }
+                visitDepartment.setProcessors(java.util.List.of(processorOptional.get()));
+            }
+
             VisitDepartment savedVisitDepartment = visitDepartmentRepository.save(visitDepartment);
 
             ApiResponse productsError = addProductsToVisitDepartment(savedVisitDepartment, departmentInput.products(), actingUser);

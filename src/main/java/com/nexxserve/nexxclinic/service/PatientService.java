@@ -131,7 +131,10 @@ public class PatientService {
 
             for (String token : validTokens) {
                 spec = spec.and((root, query, cb) ->
-                        cb.like(cb.lower(root.get("fullName")), "%" + token + "%")
+                        cb.or(
+                                cb.like(cb.lower(root.get("fullName")), "%" + token + "%"),
+                                cb.like(cb.lower(root.get("patientIdentifier")), "%" + token + "%")
+                        )
                 );
             }
         }

@@ -424,6 +424,16 @@ public class WorkerService {
     }
 
     @Transactional(readOnly = true)
+    public ApiResponse searchWorkers(String name, RoleName role, Boolean activeOnly, UUID departmentId) {
+        String normalizedName = blankToNull(name);
+        List<Map<String, Object>> users = workerRepository.searchWorkers(normalizedName, role, activeOnly, departmentId)
+                .stream()
+                .map(this::workerToMap)
+                .toList();
+        return ApiResponse.success("Workers fetched.", users);
+    }
+
+    @Transactional(readOnly = true)
     public ApiResponse adminAuditLogs() {
         return ApiResponse.success("Admin audit logs fetched.", adminAuditService.latestAuditLogs());
     }

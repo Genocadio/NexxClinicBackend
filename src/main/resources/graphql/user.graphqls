@@ -1161,6 +1161,7 @@ input ChangeVisitDateInput {
 input CreateVisitDepartmentInput {
   departmentId: ID!
   encounterType: EncounterType
+  processorId: ID
   products: [CreateVisitDepartmentProductItemInput!]
 }
 
@@ -1415,6 +1416,7 @@ input ClinicContactInput {
 type Query {
   me: WorkerResponse!
   listUsers: WorkerListResponse!
+  searchWorkers(name: String, role: RoleName, activeOnly: Boolean, departmentId: ID): WorkerListResponse!
   adminAuditLogs: AuditLogListResponse!
   insuranceProvider(insuranceProviderId: ID!): InsuranceProviderResponse!
   insuranceProviders(input: SearchInsuranceProvidersInput): PaginatedInsuranceProviderResponse!
@@ -1469,7 +1471,7 @@ type Mutation {
   updateDepartment(departmentId: ID!, input: UpdateDepartmentInput!): DepartmentResponse!
   createVisit(input: CreateVisitInput!): VisitResponse!
   changeVisitDate(input: ChangeVisitDateInput!): VisitResponse!
-  addVisitDepartment(visitId: ID!, departmentId: ID!, encounterType: EncounterType): VisitResponse!
+  addVisitDepartment(visitId: ID!, departmentId: ID!, encounterType: EncounterType, processorId: ID): VisitResponse!
 
   """
   Add a child visit department with products. Validations occur before creation:

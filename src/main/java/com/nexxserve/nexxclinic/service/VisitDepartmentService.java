@@ -93,7 +93,7 @@ public class VisitDepartmentService {
     // ─────────────────────────────────────────────────────────────
 
     @Transactional
-    public ApiResponse<VisitDto> addVisitDepartment(UUID visitId, UUID departmentId, com.nexxserve.nexxclinic.model.EncounterType encounterType, AuthenticatedUser authUser) {
+    public ApiResponse<VisitDto> addVisitDepartment(UUID visitId, UUID departmentId, com.nexxserve.nexxclinic.model.EncounterType encounterType, UUID processorId, AuthenticatedUser authUser) {
         if (visitId == null || departmentId == null) {
             return ApiResponse.error("visitId and departmentId are required.");
         }
@@ -128,6 +128,15 @@ public class VisitDepartmentService {
             visitDepartment.setEncounterType(encounterType);
         }
         visitDepartment.setStatus(VisitDepartmentStatus.PENDING);
+
+        if (processorId != null) {
+            Optional<Worker> processorOptional = workerRepository.findById(processorId);
+            if (processorOptional.isEmpty()) {
+                return ApiResponse.error("Processor not found.");
+            }
+            addProcessorToVisitDepartment(visitDepartment, processorOptional.get());
+        }
+
         visitDepartmentRepository.save(visitDepartment);
 
         // Return refreshed visit DTO via visitRepository – caller can map if needed

@@ -65,9 +65,10 @@ public class VisitMutationController {
             @Argument UUID visitId,
             @Argument UUID departmentId,
             @Argument com.nexxserve.nexxclinic.model.EncounterType encounterType,
+            @Argument UUID processorId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitDepartmentService.addVisitDepartment(visitId, departmentId, encounterType, authUser);
+        return visitDepartmentService.addVisitDepartment(visitId, departmentId, encounterType, processorId, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
@@ -284,4 +285,3 @@ public class VisitMutationController {
         return noteService.markVisitDepartmentNotesViewed(visitDepartmentId, authUser);
     }
 }
-
