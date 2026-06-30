@@ -20,7 +20,7 @@ spring:
       enabled: true
 supabase:
   url: https://supa.med.rw
-  service-key: YOUR_SERVICE_ROLE_KEY
+  service-key: SECRET
 
 logging:
   level:

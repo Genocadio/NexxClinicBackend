@@ -32,6 +32,15 @@ public class VisitBillingMutationController {
         return visitBillingService.billVisit(input, authUser);
     }
 
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.FINANCE})
+    @MutationMapping
+    public ApiResponse editBillVisit(
+            @Argument @Valid BillVisitInput input,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitBillingService.editBillVisit(input, authUser);
+    }
+
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.CLINICIAN, RoleName.FINANCE})
     @MutationMapping
     public ApiResponse recordVisitBillingPayment(

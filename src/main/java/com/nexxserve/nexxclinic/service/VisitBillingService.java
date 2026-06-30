@@ -118,8 +118,37 @@ public class VisitBillingService {
         BillVisitInput input,
         AuthenticatedUser authUser
     ) {
+        return billOrEditVisitInternal(input, authUser, false);
+    }
+
+    @Transactional
+    public ApiResponse editBillVisit(
+        BillVisitInput input,
+        AuthenticatedUser authUser
+    ) {
+        return billOrEditVisitInternal(input, authUser, true);
+    }
+
+    private ApiResponse billOrEditVisitInternal(
+        BillVisitInput input,
+        AuthenticatedUser authUser,
+        boolean isEdit
+    ) {
         if (input == null || input.visitId() == null) {
             return ApiResponse.error("visitId is required.");
+        }
+
+        Worker actingUser = resolveWorker(authUser);
+
+        // Block billing when the acting user has unread notes on any department in this visit.
+        // (Business rule: cannot bill or edit if there are unread notes.)
+        long unreadNotes = countUnreadNotesForVisit(input.visitId(), actingUser);
+        if (unreadNotes > 0) {
+            return ApiResponse.error(
+                isEdit
+                    ? "You have unread notes. Please read them before editing billing."
+                    : "You have unread notes. Please read them before billing."
+            );
         }
 
         if (input.departments() == null || input.departments().isEmpty()) {
@@ -136,6 +165,10 @@ public class VisitBillingService {
         Visit visit = visitOptional.get();
         if (visit.getStatus() == VisitStatus.CANCELLED) {
             return ApiResponse.error("Cancelled visits cannot be billed.");
+        }
+
+        if (isEdit && !hasAnyExistingBilling(input.visitId())) {
+            return ApiResponse.error("No existing billing found for this visit.");
         }
 
         List<VisitDepartment> allVisitDepartments =
@@ -257,7 +290,7 @@ public class VisitBillingService {
             .map(v -> v.getPatientInsurance().getId())
             .collect(Collectors.toSet());
 
-        Worker actingUser = resolveWorker(authUser);
+        // actingUser resolved earlier
         Map<UUID, PatientInsurance> appliedInsuranceByItem = new HashMap<>();
         Map<BillingGroup, List<VisitDepartmentProduct>> grouping =
             new LinkedHashMap<>();
@@ -479,6 +512,12 @@ public class VisitBillingService {
             BigDecimal insuranceCovered = ZERO;
             BigDecimal patientPayable = ZERO;
 
+            // When editing, we may need to clear any previous invoice for the affected insurance billing
+            // so a fresh invoice can be generated for the updated items.
+            if (isEdit && hasText(insuranceBilling.getInvoiceUrl())) {
+                insuranceBilling.setInvoiceUrl(null);
+            }
+
             for (VisitDepartmentProduct item : entry.getValue()) {
                 PatientInsurance appliedInsurance = appliedInsuranceByItem.get(
                     item.getId()
@@ -658,7 +697,9 @@ public class VisitBillingService {
         if (fullyBilled) {
             visit.setStatus(VisitStatus.COMPLETED);
             visitRepository.save(visit);
-            generateInvoicesWhenVisitFullyBilled(visit.getId());
+            // Do not auto-generate invoices for all department insurance billings here.
+            // Invoice generation should be explicit (generateInvoice) and on edit we only invalidate/regenerate
+            // invoices for changed insurance billings.
         }
 
         return ApiResponse.success(
@@ -672,14 +713,23 @@ public class VisitBillingService {
         RecordVisitBillingPaymentInput input,
         AuthenticatedUser authUser
     ) {
-        if (
-            input == null ||
-            input.departmentInsuranceBillingId() == null ||
-            input.amount() == null ||
-            input.paymentMethod() == null
-        ) {
+        if (input == null || input.departmentInsuranceBillingId() == null) {
+            return ApiResponse.error("departmentInsuranceBillingId is required.");
+        }
+
+        Worker actingUser = resolveWorker(authUser);
+        // For consistency with billing/editing rules: block payments when user has unread notes.
+        // (If you want payments allowed even with unread notes, we can relax this.)
+        UUID visitId = resolveVisitIdForDepartmentInsuranceBilling(input.departmentInsuranceBillingId());
+        if (visitId != null) {
+            long unreadNotes = countUnreadNotesForVisit(visitId, actingUser);
+            if (unreadNotes > 0) {
+                return ApiResponse.error("You have unread notes. Please read them before recording payments.");
+            }
+        }
+        if (input.amount() == null || input.paymentMethod() == null) {
             return ApiResponse.error(
-                "departmentInsuranceBillingId, amount and paymentMethod are required."
+                "amount and paymentMethod are required."
             );
         }
 
@@ -860,6 +910,14 @@ public class VisitBillingService {
             );
         }
 
+        Worker actingUser = resolveWorker(authUser);
+        UUID visitId = resolveVisitIdForDepartmentInsuranceBilling(departmentInsuranceBillingId);
+        if (visitId != null) {
+            long unreadNotes = countUnreadNotesForVisit(visitId, actingUser);
+            if (unreadNotes > 0) {
+                return ApiResponse.error("You have unread notes. Please read them before generating an invoice.");
+            }
+        }
         Optional<DepartmentInsuranceBilling> billingOptional =
             departmentInsuranceBillingRepository.findByIdWithDepartmentBillingAndVisit(
                 departmentInsuranceBillingId
@@ -981,6 +1039,38 @@ public class VisitBillingService {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private long countUnreadNotesForVisit(UUID visitId, Worker viewer) {
+        if (visitId == null || viewer == null || viewer.getId() == null) {
+            return 0;
+        }
+        List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(visitId);
+        long total = 0;
+        for (VisitDepartment vd : departments) {
+            total += visitDepartmentNoteRepository.countNewNotesForViewer(vd.getId(), viewer.getId());
+        }
+        return total;
+    }
+
+    private UUID resolveVisitIdForDepartmentInsuranceBilling(UUID departmentInsuranceBillingId) {
+        if (departmentInsuranceBillingId == null) {
+            return null;
+        }
+        return departmentInsuranceBillingRepository
+            .findByIdWithDepartmentBillingAndVisit(departmentInsuranceBillingId)
+            .map(b -> {
+                Visit v = b.getVisitDepartmentBilling().getVisitBilling().getVisit();
+                return v != null ? v.getId() : null;
+            })
+            .orElse(null);
+    }
+
+    private boolean hasAnyExistingBilling(UUID visitId) {
+        if (visitId == null) {
+            return false;
+        }
+        return !visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId).isEmpty();
     }
 
     private List<VisitDepartmentProduct> loadVisitDepartmentProducts(

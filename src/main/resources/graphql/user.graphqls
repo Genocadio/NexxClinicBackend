@@ -1495,6 +1495,7 @@ type Mutation {
   completeVisit(visitId: ID!): VisitResponse!
   removeVisitDepartmentProduct(visitDepartmentProductId: ID!): VisitDepartmentResponse!
   billVisit(input: BillVisitInput!): VisitBillingResponse!
+  editBillVisit(input: BillVisitInput!): VisitBillingResponse!
   recordVisitBillingPayment(input: RecordVisitBillingPaymentInput!): VisitBillingResponse!
   generateInvoice(departmentInsuranceBillingId: ID!): InvoiceResponse!
   cancelVisit(visitId: ID!): VisitResponse!
