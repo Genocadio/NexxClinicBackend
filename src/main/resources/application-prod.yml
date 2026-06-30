@@ -21,6 +21,9 @@ spring:
   sql:
     init:
       mode: never
+supabase:
+  url: ${SUPABASE_URL:http://localhost:8000}
+  service-key: ${SUPABASE_SERVICE_KEY:YOUR_SERVICE_ROLE_KEY}
 
 logging:
   level:

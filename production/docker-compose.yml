@@ -1,57 +1,28 @@
-services:
-  db:
-    image: postgres:16-alpine
-    container_name: nexxclinic-db
-    environment:
-      POSTGRES_DB: nexxclinic
-      POSTGRES_USER: nexxclinic_user      # Changed to match your app config
-      POSTGRES_PASSWORD: nexxclinic_pass   # Changed to match your app config
-    ports:
-      - "5432:5432"
-    volumes:
-      - nexxclinic-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nexxclinic_user -d nexxclinic"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+version: "3.9"
 
+services:
   app:
     image: genoyves/nexclinic:latest
     container_name: nexxclinic-app
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-        # configure production profile and database connection via environment variables
-      - SPRING_PROFILES_ACTIVE=prod
+    restart: unless-stopped
 
-      # Database connection
-      - DB_URL=jdbc:postgresql://db:5432/nexxclinic
-      - DB_USER=nexxclinic_user
-      - DB_PASSWORD=nexxclinic_pass
-      - DB_DRIVER=org.postgresql.Driver
-      
-      # JWT Configuration (change these in production!)
-      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-at-least-32-chars-long}
-      - JWT_EXPIRATION_MINUTES=120
-      - JWT_REFRESH_EXPIRATION_DAYS=14
-      
-      # Password history
-      - PASSWORD_HISTORY_COUNT=5
-      
-      # Java options
-      - JAVA_OPTS=-Xmx512m -Xms256m
     ports:
       - "8091:8080"
-    restart: unless-stopped
-    healthcheck:
-      test: [ "CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep UP || exit 1" ]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 120s
 
-volumes:
-  nexxclinic-data:
-    name: nexxclinic-data
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+
+      # IMPORTANT FIX
+      DB_URL: jdbc:postgresql://host.docker.internal:5432/postgres
+      DB_USER: postgres.your-tenant-id
+      DB_PASSWORD: 1232c554c17bfeb7afd394af9b655ced
+      DB_DRIVER: org.postgresql.Driver
+
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SUPABASE_URL: http://host.docker.internal:8000
+      SUPABASE_SERVICE_KEY: YOUR_SERVICE_ROLE_KEY
+
+      JWT_SECRET: your-super-secret-jwt-key-at-least-32-chars-long
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
