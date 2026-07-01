@@ -34,6 +34,10 @@ public class DepartmentInsuranceBilling {
     private VisitDepartmentBilling visitDepartmentBilling;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "billing_version_id")
+    private com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion billingVersion;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "patient_insurance_id")
     private PatientInsurance patientInsurance;
 
@@ -130,6 +134,14 @@ public class DepartmentInsuranceBilling {
 
     public void setVisitDepartmentBilling(VisitDepartmentBilling visitDepartmentBilling) {
         this.visitDepartmentBilling = visitDepartmentBilling;
+    }
+
+    public com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion getBillingVersion() {
+        return billingVersion;
+    }
+
+    public void setBillingVersion(com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion billingVersion) {
+        this.billingVersion = billingVersion;
     }
 
     public PatientInsurance getPatientInsurance() {

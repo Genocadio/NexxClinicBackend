@@ -6,6 +6,7 @@ import com.nexxserve.nexxclinic.entity.ClinicProfile;
 import com.nexxserve.nexxclinic.entity.Department;
 import com.nexxserve.nexxclinic.entity.DepartmentInsuranceBilling;
 import com.nexxserve.nexxclinic.entity.PatientInsurance;
+import com.nexxserve.nexxclinic.entity.Product;
 import com.nexxserve.nexxclinic.entity.ProductInsuranceCoverage;
 import com.nexxserve.nexxclinic.entity.Visit;
 import com.nexxserve.nexxclinic.entity.VisitBilling;
@@ -18,6 +19,7 @@ import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
 import com.nexxserve.nexxclinic.entity.VisitInsurance;
 import com.nexxserve.nexxclinic.entity.Worker;
 import com.nexxserve.nexxclinic.graphql.input.BillVisitInput;
+import com.nexxserve.nexxclinic.graphql.input.EditBillVisitInput;
 import com.nexxserve.nexxclinic.graphql.input.RecordVisitBillingPaymentInput;
 import com.nexxserve.nexxclinic.model.NoteType;
 import com.nexxserve.nexxclinic.model.VisitBillingStatus;
@@ -27,11 +29,14 @@ import com.nexxserve.nexxclinic.repository.ClinicProfileRepository;
 import com.nexxserve.nexxclinic.repository.DepartmentInsuranceBillingRepository;
 import com.nexxserve.nexxclinic.repository.PatientInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.ProductInsuranceCoverageRepository;
+import com.nexxserve.nexxclinic.repository.ProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitBillingItemRepository;
 import com.nexxserve.nexxclinic.repository.VisitBillingRepository;
+import com.nexxserve.nexxclinic.repository.VisitBillingVersionRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentBillingRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentNoteRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentProductSnapshotRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
 import com.nexxserve.nexxclinic.repository.VisitInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.VisitRepository;
@@ -68,10 +73,13 @@ public class VisitBillingService {
     private final VisitInsuranceRepository visitInsuranceRepository;
     private final PatientInsuranceRepository patientInsuranceRepository;
     private final ProductInsuranceCoverageRepository productInsuranceCoverageRepository;
+    private final ProductRepository productRepository;
     private final VisitBillingRepository visitBillingRepository;
     private final VisitDepartmentBillingRepository visitDepartmentBillingRepository;
     private final DepartmentInsuranceBillingRepository departmentInsuranceBillingRepository;
     private final VisitBillingItemRepository visitBillingItemRepository;
+    private final VisitBillingVersionRepository visitBillingVersionRepository;
+    private final VisitDepartmentProductSnapshotRepository visitDepartmentProductSnapshotRepository;
     private final WorkerRepository workerRepository;
     private final ClinicProfileRepository clinicProfileRepository;
     private final VisitDepartmentNoteRepository visitDepartmentNoteRepository;
@@ -84,10 +92,13 @@ public class VisitBillingService {
         VisitInsuranceRepository visitInsuranceRepository,
         PatientInsuranceRepository patientInsuranceRepository,
         ProductInsuranceCoverageRepository productInsuranceCoverageRepository,
+        ProductRepository productRepository,
         VisitBillingRepository visitBillingRepository,
         VisitDepartmentBillingRepository visitDepartmentBillingRepository,
         DepartmentInsuranceBillingRepository departmentInsuranceBillingRepository,
         VisitBillingItemRepository visitBillingItemRepository,
+        VisitBillingVersionRepository visitBillingVersionRepository,
+        VisitDepartmentProductSnapshotRepository visitDepartmentProductSnapshotRepository,
         WorkerRepository workerRepository,
         ClinicProfileRepository clinicProfileRepository,
         VisitDepartmentNoteRepository visitDepartmentNoteRepository,
@@ -101,12 +112,15 @@ public class VisitBillingService {
         this.patientInsuranceRepository = patientInsuranceRepository;
         this.productInsuranceCoverageRepository =
             productInsuranceCoverageRepository;
+        this.productRepository = productRepository;
         this.visitBillingRepository = visitBillingRepository;
         this.visitDepartmentBillingRepository =
             visitDepartmentBillingRepository;
         this.departmentInsuranceBillingRepository =
             departmentInsuranceBillingRepository;
         this.visitBillingItemRepository = visitBillingItemRepository;
+        this.visitBillingVersionRepository = visitBillingVersionRepository;
+        this.visitDepartmentProductSnapshotRepository = visitDepartmentProductSnapshotRepository;
         this.workerRepository = workerRepository;
         this.clinicProfileRepository = clinicProfileRepository;
         this.visitDepartmentNoteRepository = visitDepartmentNoteRepository;
@@ -123,10 +137,27 @@ public class VisitBillingService {
 
     @Transactional
     public ApiResponse editBillVisit(
-        BillVisitInput input,
+        EditBillVisitInput input,
         AuthenticatedUser authUser
     ) {
-        return billOrEditVisitInternal(input, authUser, true);
+        if (input == null) {
+            return ApiResponse.error("input is required.");
+        }
+
+        // Error-correction workflow:
+        // 1) Synchronize visit department products (add/remove/update)
+        // 2) Create a new immutable billing version from the corrected visit state
+        ApiResponse sync = applyVisitProductCorrections(input, authUser);
+        if (sync != null) {
+            return sync;
+        }
+
+        try {
+            BillVisitInput asBill = convertEditInputToBillVisitInput(input);
+            return billOrEditVisitInternal(asBill, authUser, true);
+        } catch (IllegalArgumentException e) {
+            return ApiResponse.error(e.getMessage());
+        }
     }
 
     private ApiResponse billOrEditVisitInternal(
@@ -332,7 +363,12 @@ public class VisitBillingService {
                 VisitDepartmentProduct item = allProductsById.get(
                     productInput.visitDepartmentProductId()
                 );
-                if (item == null || !requiresBilling(item)) {
+                if (item == null) {
+                    return ApiResponse.error(
+                        "Invalid billing selection. Ensure product ids exist and are billable."
+                    );
+                }
+                if (!isEdit && !requiresBilling(item)) {
                     return ApiResponse.error(
                         "Invalid billing selection. Ensure product ids exist and are billable."
                     );
@@ -440,8 +476,17 @@ public class VisitBillingService {
             new HashMap<>();
         List<VisitDepartmentProduct> productsToSave = new ArrayList<>();
 
+        // Always create a NEW billing container (immutable versions).
         VisitBilling visitBilling = new VisitBilling();
         visitBilling.setVisit(visit);
+
+        // Create a billing version row and attach it to this billing container.
+        com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion billingVersion =
+            createNextBillingVersion(visit);
+        visitBilling.setBillingVersion(billingVersion);
+
+        final VisitBilling visitBillingFinal = visitBilling;
+        final com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion billingVersionFinal = billingVersion;
 
         for (Map.Entry<
             BillingGroup,
@@ -463,7 +508,7 @@ public class VisitBillingService {
                     key -> {
                         VisitDepartmentBilling billing =
                             new VisitDepartmentBilling();
-                        billing.setVisitBilling(visitBilling);
+                        billing.setVisitBilling(visitBillingFinal);
                         billing.setVisitDepartment(rootVisitDepartment);
                         billing.setStatus(VisitBillingStatus.UNPAID);
                         billing.setTotalAmount(ZERO);
@@ -471,7 +516,7 @@ public class VisitBillingService {
                         billing.setPatientPayableAmount(ZERO);
                         billing.setPaidAmount(ZERO);
                         billing.setOutstandingAmount(ZERO);
-                        visitBilling.getDepartments().add(billing);
+                        visitBillingFinal.getDepartments().add(billing);
                         return billing;
                     }
                 );
@@ -479,6 +524,7 @@ public class VisitBillingService {
             DepartmentInsuranceBilling insuranceBilling =
                 new DepartmentInsuranceBilling();
             insuranceBilling.setVisitDepartmentBilling(departmentBilling);
+            insuranceBilling.setBillingVersion(billingVersionFinal);
             insuranceBilling.setPatientInsurance(
                 group.patientInsuranceId() == null
                     ? null
@@ -501,6 +547,7 @@ public class VisitBillingService {
                     VisitBillingPayment billingPayment =
                         new VisitBillingPayment();
                     billingPayment.setVisitDepartmentBilling(departmentBilling);
+                    billingPayment.setBillingVersion(billingVersionFinal);
                     billingPayment.setAmount(toMoney(payment.amount()));
                     billingPayment.setPaymentMethod(payment.paymentMethod());
                     billingPayment.setReference(payment.reference());
@@ -562,9 +609,26 @@ public class VisitBillingService {
                     patientAmount = toMoney(lineTotal.subtract(coveredAmount));
                 }
 
+                // Snapshot the visit product for this billing version (immutable history)
+                com.nexxserve.nexxclinic.entity.billing.VisitDepartmentProductSnapshot snap =
+                    new com.nexxserve.nexxclinic.entity.billing.VisitDepartmentProductSnapshot();
+                snap.setBillingVersion(billingVersionFinal);
+                snap.setVisitDepartmentProductId(item.getId());
+                snap.setVisitDepartment(item.getVisitDepartment());
+                snap.setProduct(item.getProduct());
+                snap.setQuantity(quantity);
+                snap.setUnitPrice(unitPrice);
+                snap.setStatus(isExempted ? VisitProductStatus.EXEMPTED : VisitProductStatus.BILLED);
+                snap.setAppliedPatientInsurance(appliedInsurance);
+                snap.setAddedBy(item.getAddedBy());
+                snap.setBilledBy(actingUser);
+                snap = visitDepartmentProductSnapshotRepository.save(snap);
+
                 VisitBillingItem billingItem = new VisitBillingItem();
                 billingItem.setDepartmentInsuranceBilling(insuranceBilling);
                 billingItem.setVisitDepartmentProduct(item);
+                billingItem.setBillingVersion(billingVersionFinal);
+                billingItem.setVisitDepartmentProductSnapshotId(snap.getId());
                 billingItem.setAppliedPatientInsurance(appliedInsurance);
                 billingItem.setUnitPriceSnapshot(unitPrice);
                 billingItem.setQuantitySnapshot(quantity);
@@ -584,6 +648,15 @@ public class VisitBillingService {
                 }
                 item.setBilledBy(actingUser);
                 productsToSave.add(item);
+
+                // On edit, allow changing quantity/price snapshots regardless of current billed status.
+                // We do not mutate the underlying VisitDepartmentProduct.price here (billing uses snapshots).
+                // Quantity of the underlying product should reflect the edited quantity.
+                if (isEdit) {
+                    if (requestedQuantityByItem.containsKey(item.getId())) {
+                        item.setQuantity(toQuantity(requestedQuantityByItem.get(item.getId())));
+                    }
+                }
             }
 
             BigDecimal remainingPaidAmount =
@@ -669,6 +742,8 @@ public class VisitBillingService {
         VisitBilling savedVisitBilling = visitBillingRepository.save(
             visitBilling
         );
+
+
         visitDepartmentProductRepository.saveAll(productsToSave);
 
         // Persist billing notes attached to the relevant visit department
@@ -1053,6 +1128,160 @@ public class VisitBillingService {
         return total;
     }
 
+    private ApiResponse applyVisitProductCorrections(EditBillVisitInput input, AuthenticatedUser authUser) {
+        if (input.visitId() == null) {
+            return ApiResponse.error("visitId is required.");
+        }
+
+        Worker actingUser = resolveWorker(authUser);
+        long unreadNotes = countUnreadNotesForVisit(input.visitId(), actingUser);
+        if (unreadNotes > 0) {
+            return ApiResponse.error("You have unread notes. Please read them before editing billing.");
+        }
+
+        Visit visit = visitRepository.findById(input.visitId()).orElse(null);
+        if (visit == null) {
+            return ApiResponse.error("Visit not found.");
+        }
+        if (visit.getStatus() == VisitStatus.CANCELLED) {
+            return ApiResponse.error("Cancelled visits cannot be edited.");
+        }
+
+        if (input.departments() == null || input.departments().isEmpty()) {
+            return ApiResponse.error("At least one department is required.");
+        }
+
+        // Apply per-department corrections
+        for (EditBillVisitInput.EditBillVisitDepartmentInput dept : input.departments()) {
+            if (dept == null || dept.visitDepartmentId() == null) {
+                return ApiResponse.error("Each department entry requires visitDepartmentId.");
+            }
+            VisitDepartment vd = visitDepartmentRepository.findById(dept.visitDepartmentId()).orElse(null);
+            if (vd == null) {
+                return ApiResponse.error("Visit department not found.");
+            }
+            if (!vd.getVisit().getId().equals(visit.getId())) {
+                return ApiResponse.error("Visit department does not belong to the visit.");
+            }
+
+            // removals (by productId)
+            if (dept.removedProductIds() != null) {
+                for (UUID productId : dept.removedProductIds()) {
+                    if (productId == null) continue;
+                    VisitDepartmentProduct vdp = visitDepartmentProductRepository
+                        .findByVisitDepartmentIdAndProductId(vd.getId(), productId)
+                        .orElse(null);
+                    if (vdp == null) {
+                        return ApiResponse.error("Product to remove not found in the visit department.");
+                    }
+                    visitDepartmentProductRepository.delete(vdp);
+                }
+            }
+
+            // updates (by productId)
+            if (dept.updatedProducts() != null) {
+                for (EditBillVisitInput.EditBillVisitUpdateProductInput upd : dept.updatedProducts()) {
+                    if (upd == null || upd.productId() == null) {
+                        return ApiResponse.error("Each updatedProducts entry requires productId.");
+                    }
+                    VisitDepartmentProduct vdp = visitDepartmentProductRepository
+                        .findByVisitDepartmentIdAndProductId(vd.getId(), upd.productId())
+                        .orElse(null);
+                    if (vdp == null) {
+                        return ApiResponse.error("Product to update not found in the visit department.");
+                    }
+                    if (upd.quantity() != null && upd.quantity().compareTo(BigDecimal.ZERO) <= 0) {
+                        return ApiResponse.error("quantity must be greater than 0.");
+                    }
+                    if (upd.quantity() != null) {
+                        vdp.setQuantity(toQuantity(upd.quantity()));
+                    }
+                    // On correction, mark as UNPAID so billing can re-evaluate.
+                    vdp.setStatus(VisitProductStatus.UNPAID);
+                    vdp.setBilledBy(null);
+                    visitDepartmentProductRepository.save(vdp);
+                }
+            }
+
+            // additions
+            if (dept.addedProducts() != null) {
+                for (EditBillVisitInput.EditBillVisitAddProductInput add : dept.addedProducts()) {
+                    if (add == null || add.productId() == null || add.quantity() == null) {
+                        return ApiResponse.error("Each addedProducts entry requires productId and quantity.");
+                    }
+                    if (add.quantity().compareTo(BigDecimal.ZERO) <= 0) {
+                        return ApiResponse.error("quantity must be greater than 0.");
+                    }
+                    Product product = productRepository.findById(add.productId()).orElse(null);
+                    if (product == null) {
+                        return ApiResponse.error("Product not found.");
+                    }
+
+                    // If already exists in department, treat as quantity update (avoid unique constraint violation)
+                    VisitDepartmentProduct existing = visitDepartmentProductRepository
+                        .findByVisitDepartmentIdAndProductId(vd.getId(), product.getId())
+                        .orElse(null);
+                    if (existing != null) {
+                        existing.setQuantity(toQuantity(add.quantity()));
+                        existing.setStatus(VisitProductStatus.UNPAID);
+                        existing.setBilledBy(null);
+                        visitDepartmentProductRepository.save(existing);
+                        continue;
+                    }
+
+                    VisitDepartmentProduct vdp = new VisitDepartmentProduct();
+                    vdp.setVisitDepartment(vd);
+                    vdp.setProduct(product);
+                    vdp.setQuantity(toQuantity(add.quantity()));
+                    // keep price as 0; billing uses unitPriceSnapshot from billProducts
+                    vdp.setPrice(BigDecimal.ZERO);
+                    vdp.setAddedBy(actingUser);
+                    vdp.setStatus(VisitProductStatus.UNPAID);
+
+                    visitDepartmentProductRepository.save(vdp);
+                }
+            }
+        }
+
+        return null; // success
+    }
+
+    private BillVisitInput convertEditInputToBillVisitInput(EditBillVisitInput input) {
+        List<BillVisitInput.BillVisitDepartmentInput> departments =
+            input.departments() == null
+                ? List.of()
+                : input.departments().stream().map(d -> {
+                    // Map productId -> visitDepartmentProductId using the (corrected) current visit department state
+                    List<BillVisitInput.BillVisitDepartmentProductInput> billProducts =
+                        d.billProducts() == null
+                            ? List.of()
+                            : d.billProducts().stream().map(bp -> {
+                                VisitDepartmentProduct vdp = visitDepartmentProductRepository
+                                    .findByVisitDepartmentIdAndProductId(d.visitDepartmentId(), bp.productId())
+                                    .orElse(null);
+                                if (vdp == null) {
+                                    throw new IllegalArgumentException("Product not found in visit department for billing: " + bp.productId());
+                                }
+                                return new BillVisitInput.BillVisitDepartmentProductInput(
+                                    vdp.getId(),
+                                    d.visitDepartmentId(),
+                                    bp.quantity(),
+                                    bp.unitPrice(),
+                                    bp.patientInsuranceId(),
+                                    bp.isExempted()
+                                );
+                            }).toList();
+
+                    return new BillVisitInput.BillVisitDepartmentInput(
+                        d.visitDepartmentId(),
+                        billProducts,
+                        d.payments(),
+                        d.note()
+                    );
+                }).toList();
+        return new BillVisitInput(input.visitId(), departments);
+    }
+
     private UUID resolveVisitIdForDepartmentInsuranceBilling(UUID departmentInsuranceBillingId) {
         if (departmentInsuranceBillingId == null) {
             return null;
@@ -1071,6 +1300,23 @@ public class VisitBillingService {
             return false;
         }
         return !visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId).isEmpty();
+    }
+
+    private com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion createNextBillingVersion(Visit visit) {
+        if (visit == null || visit.getId() == null) {
+            throw new IllegalArgumentException("visit is required");
+        }
+
+        com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion latest = visitBillingVersionRepository
+            .findFirstByVisitIdOrderByVersionDesc(visit.getId())
+            .orElse(null);
+
+        com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion v =
+            new com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion();
+        v.setVisit(visit);
+        v.setVersion(latest == null ? 1 : (latest.getVersion() + 1));
+        v.setSupersedesVersionId(latest == null ? null : latest.getId());
+        return visitBillingVersionRepository.save(v);
     }
 
     private List<VisitDepartmentProduct> loadVisitDepartmentProducts(

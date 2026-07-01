@@ -30,6 +30,10 @@ public class VisitBillingPayment {
     @JoinColumn(name = "visit_department_billing_id", nullable = false)
     private VisitDepartmentBilling visitDepartmentBilling;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "billing_version_id")
+    private com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion billingVersion;
+
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal amount;
 
@@ -78,6 +82,14 @@ public class VisitBillingPayment {
 
     public void setVisitDepartmentBilling(VisitDepartmentBilling visitDepartmentBilling) {
         this.visitDepartmentBilling = visitDepartmentBilling;
+    }
+
+    public com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion getBillingVersion() {
+        return billingVersion;
+    }
+
+    public void setBillingVersion(com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion billingVersion) {
+        this.billingVersion = billingVersion;
     }
 
     public BigDecimal getAmount() {

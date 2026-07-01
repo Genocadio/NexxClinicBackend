@@ -29,6 +29,10 @@ public class VisitBilling {
     @JoinColumn(name = "visit_id", nullable = false)
     private Visit visit;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "billing_version_id")
+    private com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion billingVersion;
+
     @OneToMany(mappedBy = "visitBilling", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<VisitDepartmentBilling> departments = new ArrayList<>();
 
@@ -64,6 +68,14 @@ public class VisitBilling {
 
     public void setVisit(Visit visit) {
         this.visit = visit;
+    }
+
+    public com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion getBillingVersion() {
+        return billingVersion;
+    }
+
+    public void setBillingVersion(com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion billingVersion) {
+        this.billingVersion = billingVersion;
     }
 
     public List<VisitDepartmentBilling> getDepartments() {

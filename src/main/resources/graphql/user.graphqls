@@ -1228,6 +1228,14 @@ input BillVisitDepartmentProductInput {
   isExempted: Boolean
 }
 
+input EditBillVisitBillProductInput {
+  productId: ID!
+  patientInsuranceId: ID
+  quantity: Float
+  unitPrice: Float
+  isExempted: Boolean
+}
+
 input BillingPaymentInput {
   amount: Float!
   paymentMethod: PaymentMethod!
@@ -1248,6 +1256,39 @@ input BillVisitDepartmentInput {
 input BillVisitInput {
   visitId: ID!
   departments: [BillVisitDepartmentInput!]!
+}
+
+"""
+Edit billing (error correction):
+- Applies add/remove/update to visit department products first
+- Then creates a new immutable billing version
+"""
+input EditBillVisitInput {
+  visitId: ID!
+  departments: [EditBillVisitDepartmentInput!]!
+}
+
+input EditBillVisitDepartmentInput {
+  visitDepartmentId: ID!
+
+  addedProducts: [EditBillVisitAddProductInput!]
+  removedProductIds: [ID!]
+  updatedProducts: [EditBillVisitUpdateProductInput!]
+
+  """Billing selections for the new version (by productId; backend maps to visitDepartmentProductId)"""
+  billProducts: [EditBillVisitBillProductInput!]!
+  payments: [BillingPaymentInput!]
+  note: String
+}
+
+input EditBillVisitAddProductInput {
+  productId: ID!
+  quantity: Float!
+}
+
+input EditBillVisitUpdateProductInput {
+  productId: ID!
+  quantity: Float
 }
 
 input RecordVisitBillingPaymentInput {
@@ -1495,7 +1536,7 @@ type Mutation {
   completeVisit(visitId: ID!): VisitResponse!
   removeVisitDepartmentProduct(visitDepartmentProductId: ID!): VisitDepartmentResponse!
   billVisit(input: BillVisitInput!): VisitBillingResponse!
-  editBillVisit(input: BillVisitInput!): VisitBillingResponse!
+  editBillVisit(input: EditBillVisitInput!): VisitBillingResponse!
   recordVisitBillingPayment(input: RecordVisitBillingPaymentInput!): VisitBillingResponse!
   generateInvoice(departmentInsuranceBillingId: ID!): InvoiceResponse!
   cancelVisit(visitId: ID!): VisitResponse!

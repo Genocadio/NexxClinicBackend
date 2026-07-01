@@ -31,6 +31,13 @@ public class VisitBillingItem {
     private VisitDepartmentProduct visitDepartmentProduct;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "billing_version_id")
+    private com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion billingVersion;
+
+    @Column
+    private UUID visitDepartmentProductSnapshotId;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "applied_patient_insurance_id")
     private PatientInsurance appliedPatientInsurance;
 
@@ -119,6 +126,22 @@ public class VisitBillingItem {
 
     public void setVisitDepartmentProduct(VisitDepartmentProduct visitDepartmentProduct) {
         this.visitDepartmentProduct = visitDepartmentProduct;
+    }
+
+    public com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion getBillingVersion() {
+        return billingVersion;
+    }
+
+    public void setBillingVersion(com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion billingVersion) {
+        this.billingVersion = billingVersion;
+    }
+
+    public UUID getVisitDepartmentProductSnapshotId() {
+        return visitDepartmentProductSnapshotId;
+    }
+
+    public void setVisitDepartmentProductSnapshotId(UUID visitDepartmentProductSnapshotId) {
+        this.visitDepartmentProductSnapshotId = visitDepartmentProductSnapshotId;
     }
 
     public PatientInsurance getAppliedPatientInsurance() {

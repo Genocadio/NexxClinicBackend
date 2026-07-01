@@ -2,6 +2,7 @@ package com.nexxserve.nexxclinic.graphql;
 
 import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
 import com.nexxserve.nexxclinic.graphql.input.BillVisitInput;
+import com.nexxserve.nexxclinic.graphql.input.EditBillVisitInput;
 import com.nexxserve.nexxclinic.graphql.input.RecordVisitBillingPaymentInput;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.RoleName;
@@ -35,7 +36,7 @@ public class VisitBillingMutationController {
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.FINANCE})
     @MutationMapping
     public ApiResponse editBillVisit(
-            @Argument @Valid BillVisitInput input,
+            @Argument @Valid EditBillVisitInput input,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         return visitBillingService.editBillVisit(input, authUser);
