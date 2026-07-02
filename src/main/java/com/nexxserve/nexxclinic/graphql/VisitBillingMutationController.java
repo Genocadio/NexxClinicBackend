@@ -59,4 +59,13 @@ public class VisitBillingMutationController {
     ) {
         return visitBillingService.generateInvoice(departmentInsuranceBillingId, authUser);
     }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.FINANCE})
+    @MutationMapping
+    public ApiResponse flushSoftDeletedVisitProducts(
+            @Argument("visitId") UUID visitId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitBillingService.flushSoftDeletedVisitProducts(visitId, authUser);
+    }
 }

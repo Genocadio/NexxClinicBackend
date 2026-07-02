@@ -67,11 +67,15 @@ public class VisitDepartmentProduct {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
+    @Column(nullable = false)
+    private boolean deleted;
+
     @PrePersist
     void onCreate() {
         LocalDateTime now = LocalDateTime.now();
         this.createdAt = now;
         this.updatedAt = now;
+        this.deleted = false;
         if (this.status == null) {
             this.status = VisitProductStatus.PENDING;
         }
@@ -183,5 +187,13 @@ public class VisitDepartmentProduct {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public boolean isDeleted() {
+        return deleted;
+    }
+
+    public void setDeleted(boolean deleted) {
+        this.deleted = deleted;
     }
 }

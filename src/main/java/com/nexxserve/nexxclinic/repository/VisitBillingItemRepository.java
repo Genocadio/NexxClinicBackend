@@ -28,4 +28,6 @@ public interface VisitBillingItemRepository extends JpaRepository<VisitBillingIt
             WHERE i.departmentInsuranceBilling.visitDepartmentBilling.visitBilling.id = :billingId
             """)
     List<VisitBillingItem> findByVisitBillingIdWithProduct(@Param("billingId") UUID billingId);
+
+    List<VisitBillingItem> findByVisitDepartmentProductId(UUID visitDepartmentProductId);
 }

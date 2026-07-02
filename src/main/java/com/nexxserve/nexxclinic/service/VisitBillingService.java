@@ -1164,17 +1164,20 @@ public class VisitBillingService {
                 return ApiResponse.error("Visit department does not belong to the visit.");
             }
 
-            // removals (by productId)
+            // removals (by productId) — soft delete so historical billing items remain valid
             if (dept.removedProductIds() != null) {
                 for (UUID productId : dept.removedProductIds()) {
                     if (productId == null) continue;
                     VisitDepartmentProduct vdp = visitDepartmentProductRepository
-                        .findByVisitDepartmentIdAndProductId(vd.getId(), productId)
+                        .findByVisitDepartmentIdAndProductIdIncludingDeleted(vd.getId(), productId)
                         .orElse(null);
                     if (vdp == null) {
                         return ApiResponse.error("Product to remove not found in the visit department.");
                     }
-                    visitDepartmentProductRepository.delete(vdp);
+                    if (!vdp.isDeleted()) {
+                        vdp.setDeleted(true);
+                        visitDepartmentProductRepository.save(vdp);
+                    }
                 }
             }
 
@@ -1217,14 +1220,15 @@ public class VisitBillingService {
                         return ApiResponse.error("Product not found.");
                     }
 
-                    // If already exists in department, treat as quantity update (avoid unique constraint violation)
+                    // If already exists in department (including soft-deleted), treat as quantity update
                     VisitDepartmentProduct existing = visitDepartmentProductRepository
-                        .findByVisitDepartmentIdAndProductId(vd.getId(), product.getId())
+                        .findByVisitDepartmentIdAndProductIdIncludingDeleted(vd.getId(), product.getId())
                         .orElse(null);
                     if (existing != null) {
                         existing.setQuantity(toQuantity(add.quantity()));
                         existing.setStatus(VisitProductStatus.UNPAID);
                         existing.setBilledBy(null);
+                        existing.setDeleted(false);
                         visitDepartmentProductRepository.save(existing);
                         continue;
                     }
@@ -1683,5 +1687,37 @@ public class VisitBillingService {
             return BigDecimal.ONE.setScale(4, RoundingMode.HALF_UP);
         }
         return value.setScale(4, RoundingMode.HALF_UP);
+    }
+
+    @Transactional
+    public ApiResponse flushSoftDeletedVisitProducts(UUID visitId, AuthenticatedUser authUser) {
+        if (visitId == null) {
+            return ApiResponse.error("visitId is required.");
+        }
+
+        if (!visitRepository.existsById(visitId)) {
+            return ApiResponse.error("Visit not found.");
+        }
+
+        List<VisitDepartmentProduct> softDeleted = visitDepartmentProductRepository.findSoftDeletedByVisitId(visitId);
+        if (softDeleted.isEmpty()) {
+            return ApiResponse.success("No soft-deleted products to flush.", Map.of("deletedCount", 0));
+        }
+
+        int deletedCount = 0;
+        for (VisitDepartmentProduct vdp : softDeleted) {
+            List<VisitBillingItem> billingItems = visitBillingItemRepository
+                .findByVisitDepartmentProductId(vdp.getId());
+            if (!billingItems.isEmpty()) {
+                visitBillingItemRepository.deleteAll(billingItems);
+            }
+            visitDepartmentProductRepository.delete(vdp);
+            deletedCount++;
+        }
+
+        return ApiResponse.success(
+            "Soft-deleted products flushed successfully.",
+            Map.of("deletedCount", deletedCount)
+        );
     }
 }
