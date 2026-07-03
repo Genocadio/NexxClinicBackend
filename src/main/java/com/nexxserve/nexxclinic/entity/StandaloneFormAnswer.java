@@ -12,9 +12,7 @@ import java.util.UUID;
 @Table(
         name = "form_answers",
         indexes = {
-                @Index(name = "idx_form_answers_form_version_id", columnList = "form_version_id"),
-                @Index(name = "idx_form_answers_patient_id", columnList = "patient_id"),
-                @Index(name = "idx_form_answers_visit_id", columnList = "visit_id")
+                @Index(name = "idx_form_answers_form_version_id", columnList = "form_version_id")
         }
 )
 public class StandaloneFormAnswer {
