@@ -1,0 +1,137 @@
+# Standalone Form Builder GraphQL Schema
+
+type StandaloneForm {
+  id: ID!
+  name: String!
+  description: String
+  type: String!
+  category: String
+  isTemplate: Boolean!
+  createdBy: ID
+  activeVersion: StandaloneFormVersion
+  createdAt: String!
+  updatedAt: String!
+}
+
+type StandaloneFormVersion {
+  id: ID!
+  formId: ID!
+  versionLabel: String!
+  majorVersion: Int!
+  minorVersion: Int!
+  blocks: JSON!
+  theme: JSON
+  status: FormStatus!
+  createdAt: String!
+}
+
+type StandaloneFormAnswer {
+  id: ID!
+  form: StandaloneForm!
+  formVersion: StandaloneFormVersion!
+  answers: JSON!
+  score: Float
+  status: AnswerStatus!
+  patientId: ID
+  visitId: ID
+  submittedBy: ID
+  submittedAt: String
+  createdAt: String!
+  updatedAt: String!
+}
+
+# Response types following project patterns
+type StandaloneFormResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: StandaloneForm
+}
+
+type StandaloneFormListResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: [StandaloneForm!]
+}
+
+type StandaloneFormAnswerResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: StandaloneFormAnswer
+}
+
+ type StandaloneFormAnswerListResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: [StandaloneFormAnswer!]
+}
+
+type VisitStandaloneAnswerData {
+  answer: StandaloneFormAnswer!
+  visitDepartment: VisitDepartment!
+}
+
+type VisitStandaloneAnswerResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: VisitStandaloneAnswerData
+}
+
+input StandaloneFormInput {
+  name: String!
+  description: String
+  type: String!
+  category: String
+  isTemplate: Boolean
+  blocks: JSON!
+  theme: JSON
+}
+
+type DepartmentForm {
+  form: StandaloneForm!
+  isDefault: Boolean!
+}
+
+type DepartmentFormResult {
+  forms: [DepartmentForm!]
+  defaultForm: StandaloneForm
+}
+
+type DepartmentFormResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: DepartmentFormResult
+}
+
+
+extend type Query {
+  # Form CRUD
+  getStandaloneForms(isTemplate: Boolean, category: String, name: String): StandaloneFormListResponse!
+  getStandaloneForm(id: ID!): StandaloneFormResponse!
+  getStandaloneFormVersion(versionId: ID!): StandaloneFormVersion # For historical rendering
+
+  # Answer CRUD
+  getStandaloneFormAnswers(formId: ID!): StandaloneFormAnswerListResponse!
+  getStandaloneAnswer(id: ID!): StandaloneFormAnswerResponse!
+  getDepartmentForms(departmentId: ID!): DepartmentFormResponse!
+}
+
+extend type Mutation {
+  # Form Management
+  createStandaloneForm(input: StandaloneFormInput!): StandaloneFormResponse!
+  updateStandaloneForm(id: ID!, input: StandaloneFormInput!, markFinal: Boolean): StandaloneFormResponse!
+  duplicateStandaloneForm(sourceFormId: ID!): StandaloneFormResponse!
+  deleteStandaloneForm(id: ID!, confirmDeleteAnswers: Boolean): BooleanResponse!
+
+  # Answer Management
+  saveStandaloneAnswer(formVersionId: ID!, answers: JSON!, status: AnswerStatus, score: Float): StandaloneFormAnswerResponse!
+  updateStandaloneAnswer(answerId: ID!, answers: JSON!, status: AnswerStatus, score: Float): StandaloneFormAnswerResponse!
+  deleteStandaloneAnswer(answerId: ID!): BooleanResponse!
+  generateStandaloneFormPdf(answerId: ID!): StringResponse! # Returns signed URL
+
+  saveVisitStandaloneAnswer(visitId: ID!, visitDepartmentId: ID!, formVersionId: ID!, answers: JSON!, status: AnswerStatus, score: Float): VisitStandaloneAnswerResponse!
+
+  # Department-Form Linking
+  linkStandaloneFormToDepartment(departmentId: ID!, formId: ID!): StandaloneFormResponse!
+  unlinkStandaloneFormFromDepartment(departmentId: ID!, formId: ID!): BooleanResponse!
+  setDefaultStandaloneFormForDepartment(departmentId: ID!, formId: ID!): StandaloneFormResponse!
+}
