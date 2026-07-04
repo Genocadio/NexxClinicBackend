@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 160" width="200" height="160">
+  <!-- Stack of cash bills -->
+  <g>
+    <!-- Back bill -->
+    <rect x="40" y="30" width="120" height="50" fill="#90EE90" stroke="#2d5016" stroke-width="3" rx="4"/>
+    <circle cx="100" cy="55" r="8" fill="none" stroke="#2d5016" stroke-width="2"/>
+    <text x="100" y="60" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#2d5016" text-anchor="middle">$</text>
+    
+    <!-- Middle bill -->
+    <rect x="35" y="50" width="120" height="50" fill="#7DD77D" stroke="#1d3d0a" stroke-width="3" rx="4"/>
+    <circle cx="95" cy="75" r="8" fill="none" stroke="#1d3d0a" stroke-width="2"/>
+    <text x="95" y="80" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#1d3d0a" text-anchor="middle">$</text>
+    
+    <!-- Front bill -->
+    <rect x="30" y="70" width="120" height="50" fill="#66DD66" stroke="#0a2d00" stroke-width="3" rx="4"/>
+    <circle cx="90" cy="95" r="8" fill="none" stroke="#0a2d00" stroke-width="2"/>
+    <text x="90" y="100" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#0a2d00" text-anchor="middle">$</text>
+  </g>
+</svg>
