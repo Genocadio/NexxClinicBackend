@@ -21,6 +21,8 @@ spring:
 supabase:
   url: https://supa.med.rw
   service-key: SECRET
+  bucket-public: uploads-public
+  bucket-private: uploads-private
 
 logging:
   level:

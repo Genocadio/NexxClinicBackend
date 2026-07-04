@@ -22,6 +22,12 @@ public class SupabaseProperties {
     /** Service-role key with full Storage access. */
     private String serviceKey;
 
+    /** Bucket name for public uploads. */
+    private String bucketPublic = "uploads-public";
+
+    /** Bucket name for private uploads. */
+    private String bucketPrivate = "uploads-private";
+
     public String getUrl() {
         return url;
     }
@@ -36,5 +42,21 @@ public class SupabaseProperties {
 
     public void setServiceKey(String serviceKey) {
         this.serviceKey = serviceKey;
+    }
+
+    public String getBucketPublic() {
+        return bucketPublic;
+    }
+
+    public void setBucketPublic(String bucketPublic) {
+        this.bucketPublic = bucketPublic;
+    }
+
+    public String getBucketPrivate() {
+        return bucketPrivate;
+    }
+
+    public void setBucketPrivate(String bucketPrivate) {
+        this.bucketPrivate = bucketPrivate;
     }
 }

@@ -1,4 +1,5 @@
 scalar JSON
+scalar Upload
 
 enum ResponseStatus {
   SUCCESS
@@ -182,6 +183,11 @@ enum ConditionalCondition {
   hasItem
 }
 
+enum UploadVisibility {
+  PUBLIC
+  PRIVATE
+}
+
 enum AnswerStatus {
   DRAFT
   FINAL
@@ -222,6 +228,17 @@ type StringResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
     data: String
+}
+
+type UploadData {
+  id: ID!
+  url: String
+}
+
+type UploadResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: UploadData
 }
 
 type Worker {
@@ -1543,4 +1560,7 @@ type Mutation {
   cancelVisit(visitId: ID!): VisitResponse!
   updateClinicProfile(input: UpdateClinicProfileInput!): ClinicProfileResponse!
   deleteClinicProfile: BooleanResponse!
+  uploadFile(file: Upload!, visibility: UploadVisibility = PUBLIC): UploadResponse!
+  deleteUpload(id: ID!): BooleanResponse!
+  updateUploadVisibility(id: ID!, visibility: UploadVisibility!): UploadResponse!
 }

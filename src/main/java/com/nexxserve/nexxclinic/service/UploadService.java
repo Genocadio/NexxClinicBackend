@@ -1,138 +1,157 @@
 package com.nexxserve.nexxclinic.service;
 
-import com.nexxserve.nexxclinic.dto.out.FileInfoResponse;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
+import com.nexxserve.nexxclinic.config.SupabaseProperties;
+import com.nexxserve.nexxclinic.dto.out.ApiResponse;
+import com.nexxserve.nexxclinic.dto.out.UploadData;
+import com.nexxserve.nexxclinic.entity.Upload;
+import com.nexxserve.nexxclinic.model.UploadVisibility;
+import com.nexxserve.nexxclinic.repository.UploadRepository;
+import java.io.IOException;
+import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.io.IOException;
-import java.net.MalformedURLException;
-import java.nio.file.*;
-import java.util.Set;
-import java.util.UUID;
 
 @Service
 public class UploadService {
 
-    private static final Set<String> IMAGE_TYPES = Set.of(
-            "image/jpeg",
-            "image/png",
-            "image/webp",
-            "image/gif",
-            "image/svg+xml"
-    );
+    private static final Logger log = LoggerFactory.getLogger(UploadService.class);
 
-    private static final Set<String> DOC_TYPES = Set.of(
-            "application/pdf",
-            "application/msword",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "application/vnd.ms-excel",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "text/plain"
-    );
-
-    private static final Set<String> ARCHIVE_TYPES = Set.of(
-            "application/zip",
-            "application/x-rar-compressed",
-            "application/x-7z-compressed",
-            "application/gzip"
-    );
-
-    private final Path rootPath;
+    private final SupabaseStorageService storageService;
+    private final SupabaseProperties supabaseProperties;
+    private final UploadRepository uploadRepository;
 
     public UploadService(
-            @Value("${app.upload-dir:uploads}") String uploadDir
+            SupabaseStorageService storageService,
+            SupabaseProperties supabaseProperties,
+            UploadRepository uploadRepository
     ) {
-        this.rootPath = Paths.get(uploadDir).toAbsolutePath().normalize();
+        this.storageService = storageService;
+        this.supabaseProperties = supabaseProperties;
+        this.uploadRepository = uploadRepository;
     }
 
-    public FileInfoResponse upload(MultipartFile file) throws IOException {
-
+    @Transactional
+    public ApiResponse uploadFile(MultipartFile file, UploadVisibility visibility) {
         if (file.isEmpty()) {
-            throw new IllegalArgumentException("File is empty");
+            return ApiResponse.error("File is empty");
         }
 
-        String contentType = file.getContentType();
-        String folder = resolveFolder(contentType);
+        try {
+            String originalFileName = file.getOriginalFilename();
+            String extension = getExtension(originalFileName);
+            String storedName = UUID.randomUUID() + (extension.isBlank() ? "" : "." + extension);
+            String contentType = file.getContentType();
+            if (contentType == null || contentType.isBlank()) {
+                contentType = "application/octet-stream";
+            }
 
-        Path uploadPath = rootPath.resolve(folder);
-        Files.createDirectories(uploadPath);
+            String bucket = visibility == UploadVisibility.PUBLIC
+                    ? supabaseProperties.getBucketPublic()
+                    : supabaseProperties.getBucketPrivate();
 
-        String extension = getExtension(file.getOriginalFilename());
+            String storagePath = storedName;
 
-        String storedName = UUID.randomUUID() +
-                (extension.isBlank() ? "" : "." + extension);
+            storageService.upload(file.getBytes(), bucket, storagePath, contentType);
 
-        Path target = uploadPath.resolve(storedName);
+            String url = null;
+            if (visibility == UploadVisibility.PUBLIC) {
+                url = storageService.publicUrl(bucket, storagePath);
+            }
 
-        Files.copy(
-                file.getInputStream(),
-                target,
-                StandardCopyOption.REPLACE_EXISTING
-        );
+            Upload upload = new Upload();
+            upload.setFileName(storedName);
+            upload.setOriginalFileName(originalFileName);
+            upload.setContentType(contentType);
+            upload.setSize(file.getSize());
+            upload.setBucket(bucket);
+            upload.setVisibility(visibility);
+            upload.setUrl(url);
+            upload.setStoragePath(storagePath);
 
-        return new FileInfoResponse(
-                storedName,
-                file.getOriginalFilename(),
-                "/api/files/" + folder + "/" + storedName,
-                contentType,
-                file.getSize()
-        );
+            upload = uploadRepository.save(upload);
+
+            return ApiResponse.success("File uploaded successfully",
+                    new UploadData(upload.getId(), upload.getUrl()));
+        } catch (IOException e) {
+            log.error("Failed to upload file to Supabase", e);
+            return ApiResponse.error("Failed to upload file: " + e.getMessage());
+        }
     }
 
-    public Resource load(String folder, String filename)
-            throws MalformedURLException {
-
-        Path file = rootPath
-                .resolve(folder)
-                .resolve(filename)
-                .normalize();
-
-        Resource resource = new UrlResource(file.toUri());
-
-        if (!resource.exists()) {
-            throw new RuntimeException("File not found");
+    @Transactional
+    public ApiResponse deleteUpload(UUID id) {
+        Upload upload = uploadRepository.findById(id).orElse(null);
+        if (upload == null) {
+            return ApiResponse.error("Upload not found");
         }
 
-        return resource;
+        try {
+            storageService.delete(upload.getBucket(), upload.getStoragePath());
+        } catch (IOException e) {
+            log.error("Failed to delete file from Supabase storage, removing DB record anyway", e);
+        }
+
+        uploadRepository.delete(upload);
+        return ApiResponse.success("File deleted successfully", null);
     }
 
-    private String resolveFolder(String contentType) {
-
-        if (contentType == null) {
-            return "others";
+    @Transactional
+    public ApiResponse updateUploadVisibility(UUID id, UploadVisibility newVisibility) {
+        Upload upload = uploadRepository.findById(id).orElse(null);
+        if (upload == null) {
+            return ApiResponse.error("Upload not found");
         }
 
-        if (IMAGE_TYPES.contains(contentType)) {
-            return "images";
+        if (upload.getVisibility() == newVisibility) {
+            return ApiResponse.success("Upload visibility updated",
+                    new UploadData(upload.getId(), upload.getUrl()));
         }
 
-        if (DOC_TYPES.contains(contentType)) {
-            return "docs";
-        }
+        try {
+            String newBucket = newVisibility == UploadVisibility.PUBLIC
+                    ? supabaseProperties.getBucketPublic()
+                    : supabaseProperties.getBucketPrivate();
 
-        if (ARCHIVE_TYPES.contains(contentType)) {
-            return "archives";
-        }
+            byte[] fileBytes;
+            try (var is = new java.net.URL(storageService.publicUrl(upload.getBucket(), upload.getStoragePath())).openStream()) {
+                fileBytes = is.readAllBytes();
+            }
 
-        return "others";
+            storageService.upload(fileBytes, newBucket, upload.getStoragePath(), upload.getContentType());
+
+            storageService.delete(upload.getBucket(), upload.getStoragePath());
+
+            String url = null;
+            if (newVisibility == UploadVisibility.PUBLIC) {
+                url = storageService.publicUrl(newBucket, upload.getStoragePath());
+            }
+
+            upload.setBucket(newBucket);
+            upload.setVisibility(newVisibility);
+            upload.setUrl(url);
+
+            upload = uploadRepository.save(upload);
+
+            return ApiResponse.success("Upload visibility updated",
+                    new UploadData(upload.getId(), upload.getUrl()));
+        } catch (IOException e) {
+            log.error("Failed to update upload visibility", e);
+            return ApiResponse.error("Failed to update upload: " + e.getMessage());
+        }
     }
 
     private String getExtension(String filename) {
-
         if (!StringUtils.hasText(filename)) {
             return "";
         }
-
         int index = filename.lastIndexOf('.');
-
         if (index < 0) {
             return "";
         }
-
         return filename.substring(index + 1);
     }
 }
