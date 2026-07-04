@@ -700,19 +700,24 @@ public class PatientService {
         String lastName = blankToNull(input.lastName());
         int birthMonth = input.dateOfBirth() == null ? LocalDate.now().getMonthValue() : input.dateOfBirth().getMonthValue();
 
-        String seed = "" + toDigit(firstName, 0) + toDigit(firstName, 1) + toDigit(lastName, 0);
-        String monthPart = String.format("%02d", birthMonth);
+        // Use only 1 char from each name to keep it short
+        String seed = "" + toDigit(firstName, 0) + toDigit(lastName, 0);
+        String monthPart = String.format("%01d", birthMonth); // Single digit month
 
         for (int attempt = 0; attempt < 100; attempt++) {
-            int suffix = java.util.concurrent.ThreadLocalRandom.current().nextInt(0, 1000);
-            String identifier = seed + monthPart + String.format("%03d", suffix);
+            int suffix = java.util.concurrent.ThreadLocalRandom.current().nextInt(0, 100);
+            String identifier = seed + monthPart + String.format("%02d", suffix);
+            // This gives: 2 + 1 + 2 = 5 characters
+            // or add a 6th char: use 3 from seed
             if (!patientRepository.existsByPatientIdentifier(identifier)) {
                 return identifier;
             }
         }
 
+        // Fallback: generate exactly 6 digits
         for (int attempt = 0; attempt < 1000; attempt++) {
-            String identifier = String.format("%06d", java.util.concurrent.ThreadLocalRandom.current().nextInt(0, 1_000_000));
+            String identifier = String.format("%06d",
+                    java.util.concurrent.ThreadLocalRandom.current().nextInt(0, 1_000_000));
             if (!patientRepository.existsByPatientIdentifier(identifier)) {
                 return identifier;
             }

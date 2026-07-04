@@ -22,7 +22,7 @@ public class Patient {
     @GeneratedValue
     private UUID id;
 
-    @Column(nullable = false, unique = true, length = 6)
+    @Column(nullable = false, unique = true, length = 20)
     private String patientIdentifier;
 
     @Column(nullable = false)
