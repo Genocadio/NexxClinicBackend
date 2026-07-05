@@ -80,6 +80,22 @@ public class SupabaseStorageService {
 
     public void upload(byte[] data, String bucket, String objectPath, String contentType)
             throws IOException {
+        try {
+            doUpload(data, bucket, objectPath, contentType);
+        } catch (IOException e) {
+            if (e.getMessage() != null && e.getMessage().contains("Bucket not found")) {
+                log.warn("Bucket '{}' not found, attempting to create it", bucket);
+                boolean isPublic = bucket.equals(props.getBucketPublic());
+                createBucket(bucket, isPublic);
+                doUpload(data, bucket, objectPath, contentType);
+            } else {
+                throw e;
+            }
+        }
+    }
+
+    private void doUpload(byte[] data, String bucket, String objectPath, String contentType)
+            throws IOException {
         String endpoint =
             base() + "/storage/v1/object/" + bucket + "/" + objectPath;
 
@@ -97,14 +113,43 @@ public class SupabaseStorageService {
                 "Supabase upload failed  bucket={} path={} status={} body={}",
                 bucket, objectPath, res.statusCode(), res.body()
             );
-            throw new IOException(
-                "Supabase upload failed with HTTP " + res.statusCode()
-            );
+            String msg = "Supabase upload failed with HTTP " + res.statusCode();
+            if (res.body() != null && res.body().contains("Bucket not found")) {
+                msg = "Bucket not found";
+            }
+            throw new IOException(msg);
         }
         log.debug(
             "Supabase upload ok  bucket={} path={} status={}",
             bucket, objectPath, res.statusCode()
         );
+    }
+
+    public void createBucket(String bucketName, boolean isPublic) throws IOException {
+        String endpoint = base() + "/storage/v1/bucket";
+        String body = mapper.writeValueAsString(Map.of(
+            "name", bucketName,
+            "public", isPublic
+        ));
+
+        HttpRequest req = HttpRequest.newBuilder()
+            .uri(URI.create(endpoint))
+            .header("Authorization", "Bearer " + props.getServiceKey())
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(body))
+            .build();
+
+        HttpResponse<String> res = send(req);
+        if (res.statusCode() < 200 || res.statusCode() >= 300) {
+            log.error(
+                "Supabase create-bucket failed  bucket={} status={} body={}",
+                bucketName, res.statusCode(), res.body()
+            );
+            throw new IOException(
+                "Supabase create-bucket failed with HTTP " + res.statusCode()
+            );
+        }
+        log.info("Supabase bucket '{}' created (public={})", bucketName, isPublic);
     }
 
     // ─── DELETE ──────────────────────────────────────────────────────────────
