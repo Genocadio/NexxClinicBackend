@@ -141,7 +141,7 @@ public class UploadService {
                     : supabaseProperties.getBucketPrivate();
 
             byte[] fileBytes;
-            try (var is = new java.net.URL(storageService.publicUrl(upload.getBucket(), upload.getStoragePath())).openStream()) {
+            try (var is = new java.net.URL(storageService.fullPublicUrl(upload.getBucket(), upload.getStoragePath())).openStream()) {
                 fileBytes = is.readAllBytes();
             }
 

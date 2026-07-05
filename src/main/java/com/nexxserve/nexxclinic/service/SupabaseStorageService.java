@@ -183,7 +183,11 @@ public class SupabaseStorageService {
     // ─── PUBLIC URL ──────────────────────────────────────────────────────────
 
     public String publicUrl(String bucket, String objectPath) {
-        return base() + "/storage/v1/object/public/" + bucket + "/" + objectPath;
+        return "/storage/v1/object/public/" + bucket + "/" + objectPath;
+    }
+
+    public String fullPublicUrl(String bucket, String objectPath) {
+        return base() + publicUrl(bucket, objectPath);
     }
 
     // ─── SIGNED URL ──────────────────────────────────────────────────────────
@@ -224,8 +228,7 @@ public class SupabaseStorageService {
             throw new IOException("Supabase returned an empty signedURL field");
         }
 
-        String path = signedPath.toString();
-        return path.startsWith("http") ? path : base() + path;
+        return stripBase(signedPath.toString());
     }
 
     public String signedUrl(String bucket, String objectPath, int expiresInSeconds)
@@ -261,8 +264,7 @@ public class SupabaseStorageService {
             throw new IOException("Supabase returned an empty signedURL field");
         }
 
-        String path = signedPath.toString();
-        return path.startsWith("http") ? path : base() + path;
+        return stripBase(signedPath.toString());
     }
 
     // ─── INTERNAL ────────────────────────────────────────────────────────────
@@ -270,6 +272,14 @@ public class SupabaseStorageService {
     private String base() {
         if (props.getUrl() == null) return "";
         return props.getUrl().replaceAll("/+$", "");
+    }
+
+    private String stripBase(String url) {
+        String b = base();
+        if (!b.isEmpty() && url.startsWith(b)) {
+            return url.substring(b.length());
+        }
+        return url;
     }
 
     private HttpResponse<String> send(HttpRequest req) throws IOException {
