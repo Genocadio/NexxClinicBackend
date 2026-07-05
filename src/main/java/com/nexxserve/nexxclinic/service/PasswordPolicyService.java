@@ -38,8 +38,8 @@ public class PasswordPolicyService {
             return ApiResponse.error("Password is required.");
         }
 
-        if (rawPassword.length() < 12) {
-            return ApiResponse.error("Password must be at least 12 characters.");
+        if (rawPassword.length() < 8) {
+            return ApiResponse.error("Password must be at least 8 characters.");
         }
 
         if (rawPassword.chars().noneMatch(Character::isUpperCase)) {
