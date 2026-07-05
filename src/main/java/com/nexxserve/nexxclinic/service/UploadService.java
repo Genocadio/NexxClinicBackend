@@ -82,9 +82,24 @@ public class UploadService {
         }
     }
 
+    public ApiResponse findByUrl(String url) {
+        return uploadRepository.findByUrl(url)
+                .map(u -> ApiResponse.success("Upload found",
+                        new UploadData(u.getId(), u.getUrl())))
+                .orElse(ApiResponse.error("Upload not found for URL: " + url));
+    }
+
     @Transactional
     public ApiResponse deleteUpload(UUID id) {
-        Upload upload = uploadRepository.findById(id).orElse(null);
+        return deleteByUpload(uploadRepository.findById(id).orElse(null));
+    }
+
+    @Transactional
+    public ApiResponse deleteUploadByUrl(String url) {
+        return deleteByUpload(uploadRepository.findByUrl(url).orElse(null));
+    }
+
+    private ApiResponse deleteByUpload(Upload upload) {
         if (upload == null) {
             return ApiResponse.error("Upload not found");
         }
@@ -101,7 +116,16 @@ public class UploadService {
 
     @Transactional
     public ApiResponse updateUploadVisibility(UUID id, UploadVisibility newVisibility) {
-        Upload upload = uploadRepository.findById(id).orElse(null);
+        return updateVisibilityByUpload(uploadRepository.findById(id).orElse(null), newVisibility);
+    }
+
+    @Transactional
+    public ApiResponse updateUploadVisibilityByUrl(String url, UploadVisibility newVisibility) {
+        return updateVisibilityByUpload(uploadRepository.findByUrl(url).orElse(null), newVisibility);
+    }
+
+    @Transactional
+    public ApiResponse updateVisibilityByUpload(Upload upload, UploadVisibility newVisibility) {
         if (upload == null) {
             return ApiResponse.error("Upload not found");
         }
