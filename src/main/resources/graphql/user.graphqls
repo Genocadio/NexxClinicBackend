@@ -870,7 +870,7 @@ input WorkerDocumentInput {
 input SelfRegisterInput {
   firstName: String!
   lastName: String
-  gender: Gender
+  gender: Gender!
   dateOfBirth: String
   profilePhotoUrl: String
   email: String
@@ -884,8 +884,8 @@ input SelfRegisterInput {
 input AdminCreateUserInput {
   firstName: String!
   lastName: String
-  gender: Gender
-  dateOfBirth: String
+  gender: Gender!
+  dateOfBirth: String!
   profilePhotoUrl: String
   email: String
   phoneNumber: String

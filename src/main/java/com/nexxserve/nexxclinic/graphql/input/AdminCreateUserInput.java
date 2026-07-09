@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.util.List;
@@ -22,8 +23,10 @@ public record AdminCreateUserInput(
         @Size(max = 120, message = "lastName must not exceed 120 characters")
         String lastName,
 
+        @NotNull(message = "gender is required")
         Gender gender,
 
+        @NotNull(message = "dateOfBirth is required")
         @NotFutureDate(message = "dateOfBirth must be in the past or present")
         LocalDate dateOfBirth,
 
