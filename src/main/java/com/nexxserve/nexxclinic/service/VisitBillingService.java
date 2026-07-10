@@ -721,6 +721,20 @@ public class VisitBillingService {
             );
         }
 
+        // Reject overpayment: if any department has remaining unapplied payments
+        // after distribution across insurance groups, the total payment exceeded patient payable.
+        for (Map.Entry<UUID, BigDecimal> entry : remainingPaidByDepartment.entrySet()) {
+            if (entry.getValue().compareTo(ZERO) > 0) {
+                VisitDepartment dept = rootDepartments.get(entry.getKey());
+                String deptName = dept != null && dept.getDepartment() != null
+                    ? dept.getDepartment().getName()
+                    : "department";
+                return ApiResponse.error(
+                    "Payment amount would exceed the patient payable amount for " + deptName + "."
+                );
+            }
+        }
+
         // Validate billing notes before persisting: required when any product is exempted
         // or when the patient payment is less than the full payable amount.
         for (Map.Entry<
@@ -840,7 +854,9 @@ public class VisitBillingService {
                 insuranceBilling.getPatientPayableAmount()
             ) > 0
         ) {
-            candidatePaid = insuranceBilling.getPatientPayableAmount();
+            return ApiResponse.error(
+                "Payment amount would exceed the patient payable amount."
+            );
         }
         if (
             candidatePaid.compareTo(
@@ -859,7 +875,9 @@ public class VisitBillingService {
         if (
             nextPaid.compareTo(insuranceBilling.getPatientPayableAmount()) > 0
         ) {
-            nextPaid = insuranceBilling.getPatientPayableAmount();
+            return ApiResponse.error(
+                "Payment amount would exceed the patient payable amount."
+            );
         }
 
         insuranceBilling.setPaidAmount(nextPaid);
