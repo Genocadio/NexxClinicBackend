@@ -29,6 +29,9 @@ public record UpdatePatientInput(
         @Size(max = 120, message = "village must not exceed 120 characters")
         String village,
 
+        @Size(max = 120, message = "cell must not exceed 120 characters")
+        String cell,
+
         @Size(max = 120, message = "city must not exceed 120 characters")
         String city,
 

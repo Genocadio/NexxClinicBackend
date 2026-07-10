@@ -20,6 +20,7 @@ public record PatientDto(
         String primaryPhoneNumber,
         String alternativePhone,
         String village,
+        String cell,
         String city,
         String district,
         String postalAddress,

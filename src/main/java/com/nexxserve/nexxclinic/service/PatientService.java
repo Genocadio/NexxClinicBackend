@@ -319,6 +319,10 @@ public class PatientService {
             patient.setVillage(blankToNull(input.village()));
         }
 
+        if (input.cell() != null) {
+            patient.setCell(blankToNull(input.cell()));
+        }
+
         if (input.city() != null) {
             patient.setCity(blankToNull(input.city()));
         }
@@ -751,6 +755,7 @@ public class PatientService {
         patient.setPrimaryPhoneNumber(blankToNull(input.primaryPhoneNumber()));
         patient.setAlternativePhone(blankToNull(input.alternativePhone()));
         patient.setVillage(blankToNull(input.village()));
+        patient.setCell(blankToNull(input.cell()));
         patient.setCity(blankToNull(input.city()));
         patient.setDistrict(blankToNull(input.district()));
         patient.setPostalAddress(blankToNull(input.postalAddress()));

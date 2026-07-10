@@ -303,6 +303,7 @@ type Patient {
   primaryPhoneNumber: String
   alternativePhone: String
   village: String
+  cell: String
   city: String
   district: String
   postalAddress: String
@@ -995,6 +996,7 @@ input CreatePatientInput {
   primaryPhoneNumber: String
   alternativePhone: String
   village: String
+  cell: String
   city: String
   district: String
   postalAddress: String
@@ -1015,6 +1017,7 @@ input UpdatePatientInput {
   primaryPhoneNumber: String
   alternativePhone: String
   village: String
+  cell: String
   city: String
   district: String
   postalAddress: String

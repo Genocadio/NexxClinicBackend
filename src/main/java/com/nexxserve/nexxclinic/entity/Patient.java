@@ -46,6 +46,7 @@ public class Patient {
     private String alternativePhone;
 
     private String village;
+    private String cell;
     private String city;
     private String district;
     private String postalAddress;
@@ -167,6 +168,14 @@ public class Patient {
 
     public void setVillage(String village) {
         this.village = village;
+    }
+
+    public String getCell() {
+        return cell;
+    }
+
+    public void setCell(String cell) {
+        this.cell = cell;
     }
 
     public String getCity() {
