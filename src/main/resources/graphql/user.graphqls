@@ -1095,7 +1095,7 @@ input CreateProductInput {
   name: String!
   genericName: String
   code: String!
-  description: String!
+  description: String
   type: ProductType!
   unit: ProductUnit!
   metadata: JSON

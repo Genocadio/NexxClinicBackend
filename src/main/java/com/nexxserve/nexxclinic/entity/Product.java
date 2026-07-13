@@ -33,7 +33,7 @@ public class Product {
     @Column(nullable = false, unique = true, length = 64)
     private String code;
 
-    @Column(nullable = false, length = 500)
+    @Column(length = 500)
     private String description;
 
     @Enumerated(EnumType.STRING)

@@ -25,7 +25,6 @@ public record CreateProductInput(
         @Size(max = 64, message = "code must not exceed 64 characters")
         String code,
 
-        @NotBlank(message = "description is required")
         @Size(max = 500, message = "description must not exceed 500 characters")
         String description,
 
