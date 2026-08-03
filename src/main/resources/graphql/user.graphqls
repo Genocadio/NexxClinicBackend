@@ -439,7 +439,7 @@ type DepartmentProfile {
   updatedAt: String!
 }
 
-type ..Department {
+type Department {
   id: ID!
   name: String!
   insurancePolicyMode: DepartmentInsurancePolicyMode!
