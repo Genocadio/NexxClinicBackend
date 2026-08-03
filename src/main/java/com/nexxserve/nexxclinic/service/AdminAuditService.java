@@ -3,6 +3,7 @@ package com.nexxserve.nexxclinic.service;
 import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
 import com.nexxserve.nexxclinic.entity.AdminAuditLog;
 import com.nexxserve.nexxclinic.repository.AdminAuditLogRepository;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -40,11 +41,14 @@ public class AdminAuditService {
     }
 
     private Map<String, Object> toAuditLogView(AdminAuditLog log) {
-        return Map.of(
-                "id", log.getId(),
-                "action", log.getActionType(),
-                "details", log.getDetails(),
-                "timestamp", log.getCreatedAt()
-        );
+        // S8 fix: Map.of throws NullPointerException on any null value. `details` is a
+        // nullable column, so one legacy/edge row with null details would 500 the whole
+        // adminAuditLogs query. Build the map null-safely instead.
+        Map<String, Object> view = new LinkedHashMap<>();
+        view.put("id", log.getId());
+        view.put("action", log.getActionType());
+        view.put("details", log.getDetails());
+        view.put("timestamp", log.getCreatedAt());
+        return view;
     }
 }

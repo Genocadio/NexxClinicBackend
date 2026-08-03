@@ -10,11 +10,19 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "visit_billing_versions")
+// A1 fix: (visit_id, version) must be unique so createNextBillingVersion can never mint
+// two version-N rows for the same visit under concurrency (which would make the
+// "latest version" guards in payments/invoices non-deterministic). On existing databases
+// the same index is created by docs/migrations/visit_billing_versions_unique_version.sql.
+@Table(
+    name = "visit_billing_versions",
+    uniqueConstraints = @UniqueConstraint(columnNames = { "visit_id", "version" })
+)
 public class VisitBillingVersion {
 
     @Id

@@ -11,6 +11,7 @@ public record VisitDepartmentDto(
         DepartmentDto department,
         VisitDepartmentStatus status,
         EncounterType encounterType,
+        DepartmentProfileDto profile,
         LocalDateTime completedAt,
         List<WorkerDto> processors,
         List<VisitDepartmentProductDto> products,

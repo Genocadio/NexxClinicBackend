@@ -16,8 +16,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -167,11 +165,17 @@ public class ClinicProfileService {
 
     private void updateMetadata(ClinicProfile profile, List<ClinicMetadataDto> inputs) {
 
-        Map<String, ClinicMetadata> current = profile.getMetadata() == null
-                ? new HashMap<>()
-                : profile.getMetadata()
-                .stream()
-                .collect(Collectors.toMap(ClinicMetadata::getKey, m -> m));
+        // Null-safe + duplicate-safe: a legacy/edge row with a null or duplicated
+        // metadata key would otherwise make Collectors.toMap throw (NPE on null key,
+        // IllegalStateException on duplicates) -> 500 on the whole profile update.
+        Map<String, ClinicMetadata> current = new HashMap<>();
+        if (profile.getMetadata() != null) {
+            for (ClinicMetadata m : profile.getMetadata()) {
+                if (m.getKey() != null) {
+                    current.putIfAbsent(m.getKey(), m);
+                }
+            }
+        }
 
         for (ClinicMetadataDto input : inputs) {
 

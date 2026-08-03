@@ -12,6 +12,10 @@ import com.nexxserve.nexxclinic.model.ResponseStatus;
 import com.nexxserve.nexxclinic.repository.InsuranceProviderRepository;
 import com.nexxserve.nexxclinic.repository.PatientInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.PatientRepository;
+import com.nexxserve.nexxclinic.repository.VisitInsuranceRepository;
+import com.nexxserve.nexxclinic.repository.VisitRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.*;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
@@ -24,12 +28,17 @@ import java.util.*;
 @Service
 public class PatientService {
 
+    private static final Logger log = LoggerFactory.getLogger(PatientService.class);
+
     private final PatientRepository patientRepository;
     private final PatientMapper patientMapper;
     private final PatientInsuranceMapper patientInsuranceMapper;
     private final PatientInsuranceRepository patientInsuranceRepository;
     private final InsuranceProviderRepository insuranceProviderRepository;
+    private final VisitRepository visitRepository;
+    private final VisitInsuranceRepository visitInsuranceRepository;
     private final VisitService visitService;
+    private final MeilisearchIndexService meilisearchIndexService;
 
     public PatientService(
             PatientRepository patientRepository,
@@ -37,14 +46,20 @@ public class PatientService {
             InsuranceProviderRepository insuranceProviderRepository,
             PatientMapper patientMapper,
             PatientInsuranceMapper patientInsuranceMapper,
-            VisitService visitService
+            VisitRepository visitRepository,
+            VisitInsuranceRepository visitInsuranceRepository,
+            VisitService visitService,
+            MeilisearchIndexService meilisearchIndexService
     ) {
         this.patientRepository = patientRepository;
         this.patientInsuranceRepository = patientInsuranceRepository;
         this.insuranceProviderRepository = insuranceProviderRepository;
         this.patientMapper = patientMapper;
         this.patientInsuranceMapper = patientInsuranceMapper;
+        this.visitRepository = visitRepository;
+        this.visitInsuranceRepository = visitInsuranceRepository;
         this.visitService = visitService;
+        this.meilisearchIndexService = meilisearchIndexService;
     }
 
     // =========================
@@ -81,10 +96,42 @@ public class PatientService {
             return ApiResponse.error("minAge cannot be greater than maxAge.");
         }
 
+        UUID insuranceProviderId = input == null ? null : input.insuranceProviderId();
+        String phoneNumber = input == null ? null : blankToNull(input.phoneNumber());
+        String name = input == null ? null : blankToNull(input.name());
+
+        if (insuranceProviderId != null && !insuranceProviderRepository.existsById(insuranceProviderId)) {
+            return ApiResponse.error("Insurance provider not found.");
+        }
+
+        // Meilisearch first (typo-tolerant, ranked); the DB spec below is the fallback.
+        if (meilisearchIndexService.isEnabled()) {
+            try {
+                MeilisearchIndexService.SearchHit hit = meilisearchIndexService.searchPatients(
+                        name,
+                        phoneNumber,
+                        insuranceProviderId,
+                        exactAge,
+                        minAge,
+                        maxAge,
+                        page,
+                        size
+                );
+                List<PatientDto> dtos = loadPatientsByHits(hit.ids());
+                int totalPages = size == 0 ? 0 : (int) Math.ceil((double) hit.total() / size);
+                return ApiResponse.success(
+                        "Patients fetched.",
+                        dtos,
+                        new com.nexxserve.nexxclinic.dto.out.PaginationDto(hit.total(), size, page, totalPages)
+                );
+            } catch (MeilisearchIndexService.SearchUnavailableException e) {
+                log.warn("Meilisearch unavailable for patients, falling back to DB: {}", e.getMessage());
+            }
+        }
+
         Specification<Patient> spec = (root, query, cb) -> cb.conjunction();
 
         // Insurance provider filter
-        UUID insuranceProviderId = input == null ? null : input.insuranceProviderId();
         if (insuranceProviderId != null) {
             if (!insuranceProviderRepository.existsById(insuranceProviderId)) {
                 return ApiResponse.error("Insurance provider not found.");
@@ -107,7 +154,6 @@ public class PatientService {
         }
 
         // Phone number filter
-        String phoneNumber = input == null ? null : blankToNull(input.phoneNumber());
         if (phoneNumber != null) {
             String normalizedPhone = phoneNumber.toLowerCase();
             spec = spec.and((root, query, cb) ->
@@ -119,7 +165,6 @@ public class PatientService {
         }
 
         // Name filter with tokenization
-        String name = input == null ? null : blankToNull(input.name());
         if (name != null) {
             String[] tokens = name.toLowerCase().split("\\s+");
             List<String> validTokens = new ArrayList<>();
@@ -171,6 +216,23 @@ public class PatientService {
         );
     }
 
+    /** Hydrates full patient DTOs from Meilisearch hit ids, preserving hit order. */
+    private List<PatientDto> loadPatientsByHits(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, Patient> byId = new HashMap<>();
+        patientRepository.findAllById(ids).forEach(p -> byId.put(p.getId(), p));
+        List<PatientDto> dtos = new ArrayList<>();
+        for (UUID id : ids) {
+            Patient patient = byId.get(id);
+            if (patient != null) {
+                dtos.add(mapToDto(patient));
+            }
+        }
+        return dtos;
+    }
+
     // =========================
     // CREATE PATIENT
     // =========================
@@ -205,28 +267,48 @@ public class PatientService {
             return ApiResponse.error("passportNumber already exists.");
         }
 
-        // Create and save patient
+        // Create and save patient (guarded: a duplicate nationalId/passport that slips
+        // past the pre-checks under concurrency must surface as a clean error, not a 500).
         Patient patient = new Patient();
         patient.setPatientIdentifier(generateUniquePatientIdentifier(input));
         applyPatientInput(patient, input);
-        Patient savedPatient = patientRepository.save(patient);
+        Patient savedPatient;
+        try {
+            // saveAndFlush (not save): the unique index on nationalId/passport is only
+            // checked at flush time — a plain save() defers the violation to a later
+            // auto-flush query/commit, so this catch would never fire.
+            savedPatient = patientRepository.saveAndFlush(patient);
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            org.springframework.transaction.interceptor.TransactionAspectSupport
+                .currentTransactionStatus()
+                .setRollbackOnly();
+            return ApiResponse.error(mapPatientPersistenceError(ex));
+        }
 
-        // Handle insurance if provided
+        // Handle insurance if provided. On failure the whole createPatient must roll
+        // back (patient + insurances + visit are one atomic unit) — otherwise a failed
+        // request would commit an orphan patient with no visit.
         List<UUID> linkedInsuranceIds = new ArrayList<>();
         if (input.insurances() != null && !input.insurances().isEmpty()) {
             ApiResponse<List<PatientInsuranceDto>> insuranceResponse = validateAndCreateInsurances(savedPatient, input.insurances());
             if (insuranceResponse.status() != ResponseStatus.SUCCESS) {
+                org.springframework.transaction.interceptor.TransactionAspectSupport
+                    .currentTransactionStatus()
+                    .setRollbackOnly();
                 return ApiResponse.error(insuranceResponse.message());
             }
-            // Extract insurance IDs from the response
+            // Link the just-created insurances to the visit so billing can apply them.
             if (insuranceResponse.data() != null) {
                 for (PatientInsuranceDto insuranceDto : insuranceResponse.data()) {
-                    // We need to fetch the actual IDs since we don't have them in the DTO
-                    // Alternative: have createPatientInsurance return the entity
-                    // For now, we'll handle this differently
+                    if (insuranceDto != null && insuranceDto.id() != null) {
+                        linkedInsuranceIds.add(insuranceDto.id());
+                    }
                 }
             }
         }
+
+        // Index AFTER insurance creation so the document carries the insurance provider ids.
+        meilisearchIndexService.indexPatient(savedPatient.getId());
 
         // Create visit
         CreateVisitInput visitInput = new CreateVisitInput(
@@ -237,6 +319,13 @@ public class PatientService {
         );
 
         ApiResponse<VisitDto> visitResponse = visitService.createVisit(visitInput, null);
+        if (visitResponse.status() != ResponseStatus.SUCCESS) {
+            // The patient (and insurances) were already saved in this transaction;
+            // roll back so a failed visit never leaves an orphan patient behind.
+            org.springframework.transaction.interceptor.TransactionAspectSupport
+                .currentTransactionStatus()
+                .setRollbackOnly();
+        }
         return visitResponse;
     }
 
@@ -276,7 +365,10 @@ public class PatientService {
         }
 
         Patient patient = patientRepository.findById(patientId)
-                .orElseThrow(() -> new RuntimeException("Patient not found"));
+                .orElseGet(() -> null);
+        if (patient == null) {
+            return ApiResponse.error("Patient not found.");
+        }
 
         // Update fields if present
         if (input.firstName() != null) {
@@ -371,6 +463,7 @@ public class PatientService {
         ));
 
         Patient saved = patientRepository.save(patient);
+        meilisearchIndexService.indexPatient(saved);
         return ApiResponse.success("Patient updated.", mapToDto(saved));
     }
 
@@ -387,13 +480,36 @@ public class PatientService {
             return ApiResponse.error("Patient not found.");
         }
 
-        // Delete associated insurances first
+        // FK guard: a patient with visits (or visit-insurances referencing their
+        // insurances) cannot be hard-deleted — the FK would throw DataIntegrityViolation.
+        if (visitRepository.existsByPatientId(patientId)) {
+            return ApiResponse.error(
+                "Patient has visit history and cannot be deleted."
+            );
+        }
+
+        // Delete associated insurances first (guarded: insurances linked to a visit
+        // cannot be removed either).
         List<PatientInsurance> patientInsurances = patientInsuranceRepository.findByPatientId(patientId);
+        for (PatientInsurance pi : patientInsurances) {
+            if (visitInsuranceRepository.existsByPatientInsuranceId(pi.getId())) {
+                return ApiResponse.error(
+                    "Patient has insurances linked to visits and cannot be deleted."
+                );
+            }
+        }
         if (!patientInsurances.isEmpty()) {
             patientInsuranceRepository.deleteAll(patientInsurances);
         }
 
-        patientRepository.deleteById(patientId);
+        try {
+            patientRepository.deleteById(patientId);
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            return ApiResponse.error(
+                "Patient has records that prevent deletion. Reassign or archive the patient's history first."
+            );
+        }
+        meilisearchIndexService.deletePatient(patientId);
         return ApiResponse.success("Patient deleted.", true);
     }
 
@@ -452,6 +568,7 @@ public class PatientService {
         }
 
         PatientInsurance saved = patientInsuranceRepository.save(patientInsurance);
+        meilisearchIndexService.indexPatient(patient.getId());
         return ApiResponse.success("Patient insurance added.", patientInsuranceMapper.toDto(saved));
     }
 
@@ -513,6 +630,7 @@ public class PatientService {
         }
 
         PatientInsurance saved = patientInsuranceRepository.save(patientInsurance);
+        meilisearchIndexService.indexPatient(patientInsurance.getPatient().getId());
         return ApiResponse.success("Patient insurance updated.", patientInsuranceMapper.toDto(saved));
     }
 
@@ -522,11 +640,23 @@ public class PatientService {
             return ApiResponse.error("patientInsuranceId is required.");
         }
 
-        if (!patientInsuranceRepository.existsById(patientInsuranceId)) {
+        Optional<PatientInsurance> patientInsuranceOptional = patientInsuranceRepository.findById(patientInsuranceId);
+        if (patientInsuranceOptional.isEmpty()) {
             return ApiResponse.error("Patient insurance not found.");
         }
 
+        UUID patientId = patientInsuranceOptional.get().getPatient().getId();
+
+        // FK guard: insurances linked to a visit cannot be removed — the FK in
+        // visit_insurances would throw DataIntegrityViolationException -> 500.
+        if (visitInsuranceRepository.existsByPatientInsuranceId(patientInsuranceId)) {
+            return ApiResponse.error(
+                "This insurance is linked to one or more visits and cannot be deleted. Unlink it from the visits first."
+            );
+        }
+
         patientInsuranceRepository.deleteById(patientInsuranceId);
+        meilisearchIndexService.indexPatient(patientId);
         return ApiResponse.success("Patient insurance deleted.", true);
     }
 
@@ -727,7 +857,16 @@ public class PatientService {
             }
         }
 
-        throw new IllegalStateException("Unable to generate a unique patient identifier.");
+        // Absolute last resort: a short random UUID fragment. Never throw here — a
+        // patient must be creatable even under extreme identifier pressure. Existence-check
+        // the fragment so the eventual save does not collide.
+        for (int attempt = 0; attempt < 100; attempt++) {
+            String identifier = java.util.UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+            if (!patientRepository.existsByPatientIdentifier(identifier)) {
+                return identifier;
+            }
+        }
+        return java.util.UUID.randomUUID().toString().substring(0, 8).toUpperCase();
     }
 
     private int toDigit(String value, int index) {
@@ -769,6 +908,20 @@ public class PatientService {
     private PatientDto mapToDto(Patient patient) {
         List<PatientInsurance> insurances = patientInsuranceRepository.findByPatientId(patient.getId());
         return patientMapper.toDto(patient, insurances);
+    }
+
+    private String mapPatientPersistenceError(org.springframework.dao.DataIntegrityViolationException ex) {
+        String lowered = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase();
+        if (lowered.contains("national") || lowered.contains("patients_national_id_number_key")) {
+            return "nationalIdNumber already exists.";
+        }
+        if (lowered.contains("passport") || lowered.contains("patients_passport_number_key")) {
+            return "passportNumber already exists.";
+        }
+        if (lowered.contains("identifier") || lowered.contains("patients_patient_identifier_key")) {
+            return "Unable to generate a unique patient identifier. Please retry.";
+        }
+        return "Unable to save the patient due to invalid or duplicate data.";
     }
 
     private String buildFullName(String first, String middle, String last) {

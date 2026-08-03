@@ -12,4 +12,11 @@ public interface VisitInsuranceRepository extends JpaRepository<VisitInsurance, 
     void deleteByVisitId(UUID visitId);
 
     boolean existsByVisitIdAndPatientInsuranceId(UUID visitId, UUID patientInsuranceId);
+
+    /**
+     * Whether any visit links this patient insurance. Used as an FK guard before
+     * hard-deleting a PatientInsurance (a linked insurance must never be deleted ->
+     * would throw DataIntegrityViolationException -> 500).
+     */
+    boolean existsByPatientInsuranceId(UUID patientInsuranceId);
 }

@@ -26,13 +26,16 @@ import com.nexxserve.nexxclinic.model.AccountStatus;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.model.ResponseStatus;
-import com.nexxserve.nexxclinic.repository.DepartmentDefaultProductRepository;
 import com.nexxserve.nexxclinic.repository.DepartmentInsurancePolicyRepository;
+import com.nexxserve.nexxclinic.repository.DepartmentProfileProductRepository;
+import com.nexxserve.nexxclinic.repository.DepartmentProfileRepository;
 import com.nexxserve.nexxclinic.repository.DepartmentRepository;
 import com.nexxserve.nexxclinic.repository.ProductInsuranceCoverageRepository;
 import com.nexxserve.nexxclinic.repository.WorkerRepository;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -54,33 +57,39 @@ public class WorkerService {
     private final WorkerRepository workerRepository;
     private final DepartmentRepository departmentRepository;
     private final DepartmentInsurancePolicyRepository departmentInsurancePolicyRepository;
-    private final DepartmentDefaultProductRepository departmentDefaultProductRepository;
+    private final DepartmentProfileRepository departmentProfileRepository;
+    private final DepartmentProfileProductRepository departmentProfileProductRepository;
     private final ProductInsuranceCoverageRepository productInsuranceCoverageRepository;
     private final PasswordEncoder passwordEncoder;
     private final SessionTokenService sessionTokenService;
     private final PasswordPolicyService passwordPolicyService;
     private final AdminAuditService adminAuditService;
+    private final MeilisearchIndexService meilisearchIndexService;
 
     public WorkerService(
             WorkerRepository workerRepository,
             DepartmentRepository departmentRepository,
             DepartmentInsurancePolicyRepository departmentInsurancePolicyRepository,
-            DepartmentDefaultProductRepository departmentDefaultProductRepository,
+            DepartmentProfileRepository departmentProfileRepository,
+            DepartmentProfileProductRepository departmentProfileProductRepository,
             ProductInsuranceCoverageRepository productInsuranceCoverageRepository,
             PasswordEncoder passwordEncoder,
             SessionTokenService sessionTokenService,
             PasswordPolicyService passwordPolicyService,
-            AdminAuditService adminAuditService
+            AdminAuditService adminAuditService,
+            MeilisearchIndexService meilisearchIndexService
     ) {
         this.workerRepository = workerRepository;
         this.departmentRepository = departmentRepository;
         this.departmentInsurancePolicyRepository = departmentInsurancePolicyRepository;
-        this.departmentDefaultProductRepository = departmentDefaultProductRepository;
+        this.departmentProfileRepository = departmentProfileRepository;
+        this.departmentProfileProductRepository = departmentProfileProductRepository;
         this.productInsuranceCoverageRepository = productInsuranceCoverageRepository;
         this.passwordEncoder = passwordEncoder;
         this.sessionTokenService = sessionTokenService;
         this.passwordPolicyService = passwordPolicyService;
         this.adminAuditService = adminAuditService;
+        this.meilisearchIndexService = meilisearchIndexService;
     }
 
     @Transactional
@@ -138,7 +147,14 @@ public class WorkerService {
         } catch (DataIntegrityViolationException ex) {
             return mapPersistenceError(ex, "Unable to register user due to invalid or duplicate data.");
         }
-        passwordPolicyService.saveToPasswordHistory(saved, encodedPassword);
+        meilisearchIndexService.indexWorker(saved);
+        try {
+            passwordPolicyService.saveToPasswordHistory(saved, encodedPassword);
+        } catch (Exception e) {
+            // The password history row is advisory (enforces "recently used" policy).
+            // A failure here must NOT roll back the successful registration/login.
+            logger.warn("Could not persist password history for user {}: {}", saved.getId(), e.getMessage());
+        }
 
         String message = firstUser
                 ? "First user registered as ACTIVE ADMIN with non-expiring password policy."
@@ -183,6 +199,7 @@ public class WorkerService {
         } catch (DataIntegrityViolationException ex) {
             return mapPersistenceError(ex, "Unable to create user due to invalid or duplicate data.");
         }
+        meilisearchIndexService.indexWorker(saved);
 
         adminAuditService.logAdminAction(
                 adminUser,
@@ -213,7 +230,13 @@ public class WorkerService {
         worker.setRoles(input.roles());
         worker.setAccountStatus(AccountStatus.ACTIVE);
         worker.setActive(true);
-        workerRepository.save(worker);
+        Worker saved;
+        try {
+            saved = workerRepository.save(worker);
+        } catch (DataIntegrityViolationException ex) {
+            return mapPersistenceError(ex, "Unable to activate user due to invalid or duplicate data.");
+        }
+        meilisearchIndexService.indexWorker(saved);
 
         adminAuditService.logAdminAction(
             adminUser,
@@ -248,12 +271,13 @@ public class WorkerService {
 
         if (worker.getPasswordHash() == null || worker.getPasswordHash().isBlank()) {
             logger.info("Initial password setup required for user: {}", worker.getId());
-            Map<String, Object> data = Map.of(
-                    "passwordSetupRequired", true,
-                    "identifier", input.identifier(),
-                "userId", worker.getId(),
-                "user", workerToMap(worker)
-            );
+            // S8 fix: Map.of throws NullPointerException on any null value. Build the
+            // response map null-safely so a partially-populated worker can never 500.
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("passwordSetupRequired", true);
+            data.put("identifier", input.identifier());
+            data.put("userId", worker.getId());
+            data.put("user", workerToMap(worker));
             return new ApiResponse<>(
                     com.nexxserve.nexxclinic.model.ResponseStatus.PARTIAL_SUCCESS,
                     "Password not set. Complete initial password setup.",
@@ -304,9 +328,24 @@ public class WorkerService {
             worker.setNextResetDate(LocalDateTime.now().plusDays(worker.getResetPeriodDays()));
         }
 
-        Worker saved = workerRepository.save(worker);
-        passwordPolicyService.saveToPasswordHistory(saved, encodedPassword);
-        sessionTokenService.issueSession(saved);
+        Worker saved;
+        try {
+            saved = workerRepository.save(worker);
+        } catch (DataIntegrityViolationException ex) {
+            return mapPersistenceError(ex, "Unable to set initial password due to invalid data.");
+        }
+        try {
+            passwordPolicyService.saveToPasswordHistory(saved, encodedPassword);
+        } catch (Exception e) {
+            logger.warn("Could not persist password history for user {}: {}", saved.getId(), e.getMessage());
+        }
+        try {
+            sessionTokenService.issueSession(saved);
+        } catch (Exception e) {
+            // Password was saved; only the auto-login failed. Return success with the
+            // flag set so the client logs in normally instead of showing a 500.
+            logger.warn("Could not issue session after initial password setup for user {}: {}", saved.getId(), e.getMessage());
+        }
 
         return ApiResponse.success("Initial password set successfully.", true);
     }
@@ -322,13 +361,12 @@ public class WorkerService {
             return ApiResponse.error("Invalid or expired refresh token.");
         }
 
-        return ApiResponse.success(
-                "Session refreshed.",
-                Map.of(
-                        "accessToken", rotated.get().accessToken(),
-                        "refreshToken", rotated.get().refreshToken()
-                )
-        );
+        // S8 fix: Map.of throws NullPointerException on any null value. Build the
+        // token map null-safely so a malformed token bundle can never 500.
+        Map<String, Object> sessionData = new LinkedHashMap<>();
+        sessionData.put("accessToken", rotated.get().accessToken());
+        sessionData.put("refreshToken", rotated.get().refreshToken());
+        return ApiResponse.success("Session refreshed.", sessionData);
     }
 
     @Transactional
@@ -356,7 +394,13 @@ public class WorkerService {
         Worker worker = workerOptional.get();
         worker.setAccountStatus(AccountStatus.DISABLED);
         worker.setActive(false);
-        workerRepository.save(worker);
+        Worker saved;
+        try {
+            saved = workerRepository.save(worker);
+        } catch (DataIntegrityViolationException ex) {
+            return mapPersistenceError(ex, "Unable to deactivate user due to invalid data.");
+        }
+        meilisearchIndexService.indexWorker(saved);
 
         boolean revokeSessions = input.revokeSessions() == null || Boolean.TRUE.equals(input.revokeSessions());
         if (revokeSessions) {
@@ -425,12 +469,45 @@ public class WorkerService {
 
     @Transactional(readOnly = true)
     public ApiResponse searchWorkers(String name, RoleName role, Boolean activeOnly, UUID departmentId) {
+        // Meilisearch first (typo-tolerant, ranked); the DB query below is the fallback.
+        if (meilisearchIndexService.isEnabled()) {
+            try {
+                MeilisearchIndexService.SearchHit hit = meilisearchIndexService.searchWorkers(
+                        blankToNull(name),
+                        role,
+                        activeOnly,
+                        departmentId
+                );
+                List<Map<String, Object>> users = loadWorkersByHits(hit.ids());
+                return ApiResponse.success("Workers fetched.", users);
+            } catch (MeilisearchIndexService.SearchUnavailableException e) {
+                logger.warn("Meilisearch unavailable for workers, falling back to DB: {}", e.getMessage());
+            }
+        }
+
         String normalizedName = blankToNull(name);
         List<Map<String, Object>> users = workerRepository.searchWorkers(normalizedName, role, activeOnly, departmentId)
                 .stream()
                 .map(this::workerToMap)
                 .toList();
         return ApiResponse.success("Workers fetched.", users);
+    }
+
+    /** Hydrates worker maps from Meilisearch hit ids, preserving hit order. */
+    private List<Map<String, Object>> loadWorkersByHits(List<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, Worker> byId = new HashMap<>();
+        workerRepository.findAllById(ids).forEach(w -> byId.put(w.getId(), w));
+        List<Map<String, Object>> users = new ArrayList<>();
+        for (UUID id : ids) {
+            Worker worker = byId.get(id);
+            if (worker != null) {
+                users.add(workerToMap(worker));
+            }
+        }
+        return users;
     }
 
     @Transactional(readOnly = true)
@@ -520,7 +597,13 @@ public class WorkerService {
             worker.setWorkerDocProfile(mapDocument(input.workerDocProfile()));
         }
 
-        Worker saved = workerRepository.save(worker);
+        Worker saved;
+        try {
+            saved = workerRepository.save(worker);
+        } catch (DataIntegrityViolationException ex) {
+            return mapPersistenceError(ex, "Unable to update profile due to invalid or duplicate data.");
+        }
+        meilisearchIndexService.indexWorker(saved);
         return ApiResponse.success("Profile updated successfully.", workerToMap(saved));
     }
 
@@ -619,6 +702,7 @@ public class WorkerService {
         } catch (DataIntegrityViolationException ex) {
             return mapPersistenceError(ex, "Unable to update user due to invalid or duplicate data.");
         }
+        meilisearchIndexService.indexWorker(saved);
 
         adminAuditService.logAdminAction(
                 adminUser,
@@ -678,21 +762,39 @@ public class WorkerService {
             worker.setNextResetDate(LocalDateTime.now().plusDays(worker.getResetPeriodDays()));
         }
 
-        Worker saved = workerRepository.save(worker);
-        passwordPolicyService.saveToPasswordHistory(saved, encodedPassword);
+        Worker saved;
+        try {
+            saved = workerRepository.save(worker);
+        } catch (DataIntegrityViolationException ex) {
+            return mapPersistenceError(ex, "Unable to change password due to invalid data.");
+        }
+        try {
+            passwordPolicyService.saveToPasswordHistory(saved, encodedPassword);
+        } catch (Exception e) {
+            logger.warn("Could not persist password history for user {}: {}", saved.getId(), e.getMessage());
+        }
 
-        sessionTokenService.revokeAllRefreshTokensForUser(saved.getId(), "PASSWORD_CHANGED");
-        if (accessTokenInfo != null) {
-            sessionTokenService.revokeAccessTokenByJti(
-                    accessTokenInfo.tokenId(),
-                    sessionTokenService.toLocalDateTime(accessTokenInfo),
-                    saved.getId(),
-                    "PASSWORD_CHANGED"
-            );
+        try {
+            sessionTokenService.revokeAllRefreshTokensForUser(saved.getId(), "PASSWORD_CHANGED");
+            if (accessTokenInfo != null) {
+                sessionTokenService.revokeAccessTokenByJti(
+                        accessTokenInfo.tokenId(),
+                        sessionTokenService.toLocalDateTime(accessTokenInfo),
+                        saved.getId(),
+                        "PASSWORD_CHANGED"
+                );
+            }
+        } catch (Exception e) {
+            // Token revocation is best-effort; the password change itself is committed.
+            logger.warn("Could not revoke old tokens after password change for user {}: {}", saved.getId(), e.getMessage());
         }
 
         logger.info("Password changed successfully for user: {} (ID: {})", authUser.principal(), authUser.userId());
-        sessionTokenService.issueSession(saved);
+        try {
+            sessionTokenService.issueSession(saved);
+        } catch (Exception e) {
+            logger.warn("Could not issue session after password change for user {}: {}", saved.getId(), e.getMessage());
+        }
         return ApiResponse.success("Password changed successfully.", true);
     }
 
@@ -789,17 +891,19 @@ public class WorkerService {
     }
 
     private Optional<Worker> findByIdentifier(String identifier) {
-        Optional<Worker> byEmail = workerRepository.findByEmailIgnoreCase(identifier);
+        // findFirst* variants: legacy duplicate rows (pre-unique-index data) used to make
+        // login throw IncorrectResultSizeDataAccessException -> 500. LIMIT 1, oldest wins.
+        Optional<Worker> byEmail = workerRepository.findFirstByEmailIgnoreCaseOrderByCreatedAtAsc(identifier);
         if (byEmail.isPresent()) {
             return byEmail;
         }
 
-        Optional<Worker> byUsername = workerRepository.findByUsernameIgnoreCase(identifier);
+        Optional<Worker> byUsername = workerRepository.findFirstByUsernameIgnoreCaseOrderByCreatedAtAsc(identifier);
         if (byUsername.isPresent()) {
             return byUsername;
         }
 
-        return workerRepository.findByPhoneNumber(identifier);
+        return workerRepository.findFirstByPhoneNumberOrderByCreatedAtAsc(identifier);
     }
 
     private void applyCommonProfileFields(
@@ -962,10 +1066,23 @@ public class WorkerService {
                         .toList()
         );
         data.put(
-                "defaultProducts",
-                departmentDefaultProductRepository.findByDepartmentId(department.getId())
+                "profiles",
+                departmentProfileRepository.findByDepartmentId(department.getId())
                         .stream()
-                        .map(link -> productToMap(link.getProduct()))
+                        .map(profile -> {
+                            Map<String, Object> profileMap = new HashMap<>();
+                            profileMap.put("id", profile.getId());
+                            profileMap.put("name", profile.getName());
+                            profileMap.put("isDefault", profile.isDefault());
+                            profileMap.put(
+                                    "products",
+                                    departmentProfileProductRepository.findByProfileId(profile.getId())
+                                            .stream()
+                                            .map(link -> productToMap(link.getProduct()))
+                                            .toList()
+                            );
+                            return profileMap;
+                        })
                         .toList()
         );
         data.put("nursing", department.isNursing());

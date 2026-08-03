@@ -1,6 +1,7 @@
 package com.nexxserve.nexxclinic.mappers.out;
 
 import com.nexxserve.nexxclinic.dto.out.DepartmentDto;
+import com.nexxserve.nexxclinic.dto.out.DepartmentProfileDto;
 import com.nexxserve.nexxclinic.entity.Department;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -11,7 +12,7 @@ import java.util.List;
 public interface DepartmentMapper {
 
     @Mapping(target = "insurancePolicies", ignore = true) // Handled dynamically/manually via custom logic in WorkerService if required
-    @Mapping(target = "defaultProducts", ignore = true)     // Handled dynamically/manually via custom logic in WorkerService if required
+    @Mapping(target = "profiles", ignore = true)           // Handled dynamically/manually via custom logic in DepartmentService
     @Mapping(target = "standaloneForms", ignore = true)
     @Mapping(target = "defaultStandaloneForm", ignore = true)
     DepartmentDto toDto(Department department);
@@ -25,13 +26,13 @@ public interface DepartmentMapper {
     @Mapping(target = "createdAt", source = "department.createdAt")
     @Mapping(target = "updatedAt", source = "department.updatedAt")
     @Mapping(target = "insurancePolicies", source = "insurancePolicies")
-    @Mapping(target = "defaultProducts", source = "defaultProducts")
+    @Mapping(target = "profiles", source = "profiles")
     @Mapping(target = "standaloneForms", source = "standaloneForms")
     @Mapping(target = "defaultStandaloneForm", source = "defaultStandaloneForm")
     DepartmentDto toDtoWithDetails(
             Department department,
             List<com.nexxserve.nexxclinic.dto.out.InsuranceProviderDto> insurancePolicies,
-            List<com.nexxserve.nexxclinic.dto.out.ProductDto> defaultProducts,
+            List<DepartmentProfileDto> profiles,
             List<com.nexxserve.nexxclinic.dto.out.StandaloneFormDto> standaloneForms,
             com.nexxserve.nexxclinic.dto.out.StandaloneFormDto defaultStandaloneForm
     );

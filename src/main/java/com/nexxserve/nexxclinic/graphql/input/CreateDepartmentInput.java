@@ -15,7 +15,7 @@ public record CreateDepartmentInput(
 
         List<UUID> insuranceProviderIds,
 
-        List<UUID> defaultProductIds,
+        List<DepartmentProfileInput> profiles,
 
         Boolean nursing,
 

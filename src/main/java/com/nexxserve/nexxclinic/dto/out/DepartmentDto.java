@@ -11,7 +11,7 @@ public record DepartmentDto(
         String name,
         DepartmentInsurancePolicyMode insurancePolicyMode,
         List<InsuranceProviderDto> insurancePolicies,
-        List<ProductDto> defaultProducts,
+        List<DepartmentProfileDto> profiles,
         boolean nursing,
         boolean supportRequests,
         boolean requestsProducts,

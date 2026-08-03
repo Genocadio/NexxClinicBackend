@@ -8,21 +8,43 @@ spring:
     driver-class-name: ${DB_DRIVER:org.postgresql.Driver}
   jpa:
     hibernate:
-      ddl-auto: update
+      # Flyway owns the schema. Hibernate only validates that entities match
+      # what the migrations created (see src/main/resources/db/migration/).
+      ddl-auto: validate
     open-in-view: false
     properties:
       hibernate:
         format_sql: true
+  flyway:
+    enabled: true
+    # Existing databases (previously managed by ddl-auto=update) have no
+    # flyway_schema_history: baseline them at V1 so only V2+ run there.
+    # Fresh databases run V1 (full schema) and then V2+.
+    baseline-on-migrate: true
+    baseline-version: 1
+    locations: classpath:db/migration
   graphql:
     schema:
       file-extensions: .graphqls, .gqls
     graphiql:
       enabled: true
+meilisearch:
+  url: ${MEILI_URL:http://localhost:7700}
+  api-key: ${MEILI_MASTER_KEY:nexxclinic_meili_master_key}
+  # Disable to make product/patient/worker search use the database exclusively.
+  enabled: ${MEILI_ENABLED:true}
+
 supabase:
   url: https://supa.med.rw
   service-key: SECRET
   bucket-public: uploads-public
   bucket-private: uploads-private
+  # Storage HTTP client hardening: fail fast instead of hanging on slow/unhealthy
+  # Supabase, and survive transient (429/5xx) blips with bounded backoff.
+  connect-timeout-ms: ${SUPABASE_CONNECT_TIMEOUT_MS:5000}
+  request-timeout-ms: ${SUPABASE_REQUEST_TIMEOUT_MS:15000}
+  retry-max-attempts: ${SUPABASE_RETRY_MAX_ATTEMPTS:2}
+  retry-backoff-ms: ${SUPABASE_RETRY_BACKOFF_MS:500}
 
 logging:
   level:

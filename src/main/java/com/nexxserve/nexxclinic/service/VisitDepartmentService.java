@@ -2,12 +2,16 @@ package com.nexxserve.nexxclinic.service;
 
 import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
 import com.nexxserve.nexxclinic.entity.Department;
+import com.nexxserve.nexxclinic.entity.DepartmentProfile;
+import com.nexxserve.nexxclinic.entity.DepartmentProfileProduct;
 import com.nexxserve.nexxclinic.entity.Product;
 import com.nexxserve.nexxclinic.entity.Visit;
 import com.nexxserve.nexxclinic.entity.VisitDepartment;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentDiagnosis;
+import com.nexxserve.nexxclinic.entity.VisitBillingItem;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentMedication;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
+import com.nexxserve.nexxclinic.entity.VisitInsurance;
 import com.nexxserve.nexxclinic.entity.VisitPreInstruction;
 import com.nexxserve.nexxclinic.entity.VisitPreInstructionMedication;
 import com.nexxserve.nexxclinic.entity.VisitPreInstructionProductRequest;
@@ -22,18 +26,24 @@ import com.nexxserve.nexxclinic.dto.out.*;
 import com.nexxserve.nexxclinic.mappers.out.*;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
+import com.nexxserve.nexxclinic.model.VisitDepartmentProductSource;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
 import com.nexxserve.nexxclinic.model.VisitStatus;
+import com.nexxserve.nexxclinic.repository.DepartmentProfileProductRepository;
+import com.nexxserve.nexxclinic.repository.DepartmentProfileRepository;
 import com.nexxserve.nexxclinic.repository.DepartmentRepository;
 import com.nexxserve.nexxclinic.repository.ProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentDiagnosisRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentMedicationRepository;
+import com.nexxserve.nexxclinic.repository.VisitBillingItemRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
+import com.nexxserve.nexxclinic.repository.VisitInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.VisitRepository;
 import com.nexxserve.nexxclinic.repository.WorkerRepository;
 import java.math.BigDecimal;
 import java.util.*;
+import java.util.stream.Collectors;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,6 +60,11 @@ public class VisitDepartmentService {
     private final DepartmentRepository departmentRepository;
     private final ProductRepository productRepository;
     private final WorkerRepository workerRepository;
+    private final VisitBillingItemRepository visitBillingItemRepository;
+    private final com.nexxserve.nexxclinic.repository.VisitDepartmentBillingRepository visitDepartmentBillingRepository;
+    private final VisitInsuranceRepository visitInsuranceRepository;
+    private final DepartmentProfileRepository departmentProfileRepository;
+    private final DepartmentProfileProductRepository departmentProfileProductRepository;
 
     private final WorkerMapper workerMapper;
     private final DepartmentMapper departmentMapper;
@@ -68,6 +83,11 @@ public class VisitDepartmentService {
             DepartmentRepository departmentRepository,
             ProductRepository productRepository,
             WorkerRepository workerRepository,
+            VisitBillingItemRepository visitBillingItemRepository,
+            com.nexxserve.nexxclinic.repository.VisitDepartmentBillingRepository visitDepartmentBillingRepository,
+            VisitInsuranceRepository visitInsuranceRepository,
+            DepartmentProfileRepository departmentProfileRepository,
+            DepartmentProfileProductRepository departmentProfileProductRepository,
             WorkerMapper workerMapper,
             DepartmentMapper departmentMapper,
             ProductMapper productMapper,
@@ -82,6 +102,11 @@ public class VisitDepartmentService {
         this.departmentRepository = departmentRepository;
         this.productRepository = productRepository;
         this.workerRepository = workerRepository;
+        this.visitBillingItemRepository = visitBillingItemRepository;
+        this.visitDepartmentBillingRepository = visitDepartmentBillingRepository;
+        this.visitInsuranceRepository = visitInsuranceRepository;
+        this.departmentProfileRepository = departmentProfileRepository;
+        this.departmentProfileProductRepository = departmentProfileProductRepository;
         this.workerMapper = workerMapper;
         this.departmentMapper = departmentMapper;
         this.productMapper = productMapper;
@@ -93,7 +118,7 @@ public class VisitDepartmentService {
     // ─────────────────────────────────────────────────────────────
 
     @Transactional
-    public ApiResponse<VisitDto> addVisitDepartment(UUID visitId, UUID departmentId, com.nexxserve.nexxclinic.model.EncounterType encounterType, UUID processorId, AuthenticatedUser authUser) {
+    public ApiResponse<VisitDto> addVisitDepartment(UUID visitId, UUID departmentId, UUID profileId, com.nexxserve.nexxclinic.model.EncounterType encounterType, UUID processorId, AuthenticatedUser authUser) {
         if (visitId == null || departmentId == null) {
             return ApiResponse.error("visitId and departmentId are required.");
         }
@@ -121,9 +146,17 @@ public class VisitDepartmentService {
             return ApiResponse.error("Department is already added to this visit.");
         }
 
+        // Resolve the profile to apply: an explicit profileId wins; otherwise the
+        // department's default profile is used (if one exists).
+        DepartmentProfile profile = resolveProfileForDepartment(departmentId, profileId);
+        if (profileId != null && profile == null) {
+            return ApiResponse.error("Profile not found or does not belong to this department.");
+        }
+
         VisitDepartment visitDepartment = new VisitDepartment();
         visitDepartment.setVisit(visit);
         visitDepartment.setDepartment(departmentOptional.get());
+        visitDepartment.setProfile(profile);
         if (encounterType != null) {
             visitDepartment.setEncounterType(encounterType);
         }
@@ -137,18 +170,201 @@ public class VisitDepartmentService {
             addProcessorToVisitDepartment(visitDepartment, processorOptional.get());
         }
 
-        visitDepartmentRepository.save(visitDepartment);
+        VisitDepartment saved = visitDepartmentRepository.save(visitDepartment);
+
+        // Auto-add the profile's products (source=PROFILE) when a profile is applied.
+        if (profile != null) {
+            Worker actingUser = resolveWorker(authUser);
+            ApiResponse applyError = applyProfileProducts(saved, profile, actingUser);
+            if (applyError != null) {
+                org.springframework.transaction.interceptor.TransactionAspectSupport
+                    .currentTransactionStatus()
+                    .setRollbackOnly();
+                return applyError;
+            }
+        }
 
         // Return refreshed visit DTO via visitRepository – caller can map if needed
         Visit refreshed = visitRepository.findById(visitId).orElse(visit);
         return ApiResponse.success("Department added to visit.", null); // DTO built by caller
     }
 
+    /**
+     * Changes the profile used by a visit department, swapping its PROFILE-sourced
+     * products for the new profile's products. USER-sourced products (added manually)
+     * are untouched. Profile products cannot be removed individually — this is the
+     * only way to replace them.
+     */
+    @Transactional
+    public ApiResponse<VisitDepartmentDto> changeVisitDepartmentProfile(UUID visitDepartmentId, UUID profileId, AuthenticatedUser authUser) {
+        if (visitDepartmentId == null) {
+            return ApiResponse.error("visitDepartmentId is required.");
+        }
+
+        Optional<VisitDepartment> departmentOptional = visitDepartmentRepository.findById(visitDepartmentId);
+        if (departmentOptional.isEmpty()) {
+            return ApiResponse.error("Visit department not found.");
+        }
+
+        VisitDepartment visitDepartment = departmentOptional.get();
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.COMPLETED) {
+            return ApiResponse.error("Cannot change the profile on a completed department.");
+        }
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.CANCELLED) {
+            return ApiResponse.error("Cannot change the profile on a cancelled department.");
+        }
+        // D2-style guard: a department that has been billed is frozen for finance.
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.BILLING
+                && visitDepartmentBillingRepository.existsByVisitDepartmentId(visitDepartment.getId())) {
+            return ApiResponse.error("Cannot change the profile of a billed department. Use editBillVisit to correct the billing.");
+        }
+
+        UUID departmentId = visitDepartment.getDepartment() == null ? null : visitDepartment.getDepartment().getId();
+        if (departmentId == null) {
+            return ApiResponse.error("Visit department has no linked department.");
+        }
+
+        DepartmentProfile profile = resolveProfileForDepartment(departmentId, profileId);
+        if (profileId != null && profile == null) {
+            return ApiResponse.error("Profile not found or does not belong to this department.");
+        }
+
+        // Remove existing PROFILE-sourced products (they are managed by the profile).
+        List<VisitDepartmentProduct> profileProducts = visitDepartmentProductRepository
+            .findByVisitDepartmentId(visitDepartment.getId())
+            .stream()
+            .filter(p -> p.getSource() == VisitDepartmentProductSource.PROFILE)
+            .toList();
+        if (!profileProducts.isEmpty()) {
+            // Never hard-delete a profile product that has billing history.
+            for (VisitDepartmentProduct p : profileProducts) {
+                if (!visitBillingItemRepository.findByVisitDepartmentProductId(p.getId()).isEmpty()) {
+                    return ApiResponse.error(
+                        "Cannot change the profile: profile products have billing history. Use editBillVisit to correct the billing instead."
+                    );
+                }
+            }
+            visitDepartmentProductRepository.deleteAll(profileProducts);
+        }
+
+        visitDepartment.setProfile(profile);
+        VisitDepartment saved = visitDepartmentRepository.save(visitDepartment);
+
+        if (profile != null) {
+            Worker actingUser = resolveWorker(authUser);
+            ApiResponse applyError = applyProfileProducts(saved, profile, actingUser);
+            if (applyError != null) {
+                org.springframework.transaction.interceptor.TransactionAspectSupport
+                    .currentTransactionStatus()
+                    .setRollbackOnly();
+                return applyError;
+            }
+        }
+
+        // A child department whose PROFILE products were just removed may now be
+        // empty — children can never exist with zero products (same rule as the
+        // product-removal paths). Map to the parent so the response stays valid.
+        VisitDepartment mapped = deleteChildVisitDepartmentIfEmpty(saved);
+        return ApiResponse.success(
+            "Visit department profile changed.",
+            visitDepartmentToDto(mapped == null ? saved : mapped)
+        );
+    }
+
+    private DepartmentProfile resolveProfileForDepartment(UUID departmentId, UUID profileId) {
+        if (profileId != null) {
+            return departmentProfileRepository.findById(profileId)
+                .filter(p -> p.getDepartment() != null && departmentId.equals(p.getDepartment().getId()))
+                .orElse(null);
+        }
+        return departmentProfileRepository.findFirstByDepartmentIdAndIsDefaultTrue(departmentId).orElse(null);
+    }
+
+    /**
+     * Resolves the profile (explicit {@code profileId} or the department's default),
+     * attaches it to the visit department and auto-adds its products as source=PROFILE.
+     * Used by createVisit so departments added during visit creation get their profile
+     * products too. Returns an error ApiResponse only when an explicit profileId was
+     * supplied but is invalid; otherwise null on success.
+     */
+    public ApiResponse applyProfileToVisitDepartment(VisitDepartment visitDepartment, UUID profileId, Worker actingUser) {
+        if (visitDepartment == null || visitDepartment.getDepartment() == null) {
+            return ApiResponse.error("Visit department is required.");
+        }
+        UUID departmentId = visitDepartment.getDepartment().getId();
+        DepartmentProfile profile = resolveProfileForDepartment(departmentId, profileId);
+        if (profileId != null && profile == null) {
+            return ApiResponse.error("Profile not found or does not belong to this department.");
+        }
+        visitDepartment.setProfile(profile);
+        return applyProfileProducts(visitDepartment, profile, actingUser);
+    }
+
+    /**
+     * Adds the products of {@code profile} to the visit department as source=PROFILE.
+     * Products already present (by product id, non-deleted) are skipped.
+     */
+    private ApiResponse applyProfileProducts(VisitDepartment visitDepartment, DepartmentProfile profile, Worker actingUser) {
+        if (visitDepartment == null || profile == null) {
+            return null;
+        }
+        List<DepartmentProfileProduct> links = departmentProfileProductRepository.findByProfileId(profile.getId());
+        if (links == null || links.isEmpty()) {
+            return null; // a profile may have zero products
+        }
+
+        for (DepartmentProfileProduct link : links) {
+            if (link == null || link.getProduct() == null) {
+                continue;
+            }
+            Optional<VisitDepartmentProduct> existing = visitDepartmentProductRepository
+                .findByVisitDepartmentIdAndProductId(visitDepartment.getId(), link.getProduct().getId());
+            if (existing.isPresent()) {
+                continue;
+            }
+
+            VisitDepartmentProduct item = new VisitDepartmentProduct();
+            item.setVisitDepartment(visitDepartment);
+            item.setProduct(link.getProduct());
+            item.setQuantity(BigDecimal.ONE);
+            item.setPrice(resolveUnitPriceSnapshot(link.getProduct(), null));
+            item.setStatus(VisitProductStatus.PENDING);
+            item.setSource(VisitDepartmentProductSource.PROFILE);
+            item.setAddedBy(actingUser);
+
+            ApiResponse processorError = assignVisitDepartmentProductProcessor(visitDepartment, item, actingUser, null);
+            if (processorError != null) {
+                return processorError;
+            }
+            try {
+                // saveAndFlush: the partial unique index is only checked at flush time;
+                // a plain save() would defer the violation past this catch.
+                visitDepartmentProductRepository.saveAndFlush(item);
+            } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+                // Partial unique index (visit_department_id, product_id): concurrent
+                // profile application or explicit add raced this insert.
+                org.springframework.transaction.interceptor.TransactionAspectSupport
+                    .currentTransactionStatus()
+                    .setRollbackOnly();
+                return ApiResponse.error(
+                    "Product already exists in this visit department."
+                );
+            }
+        }
+        return null;
+    }
+
     @Transactional
     public ApiResponse<VisitDepartmentDto> addChildVisitDepartment(AddChildVisitDepartmentInput input, AuthenticatedUser authUser) {
-        if (input == null || input.parentVisitDepartmentId() == null || input.departmentId() == null ||
-                input.products() == null || input.products().isEmpty()) {
-            return ApiResponse.error("parentVisitDepartmentId, departmentId and products are required.");
+        if (input == null || input.parentVisitDepartmentId() == null || input.departmentId() == null) {
+            return ApiResponse.error("parentVisitDepartmentId and departmentId are required.");
+        }
+        boolean hasExplicitProducts = input.products() != null && !input.products().isEmpty();
+        if (!hasExplicitProducts && input.profileId() == null) {
+            // Products can come from the request OR from a department profile. With
+            // neither, the child would be created with zero products, which is
+            // forbidden — children can never exist with zero products.
+            return ApiResponse.error("At least one product or a profile is required for a child department.");
         }
 
         Optional<VisitDepartment> parentOptional = visitDepartmentRepository.findById(input.parentVisitDepartmentId());
@@ -162,6 +378,11 @@ public class VisitDepartmentService {
         }
         if (parent.getStatus() == VisitDepartmentStatus.CANCELLED) {
             return ApiResponse.error("Cannot add child departments to a cancelled department.");
+        }
+        // S5: a department in BILLING status is frozen for finance; new products must
+        // go through editBillVisit so a new billing version captures them.
+        if (parent.getStatus() == VisitDepartmentStatus.BILLING) {
+            return ApiResponse.error("Cannot add child departments to a department in BILLING status. Use editBillVisit to correct the billing.");
         }
 
         if (parent.getDepartment() != null && parent.getDepartment().getId() != null && parent.getDepartment().getId().equals(input.departmentId())) {
@@ -233,26 +454,72 @@ public class VisitDepartmentService {
 
         VisitDepartment savedChild = visitDepartmentRepository.save(child);
 
-        for (var productInput : input.products()) {
-            Optional<Product> productOptional = productRepository.findById(productInput.productId());
-            if (productOptional.isEmpty()) {
-                return ApiResponse.error("Product not found.");
+        // Apply the department profile first (explicit profileId or the department's
+        // default profile) so its products are added as source=PROFILE.
+        ApiResponse profileError = applyProfileToVisitDepartment(savedChild, input.profileId(), actingUser);
+        if (profileError != null) {
+            org.springframework.transaction.interceptor.TransactionAspectSupport
+                .currentTransactionStatus()
+                .setRollbackOnly();
+            return profileError;
+        }
+
+        if (hasExplicitProducts) {
+            for (var productInput : input.products()) {
+                Optional<Product> productOptional = productRepository.findById(productInput.productId());
+                if (productOptional.isEmpty()) {
+                    return ApiResponse.error("Product not found.");
+                }
+
+                // Skip products already added by the profile (same dedupe rule as
+                // addVisitDepartmentProduct / addProductsToVisitDepartment).
+                if (visitDepartmentProductRepository.findByVisitDepartmentIdAndProductId(
+                        savedChild.getId(), productInput.productId()).isPresent()) {
+                    continue;
+                }
+
+                VisitDepartmentProduct item = new VisitDepartmentProduct();
+                item.setVisitDepartment(savedChild);
+                item.setProduct(productOptional.get());
+                item.setQuantity(normalizeQuantity(BigDecimal.valueOf(productInput.quantity())));
+                item.setPrice(resolveUnitPriceSnapshot(productOptional.get(), null));
+                item.setStatus(VisitProductStatus.PENDING);
+
+                ApiResponse processorError = assignVisitDepartmentProductProcessor(savedChild, item, actingUser, input.processorId());
+                if (processorError != null) {
+                    // C2 fix: the child department was already saved above. Returning an error
+                    // ApiResponse would COMMIT it (Spring only rolls back on exceptions),
+                    // leaving an empty child department behind. Mark rollback-only.
+                    org.springframework.transaction.interceptor.TransactionAspectSupport
+                        .currentTransactionStatus()
+                        .setRollbackOnly();
+                    return processorError;
+                }
+
+                item.setAddedBy(actingUser);
+                try {
+                    // saveAndFlush: unique index only checked at flush time.
+                    visitDepartmentProductRepository.saveAndFlush(item);
+                } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+                    // Partial unique index: concurrent add of the same product raced us.
+                    org.springframework.transaction.interceptor.TransactionAspectSupport
+                        .currentTransactionStatus()
+                        .setRollbackOnly();
+                    return ApiResponse.error(
+                        "Product already exists in this child visit department."
+                    );
+                }
             }
+        }
 
-            VisitDepartmentProduct item = new VisitDepartmentProduct();
-            item.setVisitDepartment(savedChild);
-            item.setProduct(productOptional.get());
-            item.setQuantity(normalizeQuantity(BigDecimal.valueOf(productInput.quantity())));
-            item.setPrice(resolveUnitPriceSnapshot(productOptional.get(), null));
-            item.setStatus(VisitProductStatus.PENDING);
-
-            ApiResponse processorError = assignVisitDepartmentProductProcessor(savedChild, item, actingUser, input.processorId());
-            if (processorError != null) {
-                return processorError;
-            }
-
-            item.setAddedBy(actingUser);
-            visitDepartmentProductRepository.save(item);
+        // A profile may legitimately contain zero products — but a child department can
+        // never exist with zero products. Roll back if both sources produced nothing.
+        List<VisitDepartmentProduct> childProducts = visitDepartmentProductRepository.findByVisitDepartmentId(savedChild.getId());
+        if (childProducts.isEmpty()) {
+            org.springframework.transaction.interceptor.TransactionAspectSupport
+                .currentTransactionStatus()
+                .setRollbackOnly();
+            return ApiResponse.error("Child department cannot be created with zero products.");
         }
 
         return ApiResponse.success("Child visit department added.", visitDepartmentToDto(parent));
@@ -272,6 +539,32 @@ public class VisitDepartmentService {
         VisitDepartment child = departmentOptional.get();
         if (child.getParentVisitDepartment() == null) {
             return ApiResponse.error("Only child visit departments can be removed with this mutation.");
+        }
+
+        // N1 fix: never hard-delete a child department that still has products (active
+        // or soft-deleted) or billing history. Deleting it would leave a dangling
+        // FK on visit_department_products (nullable=false) and orphan the billing rows.
+        List<VisitDepartmentProduct> childProducts = visitDepartmentProductRepository
+            .findByVisitDepartmentIdIncludingDeleted(child.getId());
+        if (!childProducts.isEmpty()) {
+            return ApiResponse.error(
+                "Cannot remove a child department that still has products. " +
+                "Remove or re-bill them first (use editBillVisit for billed products)."
+            );
+        }
+
+        // FK guard: a child with clinical/financial dependents (notes, diagnoses,
+        // medications, pre-instructions, billing) cannot be hard-deleted — deleting it
+        // would throw DataIntegrityViolationException -> 500.
+        if (!visitDepartmentDiagnosisRepository.findByVisitDepartmentId(child.getId()).isEmpty()
+                || !visitDepartmentMedicationRepository.findByVisitDepartmentId(child.getId()).isEmpty()
+                || !visitPreInstructionRepository.findByVisitDepartmentIdOrderByCreatedAtAsc(child.getId()).isEmpty()
+                || visitDepartmentNoteServiceHasNotes(child.getId())
+                || visitDepartmentBillingRepository.existsByVisitDepartmentId(child.getId())) {
+            return ApiResponse.error(
+                "Cannot remove a child department that has notes, diagnoses, medications, pre-instructions or billing history. " +
+                "Use editBillVisit to correct the billing instead."
+            );
         }
 
         VisitDepartment parent = child.getParentVisitDepartment();
@@ -317,6 +610,12 @@ public class VisitDepartmentService {
             return ApiResponse.error("Cannot add products to a cancelled department.");
         }
 
+        // S5: a department in BILLING status is frozen for finance; new products must
+        // go through editBillVisit so a new billing version captures them.
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.BILLING) {
+            return ApiResponse.error("Cannot add products to a department in BILLING status. Use editBillVisit to correct the billing.");
+        }
+
         Optional<Product> productOptional = productRepository.findById(input.productId());
         if (productOptional.isEmpty()) {
             return ApiResponse.error("Product not found.");
@@ -329,12 +628,23 @@ public class VisitDepartmentService {
             return ApiResponse.error("Product already exists for this visit department.");
         }
 
+        // S4: BILLED/EXEMPTED/CORRECTION_PENDING are managed exclusively by the billing
+        // service; clients may only create products as PENDING (default) or UNPAID.
+        VisitProductStatus requestedStatus = input.status() == null
+                ? VisitProductStatus.PENDING
+                : input.status();
+        if (requestedStatus == VisitProductStatus.BILLED
+                || requestedStatus == VisitProductStatus.EXEMPTED
+                || requestedStatus == VisitProductStatus.CORRECTION_PENDING) {
+            return ApiResponse.error("Status " + requestedStatus + " cannot be set manually. Only PENDING or UNPAID can be set when adding a product.");
+        }
+
         VisitDepartmentProduct item = new VisitDepartmentProduct();
         item.setVisitDepartment(visitDepartment);
         item.setProduct(productOptional.get());
         item.setQuantity(normalizeQuantity(input.quantity()));
         item.setPrice(resolveUnitPriceSnapshot(productOptional.get(), input.price()));
-        item.setStatus(input.status() == null ? VisitProductStatus.PENDING : input.status());
+        item.setStatus(requestedStatus);
 
         Worker actingUser = resolveWorker(authUser);
         ApiResponse processorError = assignVisitDepartmentProductProcessor(visitDepartment, item, actingUser, input.processorId());
@@ -346,8 +656,21 @@ public class VisitDepartmentService {
             item.setBilledBy(actingUser);
         }
 
-        visitDepartmentProductRepository.save(item);
-        reopenVisitIfCompleted(visit);
+        // N6 fix: this method already rejects COMPLETED visits at the top, so the
+        // previous reopenVisitIfCompleted(visit) call here was unreachable dead code.
+        try {
+            // saveAndFlush: unique index only checked at flush time.
+            visitDepartmentProductRepository.saveAndFlush(item);
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            // Partial unique index (visit_department_id, product_id): the check above
+            // raced with a concurrent add of the same product.
+            org.springframework.transaction.interceptor.TransactionAspectSupport
+                .currentTransactionStatus()
+                .setRollbackOnly();
+            return ApiResponse.error(
+                "Product already exists for this visit department."
+            );
+        }
         return ApiResponse.success("Product added to visit department.", visitDepartmentToDto(visitDepartment));
     }
 
@@ -363,13 +686,28 @@ public class VisitDepartmentService {
         }
 
         VisitDepartmentProduct item = itemOptional.get();
-        VisitProductStatus previous = item.getStatus();
-        item.setStatus(input.status());
-
-        Worker actingUser = resolveWorker(authUser);
-        if (previous == VisitProductStatus.PENDING && input.status() != VisitProductStatus.PENDING) {
-            item.setBilledBy(actingUser);
+        // D2 fix: products in a department that has been BILLED are frozen for finance.
+        // Direct edits here would desync the clinical view from the bill. Use editBillVisit.
+        // (A BILLING-status department that was never actually billed is still editable —
+        //  it can be reopened via updateVisitDepartmentStatus, matching the D1 rule.)
+        if (item.getVisitDepartment().getStatus() == VisitDepartmentStatus.BILLING
+                && visitDepartmentBillingRepository.existsByVisitDepartmentId(item.getVisitDepartment().getId())) {
+            return ApiResponse.error("Cannot change the status of a product in a billed department. Use editBillVisit to correct the billing.");
         }
+        // S4: BILLED/EXEMPTED/CORRECTION_PENDING are managed exclusively by the billing
+        // service. Externally, product status is effectively read-only for those values
+        // (only PENDING and UNPAID are externally settable).
+        VisitProductStatus requestedStatus = input.status();
+        if (requestedStatus == VisitProductStatus.BILLED
+                || requestedStatus == VisitProductStatus.EXEMPTED
+                || requestedStatus == VisitProductStatus.CORRECTION_PENDING) {
+            return ApiResponse.error("Status " + requestedStatus + " can only be set by the billing service. Allowed external statuses: PENDING, UNPAID.");
+        }
+
+        // F5 fix: billedBy is only meaningful for BILLED/EXEMPTED, which are set
+        // exclusively by the billing service. Flipping PENDING -> UNPAID here previously
+        // stamped a bogus billedBy on an unbilled product.
+        item.setStatus(requestedStatus);
 
         VisitDepartmentProduct saved = visitDepartmentProductRepository.save(item);
         deleteChildVisitDepartmentIfEmpty(saved.getVisitDepartment());
@@ -390,7 +728,30 @@ public class VisitDepartmentService {
         VisitDepartmentProduct item = itemOptional.get();
         Visit visit = item.getVisitDepartment().getVisit();
 
+        // D2 fix: products in a department that has been BILLED are frozen for finance.
+        if (item.getVisitDepartment().getStatus() == VisitDepartmentStatus.BILLING
+                && visitDepartmentBillingRepository.existsByVisitDepartmentId(item.getVisitDepartment().getId())) {
+            return ApiResponse.error("Cannot change the quantity of a product in a billed department. Use editBillVisit to correct the billing.");
+        }
+
+        // E4: a BILLED/EXEMPTED product's live quantity must not diverge from its
+        // billing snapshot. Quantity corrections go through editBillVisit.
+        if (item.getStatus() == VisitProductStatus.BILLED
+                || item.getStatus() == VisitProductStatus.EXEMPTED) {
+            return ApiResponse.error("Cannot change the quantity of a billed or exempted product. Use editBillVisit to correct the billing.");
+        }
+
         if (input.quantity().compareTo(BigDecimal.ZERO) <= 0) {
+            // Profile products are managed by the profile — they cannot be removed
+            // individually (quantity-to-zero is a removal). Change the profile instead.
+            if (item.getSource() == VisitDepartmentProductSource.PROFILE) {
+                return ApiResponse.error("Profile products cannot be removed individually. Change the visit department's profile instead.");
+            }
+            // B5: never hard-delete a product that has billing history.
+            List<VisitBillingItem> billingItems = visitBillingItemRepository.findByVisitDepartmentProductId(item.getId());
+            if (!billingItems.isEmpty()) {
+                return ApiResponse.error("Cannot remove a product that has billing history. Use editBillVisit to correct the billing instead.");
+            }
             VisitDepartment affectedDepartment = item.getVisitDepartment();
             visitDepartmentProductRepository.delete(item);
             reopenVisitIfCompleted(visit);
@@ -420,6 +781,26 @@ public class VisitDepartmentService {
         Visit visit = item.getVisitDepartment().getVisit();
         VisitDepartment affectedDepartment = item.getVisitDepartment();
 
+        // Profile products are managed by the profile — they cannot be removed
+        // individually. Only changeVisitDepartmentProfile can replace them.
+        if (item.getSource() == VisitDepartmentProductSource.PROFILE) {
+            return ApiResponse.error("Profile products cannot be removed individually. Change the visit department's profile instead.");
+        }
+
+        // D2 fix: products in a department that has been BILLED are frozen for finance.
+        if (affectedDepartment.getStatus() == VisitDepartmentStatus.BILLING
+                && visitDepartmentBillingRepository.existsByVisitDepartmentId(affectedDepartment.getId())) {
+            return ApiResponse.error("Cannot remove a product from a billed department. Use editBillVisit to correct the billing.");
+        }
+
+        // B5: never hard-delete a product that has billing history. If a billing item
+        // references this row, a hard delete would leave a dangling FK in
+        // visit_billing_items and corrupt invoice generation. Use editBillVisit.
+        List<VisitBillingItem> billingItems = visitBillingItemRepository.findByVisitDepartmentProductId(item.getId());
+        if (!billingItems.isEmpty()) {
+            return ApiResponse.error("Cannot remove a product that has billing history. Use editBillVisit to correct the billing instead.");
+        }
+
         visitDepartmentProductRepository.delete(item);
         reopenVisitIfCompleted(visit);
 
@@ -443,12 +824,42 @@ public class VisitDepartmentService {
         }
 
         VisitDepartment department = departmentOptional.get();
-        department.setStatus(input.status());
-        if (input.status() == VisitDepartmentStatus.COMPLETED) {
+        // D1 fix: enforce a transition guard. Terminal states (COMPLETED/CANCELLED) and
+        // the finance-frozen state (BILLING) must not be changed through this generic
+        // mutation — otherwise a client could re-open a BILLING department (re-enabling
+        // product/clinical edits after finance started, undoing the S5 guards) or fake a
+        // COMPLETED department while products are still unbilled.
+        VisitDepartmentStatus currentStatus = department.getStatus();
+        VisitDepartmentStatus requestedStatus = input.status();
+        if (requestedStatus == null) {
+            return ApiResponse.error("status is required.");
+        }
+        if (currentStatus == VisitDepartmentStatus.COMPLETED
+                || currentStatus == VisitDepartmentStatus.CANCELLED) {
+            return ApiResponse.error("A " + currentStatus + " department is terminal and cannot be changed.");
+        }
+        if (currentStatus == VisitDepartmentStatus.BILLING
+                && requestedStatus != VisitDepartmentStatus.COMPLETED
+                && visitDepartmentBillingRepository.existsByVisitDepartmentId(department.getId())) {
+            return ApiResponse.error("A department that has been billed is frozen. Use editBillVisit to correct the billing.");
+        }
+        if (requestedStatus == VisitDepartmentStatus.COMPLETED) {
+            List<VisitDepartmentProduct> products = visitDepartmentProductRepository
+                .findByVisitDepartmentId(department.getId());
+            boolean hasUnbilled = products.stream().anyMatch(p ->
+                p.getStatus() == VisitProductStatus.PENDING
+                    || p.getStatus() == VisitProductStatus.UNPAID
+                    || p.getStatus() == VisitProductStatus.CORRECTION_PENDING);
+            if (hasUnbilled) {
+                return ApiResponse.error("Cannot complete a department with unbilled products. All products must be billed first.");
+            }
+        }
+        department.setStatus(requestedStatus);
+        if (requestedStatus == VisitDepartmentStatus.COMPLETED) {
             department.setCompletedAt(java.time.LocalDateTime.now());
         }
 
-        if (input.status() == VisitDepartmentStatus.ACTIVE) {
+        if (requestedStatus == VisitDepartmentStatus.ACTIVE) {
             Worker actingUser = resolveWorker(authUser);
             if (actingUser != null) {
                 addProcessorToVisitDepartment(department, actingUser);
@@ -573,6 +984,10 @@ public class VisitDepartmentService {
         if (visitDept.getStatus() == VisitDepartmentStatus.CANCELLED) {
             return ApiResponse.error("Cannot add diagnostics to a cancelled department.");
         }
+        // C1: once a department is handed to finance (BILLING), clinical data is frozen.
+        if (visitDept.getStatus() == VisitDepartmentStatus.BILLING) {
+            return ApiResponse.error("Cannot add diagnostics to a department in BILLING status.");
+        }
 
         VisitDepartmentDiagnosis diagnosis = new VisitDepartmentDiagnosis();
         diagnosis.setVisitDepartment(visitDept);
@@ -608,6 +1023,10 @@ public class VisitDepartmentService {
         if (visitDept.getStatus() == VisitDepartmentStatus.CANCELLED) {
             return ApiResponse.error("Cannot add medication to a cancelled department.");
         }
+        // C1: once a department is handed to finance (BILLING), clinical data is frozen.
+        if (visitDept.getStatus() == VisitDepartmentStatus.BILLING) {
+            return ApiResponse.error("Cannot add medication to a department in BILLING status.");
+        }
 
         VisitDepartmentMedication medication = new VisitDepartmentMedication();
         medication.setVisitDepartment(visitDept);
@@ -640,6 +1059,10 @@ public class VisitDepartmentService {
         }
         if (visitDepartment.getStatus() == VisitDepartmentStatus.CANCELLED) {
             return ApiResponse.error("Cannot add pre-instructions to a cancelled department.");
+        }
+        // C1: once a department is handed to finance (BILLING), clinical data is frozen.
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.BILLING) {
+            return ApiResponse.error("Cannot add pre-instructions to a department in BILLING status.");
         }
 
         Worker actingUser = resolveWorker(authUser);
@@ -750,6 +1173,7 @@ public class VisitDepartmentService {
                     departmentMapper.toDto(visitDepartment.getDepartment()),
                     visitDepartment.getStatus(),
                     visitDepartment.getEncounterType(),
+                    departmentProfileToDto(visitDepartment.getProfile()),
                     visitDepartment.getCompletedAt(),
                     visitDepartment.getProcessors() == null || visitDepartment.getProcessors().isEmpty() ? null : visitDepartment.getProcessors().stream().map(workerMapper::toDto).toList(),
                     List.of(),
@@ -800,6 +1224,7 @@ public class VisitDepartmentService {
                 departmentMapper.toDto(visitDepartment.getDepartment()),
                 visitDepartment.getStatus(),
                 visitDepartment.getEncounterType(),
+                departmentProfileToDto(visitDepartment.getProfile()),
                 visitDepartment.getCompletedAt(),
                 processors,
                 products,
@@ -814,6 +1239,23 @@ public class VisitDepartmentService {
         );
     }
 
+    private DepartmentProfileDto departmentProfileToDto(DepartmentProfile profile) {
+        if (profile == null) {
+            return null;
+        }
+        return new DepartmentProfileDto(
+                profile.getId(),
+                profile.getName(),
+                profile.isDefault(),
+                departmentProfileProductRepository.findByProfileId(profile.getId())
+                        .stream()
+                        .map(link -> productMapper.toDto(link.getProduct()))
+                        .toList(),
+                profile.getCreatedAt(),
+                profile.getUpdatedAt()
+        );
+    }
+
     private VisitDepartmentProductDto visitDepartmentProductToDto(
             VisitDepartmentProduct item,
             Set<UUID> visitInsuranceProviderIds
@@ -824,6 +1266,7 @@ public class VisitDepartmentService {
                 item.getQuantity(),
                 item.getPrice(),
                 item.getStatus(),
+                item.getSource(),
                 workerMapper.toDto(item.getAddedBy()),
                 workerMapper.toDto(item.getBilledBy()),
                 workerMapper.toDto(item.getProcessor()),
@@ -1008,9 +1451,28 @@ public class VisitDepartmentService {
             return visitDepartment;
         }
 
+        // FK guard: a child with clinical/financial dependents cannot be hard-deleted —
+        // deleting it would throw DataIntegrityViolationException -> 500. Keep it and
+        // let the caller decide (it will surface in the DTO as a still-present child).
+        if (!visitDepartmentDiagnosisRepository.findByVisitDepartmentId(visitDepartment.getId()).isEmpty()
+                || !visitDepartmentMedicationRepository.findByVisitDepartmentId(visitDepartment.getId()).isEmpty()
+                || !visitPreInstructionRepository.findByVisitDepartmentIdOrderByCreatedAtAsc(visitDepartment.getId()).isEmpty()
+                || !visitDepartmentNoteServiceHasNotes(visitDepartment.getId())
+                || visitDepartmentBillingRepository.existsByVisitDepartmentId(visitDepartment.getId())) {
+            return visitDepartment;
+        }
+
         VisitDepartment parent = visitDepartment.getParentVisitDepartment();
         visitDepartmentRepository.delete(visitDepartment);
         return parent;
+    }
+
+    private boolean visitDepartmentNoteServiceHasNotes(UUID visitDepartmentId) {
+        try {
+            return visitDepartmentNoteService.hasNotes(visitDepartmentId);
+        } catch (Exception e) {
+            return true; // if we cannot verify, do not hard-delete
+        }
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -1032,13 +1494,17 @@ public class VisitDepartmentService {
     }
 
     private Set<UUID> resolveVisitInsuranceProviderIds(UUID visitId) {
-        // Delegate to shared utility via repository — pulled inline to avoid dep on VisitService
-        return visitDepartmentRepository.findByVisitId(visitId).stream()
-                .findFirst()
-                .map(vd -> vd.getVisit().getId())
-                .map(id -> Set.<UUID>of())
-                .orElse(Set.of());
-        // NOTE: Caller should supply visitInsuranceProviderIds where precision is needed.
+        // S8 fix: previously always returned an empty set. Resolve the insurance
+        // provider ids linked to this visit so product DTOs can show the coverage
+        // indicator without the caller having to pass them explicitly.
+        if (visitId == null) {
+            return Set.of();
+        }
+        return visitInsuranceRepository.findByVisitId(visitId).stream()
+                .map(VisitInsurance::getPatientInsurance)
+                .filter(pi -> pi != null && pi.getInsuranceProvider() != null && pi.getInsuranceProvider().getId() != null)
+                .map(pi -> pi.getInsuranceProvider().getId())
+                .collect(Collectors.toSet());
     }
 
     public BigDecimal normalizeQuantity(BigDecimal value) {

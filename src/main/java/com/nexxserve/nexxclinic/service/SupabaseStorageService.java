@@ -7,6 +7,8 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,14 +24,46 @@ public class SupabaseStorageService {
     private static final String BUCKET = "data";
     private static final String BASE_PATH = "invoices";
 
+    /** HTTP 429 Too Many Requests — transient, retryable. */
+    private static final int HTTP_TOO_MANY_REQUESTS = 429;
+
+    /** HTTP 408 Request Timeout — transient, retryable. */
+    private static final int HTTP_REQUEST_TIMEOUT = 408;
+
+    /**
+     * Cap on a single backoff sleep (30s). Prevents `1L << attempt` overflow for a
+     * misconfigured large retry-max-attempts and bounds worst-case wait time.
+     */
+    private static final long MAX_BACKOFF_MS = 30_000L;
+
     private final SupabaseProperties props;
     private final HttpClient http;
     private final ObjectMapper mapper;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public SupabaseStorageService(SupabaseProperties props) {
         this.props = props;
-        this.http = HttpClient.newHttpClient();
+        this.http = buildHttpClient();
         this.mapper = new ObjectMapper();
+    }
+
+    /**
+     * Package-private constructor for tests: inject a controllable {@link HttpClient}
+     * so timeout/retry behaviour can be verified without a real Supabase instance.
+     */
+    SupabaseStorageService(SupabaseProperties props, HttpClient http) {
+        this.props = props;
+        this.http = http;
+        this.mapper = new ObjectMapper();
+    }
+
+    private HttpClient buildHttpClient() {
+        // Connect timeout: fail fast when Supabase is unreachable instead of waiting
+        // on the OS default (which can be minutes). Request timeouts are applied
+        // per-request below, so a slow/hung response never blocks the caller.
+        return HttpClient.newBuilder()
+            .connectTimeout(Duration.ofMillis(props.getConnectTimeoutMs()))
+            .build();
     }
 
     // ─── PATH HELPER ─────────────────────────────────────────────────────────
@@ -54,10 +88,11 @@ public class SupabaseStorageService {
             .header("Authorization", "Bearer " + props.getServiceKey())
             .header("Content-Type", "application/pdf")
             .header("x-upsert", "true")
+            .timeout(Duration.ofMillis(props.getRequestTimeoutMs()))
             .POST(HttpRequest.BodyPublishers.ofByteArray(pdfBytes))
             .build();
 
-        HttpResponse<String> res = send(req);
+        HttpResponse<String> res = sendWithRetry(req);
         if (res.statusCode() < 200 || res.statusCode() >= 300) {
             log.error(
                 "Supabase upload failed  path={} status={} body={}",
@@ -104,10 +139,11 @@ public class SupabaseStorageService {
             .header("Authorization", "Bearer " + props.getServiceKey())
             .header("Content-Type", contentType)
             .header("x-upsert", "true")
+            .timeout(Duration.ofMillis(props.getRequestTimeoutMs()))
             .POST(HttpRequest.BodyPublishers.ofByteArray(data))
             .build();
 
-        HttpResponse<String> res = send(req);
+        HttpResponse<String> res = sendWithRetry(req);
         if (res.statusCode() < 200 || res.statusCode() >= 300) {
             log.error(
                 "Supabase upload failed  bucket={} path={} status={} body={}",
@@ -126,20 +162,34 @@ public class SupabaseStorageService {
     }
 
     public void createBucket(String bucketName, boolean isPublic) throws IOException {
+        // Fail fast on a null/blank bucket name (e.g. an unset property) instead of
+        // sending a malformed request that can hang or 400 confusingly. This is a
+        // configuration error, not a transient storage failure — so it is NOT retried.
+        if (bucketName == null || bucketName.isBlank()) {
+            log.error(
+                "createBucket rejected: bucketName is null or blank (is supabase.bucket-public/private configured?)"
+            );
+            throw new IllegalArgumentException(
+                "bucketName is required to create a Supabase bucket"
+            );
+        }
         String endpoint = base() + "/storage/v1/bucket";
-        String body = mapper.writeValueAsString(Map.of(
-            "name", bucketName,
-            "public", isPublic
-        ));
+        // S8 fix: Map.of throws NullPointerException on a null bucketName (e.g. an
+        // unset property). Build the JSON body null-safely.
+        Map<String, Object> bodyPayload = new LinkedHashMap<>();
+        bodyPayload.put("name", bucketName);
+        bodyPayload.put("public", isPublic);
+        String body = mapper.writeValueAsString(bodyPayload);
 
         HttpRequest req = HttpRequest.newBuilder()
             .uri(URI.create(endpoint))
             .header("Authorization", "Bearer " + props.getServiceKey())
             .header("Content-Type", "application/json")
+            .timeout(Duration.ofMillis(props.getRequestTimeoutMs()))
             .POST(HttpRequest.BodyPublishers.ofString(body))
             .build();
 
-        HttpResponse<String> res = send(req);
+        HttpResponse<String> res = sendWithRetry(req);
         if (res.statusCode() < 200 || res.statusCode() >= 300) {
             log.error(
                 "Supabase create-bucket failed  bucket={} status={} body={}",
@@ -161,10 +211,11 @@ public class SupabaseStorageService {
         HttpRequest req = HttpRequest.newBuilder()
             .uri(URI.create(endpoint))
             .header("Authorization", "Bearer " + props.getServiceKey())
+            .timeout(Duration.ofMillis(props.getRequestTimeoutMs()))
             .DELETE()
             .build();
 
-        HttpResponse<String> res = send(req);
+        HttpResponse<String> res = sendWithRetry(req);
         if (res.statusCode() < 200 || res.statusCode() >= 300) {
             log.error(
                 "Supabase delete failed  bucket={} path={} status={} body={}",
@@ -204,10 +255,11 @@ public class SupabaseStorageService {
             .uri(URI.create(endpoint))
             .header("Authorization", "Bearer " + props.getServiceKey())
             .header("Content-Type", "application/json")
+            .timeout(Duration.ofMillis(props.getRequestTimeoutMs()))
             .POST(HttpRequest.BodyPublishers.ofString(body))
             .build();
 
-        HttpResponse<String> res = send(req);
+        HttpResponse<String> res = sendWithRetry(req);
         if (res.statusCode() < 200 || res.statusCode() >= 300) {
             log.error(
                 "Supabase sign failed  path={} status={} body={}",
@@ -243,10 +295,11 @@ public class SupabaseStorageService {
             .uri(URI.create(endpoint))
             .header("Authorization", "Bearer " + props.getServiceKey())
             .header("Content-Type", "application/json")
+            .timeout(Duration.ofMillis(props.getRequestTimeoutMs()))
             .POST(HttpRequest.BodyPublishers.ofString(body))
             .build();
 
-        HttpResponse<String> res = send(req);
+        HttpResponse<String> res = sendWithRetry(req);
         if (res.statusCode() < 200 || res.statusCode() >= 300) {
             log.error(
                 "Supabase sign failed  bucket={} path={} status={} body={}",
@@ -282,12 +335,94 @@ public class SupabaseStorageService {
         return url;
     }
 
-    private HttpResponse<String> send(HttpRequest req) throws IOException {
+    /**
+     * Sends a request, retrying transient failures (HTTP 429 and 5xx) with an
+     * exponential backoff capped by {@code supabase.retry-max-attempts} and
+     * {@code supabase.retry-backoff-ms}. Retries make the invoice upload resilient
+     * to throttling / short-lived Supabase outages; the per-request timeout ensures
+     * each attempt fails fast instead of hanging.
+     */
+    private HttpResponse<String> sendWithRetry(HttpRequest req) throws IOException {
+        // retryMaxAttempts counts retries AFTER the initial attempt (0 = no retry),
+        // so the total number of HTTP sends is retryMaxAttempts + 1.
+        int retries = Math.max(0, props.getRetryMaxAttempts());
+        int attempt = 0;
+        while (true) {
+            HttpResponse<String> res = null;
+            IOException io = null;
+            try {
+                res = http.send(req, HttpResponse.BodyHandlers.ofString());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Supabase HTTP call interrupted", e);
+            } catch (IOException e) {
+                io = e;
+            }
+
+            if (io != null) {
+                if (attempt >= retries) {
+                    throw io;
+                }
+                long backoff = backoffFor(attempt);
+                log.warn(
+                    "Supabase request failed on attempt {}/{} for {}: {}; retrying in {}ms",
+                    attempt + 1,
+                    retries + 1,
+                    req.uri(),
+                    io.getMessage(),
+                    backoff
+                );
+                sleepQuietly(backoff);
+                attempt++;
+                continue;
+            }
+
+            int code = res.statusCode();
+            if (!isTransient(code) || attempt >= retries) {
+                return res;
+            }
+            long backoff = backoffFor(attempt);
+            log.warn(
+                "Supabase transient HTTP {} on attempt {}/{} for {}; retrying in {}ms",
+                code,
+                attempt + 1,
+                retries + 1,
+                req.uri(),
+                backoff
+            );
+            sleepQuietly(backoff);
+            attempt++;
+        }
+    }
+
+    private static boolean isTransient(int statusCode) {
+        return (
+            statusCode == HTTP_TOO_MANY_REQUESTS ||
+            statusCode == HTTP_REQUEST_TIMEOUT ||
+            statusCode >= 500
+        );
+    }
+
+    /** Exponential backoff with an overflow-safe cap (base * 2^attempt, max 30s). */
+    private long backoffFor(int attempt) {
+        long base = Math.max(0, props.getRetryBackoffMs());
+        if (attempt >= 63) {
+            return MAX_BACKOFF_MS;
+        }
+        return Math.min(base * (1L << attempt), MAX_BACKOFF_MS);
+    }
+
+    /**
+     * Sleeps between retries. An interrupt aborts the retry loop promptly instead of
+     * letting a cancelled thread hammer the service again.
+     */
+    private static void sleepQuietly(long millis) throws IOException {
+        if (millis <= 0) return;
         try {
-            return http.send(req, HttpResponse.BodyHandlers.ofString());
+            Thread.sleep(millis);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IOException("Supabase HTTP call interrupted", e);
+            throw new IOException("Supabase retry interrupted", e);
         }
     }
 }

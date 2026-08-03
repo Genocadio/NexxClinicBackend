@@ -1,5 +1,6 @@
 package com.nexxserve.nexxclinic.entity;
 
+import com.nexxserve.nexxclinic.model.VisitDepartmentProductSource;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -13,18 +14,17 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(
-        name = "visit_department_products",
-        uniqueConstraints = {
-                @UniqueConstraint(name = "uk_visit_department_product", columnNames = {"visit_department_id", "product_id"})
-        }
-)
+// N4 fix: the full (visit_department_id, product_id) unique constraint was removed.
+// Uniqueness is now enforced by the PARTIAL unique index created in
+// docs/migrations/visit_department_products_partial_unique_index.sql
+// (uk_visit_department_product_active WHERE deleted = false), which lets a re-added
+// product coexist with its own soft-deleted historical row.
+@Table(name = "visit_department_products")
 public class VisitDepartmentProduct {
 
     @Id
@@ -48,6 +48,17 @@ public class VisitDepartmentProduct {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     private VisitProductStatus status;
+
+    /**
+     * How this product was added to the visit department:
+     * {@link VisitDepartmentProductSource#USER} (manual) or
+     * {@link VisitDepartmentProductSource#PROFILE} (auto-added from a department
+     * profile). Profile-sourced products cannot be removed individually — change
+     * the visit department's profile instead.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source", nullable = false, length = 16)
+    private VisitDepartmentProductSource source;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "added_by_worker_id")
@@ -76,6 +87,9 @@ public class VisitDepartmentProduct {
         this.createdAt = now;
         this.updatedAt = now;
         this.deleted = false;
+        if (this.source == null) {
+            this.source = VisitDepartmentProductSource.USER;
+        }
         if (this.status == null) {
             this.status = VisitProductStatus.PENDING;
         }
@@ -147,6 +161,14 @@ public class VisitDepartmentProduct {
 
     public void setStatus(VisitProductStatus status) {
         this.status = status;
+    }
+
+    public VisitDepartmentProductSource getSource() {
+        return source;
+    }
+
+    public void setSource(VisitDepartmentProductSource source) {
+        this.source = source;
     }
 
     public Worker getAddedBy() {

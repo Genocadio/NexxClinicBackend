@@ -15,6 +15,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
 import java.util.UUID;
 import java.util.List;
 
@@ -89,8 +90,12 @@ public class InsuranceProviderService {
             return ApiResponse.error("id and input are required.");
         }
 
-        InsuranceProvider provider = insuranceProviderRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Insurance provider not found"));
+        // S8 fix: an unknown id must be a clean error, not a RuntimeException -> 500.
+        Optional<InsuranceProvider> providerOptional = insuranceProviderRepository.findById(id);
+        if (providerOptional.isEmpty()) {
+            return ApiResponse.error("Insurance provider not found");
+        }
+        InsuranceProvider provider = providerOptional.get();
 
         if (input.insuranceName() != null) {
             String name = requiredTrim(input.insuranceName());

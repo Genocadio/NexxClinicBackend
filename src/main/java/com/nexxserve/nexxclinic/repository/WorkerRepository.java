@@ -16,6 +16,14 @@ public interface WorkerRepository extends JpaRepository<Worker, UUID> {
 
     Optional<Worker> findByUsernameIgnoreCase(String username);
 
+    // findFirst* variants: legacy duplicate rows (pre-unique-index data) must NOT make
+    // login blow up with IncorrectResultSizeDataAccessException. LIMIT 1 + oldest wins.
+    Optional<Worker> findFirstByEmailIgnoreCaseOrderByCreatedAtAsc(String email);
+
+    Optional<Worker> findFirstByPhoneNumberOrderByCreatedAtAsc(String phoneNumber);
+
+    Optional<Worker> findFirstByUsernameIgnoreCaseOrderByCreatedAtAsc(String username);
+
     boolean existsByEmailIgnoreCase(String email);
 
     boolean existsByEmailIgnoreCaseAndIdNot(String email, UUID id);

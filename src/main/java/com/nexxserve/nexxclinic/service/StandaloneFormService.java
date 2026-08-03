@@ -109,8 +109,14 @@ public class StandaloneFormService {
             form.setTemplate(input.isTemplate());
         }
 
-        StandaloneFormVersion latest = versionRepository.findTopByFormIdOrderByMajorVersionDescMinorVersionDesc(id)
-                .orElseThrow(() -> new RuntimeException("No version found for form"));
+        // S8 fix: a form with no version rows must fail with a clean error, not a
+        // RuntimeException -> 500.
+        Optional<StandaloneFormVersion> latestOptional =
+                versionRepository.findTopByFormIdOrderByMajorVersionDescMinorVersionDesc(id);
+        if (latestOptional.isEmpty()) {
+            return ApiResponse.error("No version found for form");
+        }
+        StandaloneFormVersion latest = latestOptional.get();
 
         StandaloneFormVersion targetVersion;
         if (latest.getStatus() == FormStatus.DRAFT) {

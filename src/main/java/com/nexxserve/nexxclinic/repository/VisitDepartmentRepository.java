@@ -30,6 +30,8 @@ public interface VisitDepartmentRepository extends JpaRepository<VisitDepartment
     boolean existsByVisitIdAndDepartmentIdAndParentVisitDepartmentId(
             UUID visitId, UUID departmentId, UUID parentVisitDepartmentId);
 
+    boolean existsByProfileId(UUID profileId);
+
     @Query("SELECT vd FROM VisitDepartment vd " +
             "WHERE vd.visit.patient.id = :patientId " +
             "AND vd.department.id = :departmentId " +

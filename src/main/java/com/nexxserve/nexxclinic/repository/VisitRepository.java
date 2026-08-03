@@ -1,17 +1,37 @@
 package com.nexxserve.nexxclinic.repository;
 
 import com.nexxserve.nexxclinic.entity.Visit;
+import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface VisitRepository extends JpaRepository<Visit, UUID>, JpaSpecificationExecutor<Visit> {
+
+	/**
+	 * Whether the patient has any visit rows. Used as an FK guard before hard-deleting
+	 * a patient (a patient with visits must never be deleted -> would throw
+	 * DataIntegrityViolationException -> 500).
+	 */
+	boolean existsByPatientId(UUID patientId);
+
+	/**
+	 * Locks the visit row for the duration of the transaction. Used to serialize all
+	 * billing operations (billVisit, editBillVisit, recordVisitBillingPayment) per visit
+	 * so concurrent calls cannot race on the version counter, product billing, or payment
+	 * paidAmount (round-2 review findings A1–A4).
+	 */
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("SELECT v FROM Visit v WHERE v.id = :visitId")
+	Optional<Visit> findByIdForUpdate(@Param("visitId") UUID visitId);
 
 	@Modifying(clearAutomatically = true, flushAutomatically = true)
 	@Query("update Visit v set v.visitDate = :visitDate where v.id = :visitId")

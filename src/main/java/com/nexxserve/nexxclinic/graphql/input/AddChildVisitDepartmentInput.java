@@ -12,9 +12,16 @@ public record AddChildVisitDepartmentInput(
         @NotNull(message = "departmentId is required")
         UUID departmentId,
 
-        @NotNull(message = "products are required")
         @Valid
         List<AddChildVisitDepartmentProductInput> products,
+
+        /**
+         * Optional department profile whose products are auto-added as source=PROFILE.
+         * When omitted, the department's default profile (if any) is used. At least one
+         * product must exist on the child after creation (explicit + profile), because
+         * child departments can never exist with zero products.
+         */
+        UUID profileId,
 
         UUID processorId,
 

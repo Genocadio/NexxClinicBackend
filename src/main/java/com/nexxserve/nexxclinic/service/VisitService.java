@@ -151,6 +151,13 @@ public class VisitService {
 
         ApiResponse departmentError = addDepartmentsToVisit(saved, input.departments(), actingUser);
         if (departmentError != null) {
+            // C1 fix: the visit + insurance links were already saved above. Returning an
+            // error ApiResponse would COMMIT them (Spring only rolls back on exceptions),
+            // leaving an orphan CREATED visit with no departments. Mark rollback-only so
+            // a failed createVisit is atomic.
+            org.springframework.transaction.interceptor.TransactionAspectSupport
+                .currentTransactionStatus()
+                .setRollbackOnly();
             return departmentError;
         }
 
@@ -365,7 +372,9 @@ public class VisitService {
 
         List<VisitDepartmentProduct> visitProducts = visitDepartmentProductRepository.findByVisitDepartmentVisitId(visitId);
         boolean hasUnbilledProducts = visitProducts.stream()
-                .anyMatch(product -> product.getStatus() == VisitProductStatus.PENDING);
+                .anyMatch(product -> product.getStatus() == VisitProductStatus.PENDING
+                        || product.getStatus() == VisitProductStatus.UNPAID
+                        || product.getStatus() == VisitProductStatus.CORRECTION_PENDING);
 
         if (hasUnbilledProducts) {
             return ApiResponse.error("Cannot complete visit with unbilled products. All products must be billed first.");
@@ -421,6 +430,14 @@ public class VisitService {
         ApiResponse answerResponse = departmentFormService.upsertConsultationAnswers(effectiveInput, authUser);
         if (answerResponse.status() != ResponseStatus.SUCCESS) {
             return answerResponse;
+        }
+
+        // Only a FINAL submission hands the departments to finance (BILLING). Draft
+        // saves (finalAnswer = false) must NOT freeze clinical/product work — otherwise
+        // the BILLING guards in VisitDepartmentService would block clinicians from
+        // adding products, diagnosis or medication mid-consultation.
+        if (!finalAnswer) {
+            return ApiResponse.success("Consultation answers saved.", visitToDto(visit));
         }
 
         List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(input.visitId());
@@ -666,6 +683,19 @@ public class VisitService {
 
             VisitDepartment savedVisitDepartment = visitDepartmentRepository.save(visitDepartment);
 
+            // Apply the department profile (explicit or default) so its products are
+            // auto-added as source=PROFILE. Explicitly listed products are still applied
+            // afterwards (duplicates are skipped by addProductsToVisitDepartment's
+            // seen-products set).
+            ApiResponse profileError = visitDepartmentService.applyProfileToVisitDepartment(
+                    savedVisitDepartment,
+                    departmentInput.profileId(),
+                    actingUser
+            );
+            if (profileError != null) {
+                return profileError;
+            }
+
             ApiResponse productsError = addProductsToVisitDepartment(savedVisitDepartment, departmentInput.products(), actingUser);
             if (productsError != null) {
                 return productsError;
@@ -699,12 +729,31 @@ public class VisitService {
                 return ApiResponse.error("Product not found.");
             }
 
+            // If a department profile was applied first (applyProfileToVisitDepartment),
+            // it may already have added this product as source=PROFILE. Skip it instead
+            // of creating a duplicate row that violates the partial unique index.
+            if (visitDepartmentProductRepository.findByVisitDepartmentIdAndProductId(
+                    visitDepartment.getId(), productInput.productId()).isPresent()) {
+                continue;
+            }
+
+            // S4: BILLED/EXEMPTED/CORRECTION_PENDING are managed exclusively by the
+            // billing service; clients may only create products as PENDING or UNPAID.
+            VisitProductStatus requestedStatus = productInput.status() == null
+                    ? VisitProductStatus.PENDING
+                    : productInput.status();
+            if (requestedStatus == VisitProductStatus.BILLED
+                    || requestedStatus == VisitProductStatus.EXEMPTED
+                    || requestedStatus == VisitProductStatus.CORRECTION_PENDING) {
+                return ApiResponse.error("Status " + requestedStatus + " cannot be set manually. Only PENDING or UNPAID can be set when adding a product.");
+            }
+
             VisitDepartmentProduct item = new VisitDepartmentProduct();
             item.setVisitDepartment(visitDepartment);
             item.setProduct(productOptional.get());
             item.setQuantity(normalizeQuantity(productInput.quantity()));
             item.setPrice(resolveUnitPriceSnapshot(productOptional.get(), productInput.price()));
-            item.setStatus(productInput.status() == null ? VisitProductStatus.PENDING : productInput.status());
+            item.setStatus(requestedStatus);
             ApiResponse processorError = visitDepartmentService.assignVisitDepartmentProductProcessor(visitDepartment, item, actingUser, productInput.processorId());
             if (processorError != null) {
                 return processorError;
@@ -713,7 +762,22 @@ public class VisitService {
             if (item.getStatus() != VisitProductStatus.PENDING) {
                 item.setBilledBy(actingUser);
             }
-            visitDepartmentProductRepository.save(item);
+            try {
+                // saveAndFlush (not save): the partial unique index is only checked at
+                // flush time, so a plain save() would defer the violation to a later
+                // query/commit and the catch below would never fire.
+                visitDepartmentProductRepository.saveAndFlush(item);
+            } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+                // Partial unique index (visit_department_id, product_id): a concurrent
+                // request added the same product between the check above and this save.
+                // Roll back so a failed visit creation is atomic (C1 pattern).
+                org.springframework.transaction.interceptor.TransactionAspectSupport
+                    .currentTransactionStatus()
+                    .setRollbackOnly();
+                return ApiResponse.error(
+                    "Product already exists in this visit department."
+                );
+            }
         }
 
         return null;

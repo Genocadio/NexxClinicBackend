@@ -41,4 +41,13 @@ public class DepartmentMutationController {
     ) {
         return departmentService.updateDepartment(departmentId, input);
     }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN})
+    @MutationMapping
+    public ApiResponse removeDepartmentProfile(
+            @Argument UUID profileId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return departmentService.removeDepartmentProfile(profileId);
+    }
 }

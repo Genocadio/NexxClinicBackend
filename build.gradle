@@ -20,6 +20,8 @@ repositories {
 dependencies {
 
 	implementation 'org.mapstruct:mapstruct:1.6.3'
+	//Meilisearch api
+	implementation "com.meilisearch.sdk:meilisearch-java:0.14.4"
 
 	// MapStruct annotation processor for code generation
 	annotationProcessor 'org.mapstruct:mapstruct-processor:1.6.3'
@@ -33,6 +35,11 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+	implementation 'org.flywaydb:flyway-core'
+	implementation 'org.flywaydb:flyway-database-postgresql'
+	// Spring Boot 4 moved Flyway auto-configuration out of spring-boot-autoconfigure
+	// into this dedicated module; without it, migrations never run at startup.
+	implementation 'org.springframework.boot:spring-boot-flyway'
 	implementation 'com.graphql-java:graphql-java-extended-scalars:24.0'
 	implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
 	implementation 'org.slf4j:slf4j-api'

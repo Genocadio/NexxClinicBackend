@@ -13,7 +13,7 @@ public record UpdateDepartmentInput(
 
         List<UUID> insuranceProviderIds,
 
-        List<UUID> defaultProductIds,
+        List<DepartmentProfileInput> profiles,
 
         Boolean nursing,
 

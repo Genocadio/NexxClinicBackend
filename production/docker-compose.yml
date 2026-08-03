@@ -1,28 +1,130 @@
 version: "3.9"
 
 services:
-  app:
+  # Backend Service (Spring Boot)
+  backend:
     image: genoyves/nexclinic:latest
-    container_name: nexxclinic-app
+    container_name: nexxclinic-backend
     restart: unless-stopped
 
-    ports:
-      - "8091:8080"
+    # No need to expose ports - internal only
+    expose:
+      - "8080"
+
+    depends_on:
+      # Soft dependency: the backend is resilient to a slow/absent Meilisearch
+      # (search falls back to the database, startup sync runs async), so we never
+      # block boot on `service_healthy`.
+      meilisearch:
+        condition: service_started
 
     environment:
       SPRING_PROFILES_ACTIVE: prod
 
-      # IMPORTANT FIX
-      DB_URL: jdbc:postgresql://host.docker.internal:5432/postgres
+      # Meilisearch (search for products / patients / workers)
+      MEILI_URL: http://meilisearch:7700
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-nexxclinic_meili_master_key}
+      MEILI_ENABLED: "true"
+
+      # Use Supabase PostgreSQL (igisubizo instance)
+      DB_URL: jdbc:postgresql://host.docker.internal:55322/postgres
       DB_USER: postgres.your-tenant-id
-      DB_PASSWORD: 1232c554c17bfeb7afd394af9b655ced
+      DB_PASSWORD: WojHKBUqte3Dqzyjj2bkWWnsZb2Rzdx5JrRx0zFf
       DB_DRIVER: org.postgresql.Driver
 
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
-      SUPABASE_URL: http://host.docker.internal:8000
-      SUPABASE_SERVICE_KEY: YOUR_SERVICE_ROLE_KEY
 
-      JWT_SECRET: your-super-secret-jwt-key-at-least-32-chars-long
+      # Supabase API (igisubizo instance)
+      SUPABASE_URL: http://host.docker.internal:55321
+      SUPABASE_SERVICE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoyMDk4NDcyOTM2LCJpYXQiOjE3ODMxMTI5MzYsImlzcyI6InN1cGFiYXNlIiwicmVmIjoibG9jYWxob3N0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsInN1YiI6IjEyMzQ1Njc4OTAifQ.J4uGzvGYEjU-RUwhHmS0K7fMseDazF1SQe5n_ScFB64
+
+      JWT_SECRET: HCl3BC5fRRwwX5XKtHzSZ3OQ92ckOkURufljZSpJ  # From igisubizo .env
+
+      # CORS - Allow frontend domains
+      CORS_ALLOWED_ORIGINS: http://frontend:3000,http://localhost:3000,https://igisubizo.med.rw
+
+      # Supabase-specific settings
+      SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT: 60000
+      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
 
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # Meilisearch Service (full-text search for products / patients / workers)
+  meilisearch:
+    image: getmeili/meilisearch:v1.12
+    container_name: nexxclinic-meilisearch
+    restart: unless-stopped
+
+    # Internal only - the backend reaches it via the app-network
+    expose:
+      - "7700"
+
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-nexxclinic_meili_master_key}
+      MEILI_NO_ANALYTICS: "true"
+      # Production mode: enforces the master key and disables dev-only behaviour
+      MEILI_ENV: production
+
+    volumes:
+      - meilisearch_data:/meili_data
+
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:7700/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Frontend Service (Next.js)
+  frontend:
+    image: genoyves/nexclinic-front:latest
+    container_name: nexxclinic-frontend
+    restart: unless-stopped
+
+    ports:
+      - "3000:3000"
+
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: 1
+
+      # Backend API URL
+      API_BASE_URL: http://backend:8080
+
+      # Supabase (igisubizo instance)
+      SUPABASE_INTERNAL_URL: http://host.docker.internal:55321
+      SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoyMDk4NDcyOTM2LCJpYXQiOjE3ODMxMTI5MzYsImlzcyI6InN1cGFiYXNlIiwicmVmIjoibG9jYWxob3N0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsInN1YiI6IjEyMzQ1Njc4OTAifQ.J4uGzvGYEjU-RUwhHmS0K7fMseDazF1SQe5n_ScFB64
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  meilisearch_data:
+
+networks:
+  app-network:
+    driver: bridge

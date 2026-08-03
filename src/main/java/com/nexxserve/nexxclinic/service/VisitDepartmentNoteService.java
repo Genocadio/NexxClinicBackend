@@ -81,9 +81,13 @@ public class VisitDepartmentNoteService {
 
         List<VisitDepartmentNote> notes;
         if (visitDepartmentId != null) {
-            VisitDepartment visitDepartment = visitDepartmentRepository.findById(visitDepartmentId)
+            // S8 fix: a missing/foreign visitDepartmentId must be a clean error, not a
+            // RuntimeException -> 500. The filter already proves it belongs to this visit.
+            if (visitDepartmentRepository.findById(visitDepartmentId)
                     .filter(vd -> visitId.equals(vd.getVisit().getId()))
-                    .orElseThrow(() -> new RuntimeException("Visit department not found or does not belong to visit."));
+                    .isEmpty()) {
+                return ApiResponse.error("Visit department not found or does not belong to visit.");
+            }
             notes = visitDepartmentNoteRepository
                     .findByVisitDepartment_Visit_IdAndVisitDepartment_IdOrderByCreatedAtAsc(
                             visitId, visitDepartmentId);
@@ -360,6 +364,16 @@ public class VisitDepartmentNoteService {
     // ─────────────────────────────────────────────────────────────
     //  SUMMARY (called by VisitDepartmentService when building DTOs)
     // ─────────────────────────────────────────────────────────────
+
+    /**
+     * Whether a visit department has any notes at all. Used as an FK guard before
+     * hard-deleting a child department (a child with notes must never be deleted ->
+     * would throw DataIntegrityViolationException -> 500).
+     */
+    @Transactional(readOnly = true)
+    public boolean hasNotes(UUID visitDepartmentId) {
+        return visitDepartmentNoteRepository.countByVisitDepartmentId(visitDepartmentId) > 0;
+    }
 
     public VisitDepartmentNotesSummaryDto buildNotesSummary(UUID visitDepartmentId, AuthenticatedUser authUser) {
         long totalNotes = visitDepartmentNoteRepository.countByVisitDepartmentId(visitDepartmentId);

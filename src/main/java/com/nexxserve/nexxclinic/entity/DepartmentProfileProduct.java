@@ -15,26 +15,29 @@ import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+/**
+ * Link between a {@link DepartmentProfile} and one of its products.
+ */
 @Entity
 @Table(
-        name = "department_default_products",
+        name = "department_profile_products",
         uniqueConstraints = {
-                @UniqueConstraint(name = "uk_department_default_product", columnNames = {"department_id", "product_id"})
+                @UniqueConstraint(name = "uk_department_profile_product", columnNames = {"profile_id", "product_id"})
         },
         indexes = {
-                @Index(name = "idx_department_default_product_department", columnList = "department_id"),
-                @Index(name = "idx_department_default_product_product", columnList = "product_id")
+                @Index(name = "idx_department_profile_product_profile", columnList = "profile_id"),
+                @Index(name = "idx_department_profile_product_product", columnList = "product_id")
         }
 )
-public class DepartmentDefaultProduct {
+public class DepartmentProfileProduct {
 
     @Id
     @GeneratedValue
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "department_id", nullable = false)
-    private Department department;
+    @JoinColumn(name = "profile_id", nullable = false)
+    private DepartmentProfile profile;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "product_id", nullable = false)
@@ -66,12 +69,12 @@ public class DepartmentDefaultProduct {
         this.id = id;
     }
 
-    public Department getDepartment() {
-        return department;
+    public DepartmentProfile getProfile() {
+        return profile;
     }
 
-    public void setDepartment(Department department) {
-        this.department = department;
+    public void setProfile(DepartmentProfile profile) {
+        this.profile = profile;
     }
 
     public Product getProduct() {

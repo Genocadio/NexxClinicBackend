@@ -45,6 +45,16 @@ public class VisitDepartment {
     @JoinColumn(name = "department_id", nullable = false)
     private Department department;
 
+    /**
+     * The department profile used when this department was added to the visit
+     * (or last changed via changeVisitDepartmentProfile). Null when added without
+     * a profile. Products auto-added from the profile carry source=PROFILE and are
+     * managed by the profile (they cannot be removed individually).
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "profile_id")
+    private DepartmentProfile profile;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private VisitDepartmentStatus status;
@@ -130,6 +140,14 @@ public class VisitDepartment {
 
     public void setDepartment(Department department) {
         this.department = department;
+    }
+
+    public DepartmentProfile getProfile() {
+        return profile;
+    }
+
+    public void setProfile(DepartmentProfile profile) {
+        this.profile = profile;
     }
 
     public VisitDepartmentStatus getStatus() {

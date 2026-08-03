@@ -109,8 +109,23 @@ enum VisitStatus {
 enum VisitProductStatus {
   BILLED
   EXEMPTED
+  """
+  Was BILLED/EXEMPTED and reset by the edit-billing correction flow.
+  Transient within the correction transaction; not settable by clients.
+  """
+  CORRECTION_PENDING
   UNPAID
   PENDING
+}
+
+"""
+How a visit department product was added:
+- USER: added manually through the normal add-product flow
+- PROFILE: auto-added from a department profile (cannot be removed individually — change the visit department's profile instead)
+"""
+enum VisitDepartmentProductSource {
+  USER
+  PROFILE
 }
 
 enum VisitDepartmentStatus {
@@ -125,6 +140,15 @@ enum EncounterType {
   OUTPATIENT
   INPATIENT_OBSERVATION
   INPATIENT_ADMISSION
+}
+
+"""
+Meilisearch indexes that can be rebuilt via reindexSearchIndexes.
+"""
+enum SearchIndexType {
+  PRODUCTS
+  PATIENTS
+  WORKERS
 }
 
 enum VisitBillingStatus {
@@ -406,12 +430,21 @@ type ProductInsuranceCoverageResponse implements ApiResponse {
     data: ProductInsuranceCoverage
 }
 
+type DepartmentProfile {
+  id: ID!
+  name: String!
+  isDefault: Boolean!
+  products: [Product!]!
+  createdAt: String!
+  updatedAt: String!
+}
+
 type Department {
   id: ID!
   name: String!
   insurancePolicyMode: DepartmentInsurancePolicyMode!
   insurancePolicies: [InsuranceProvider!]!
-  defaultProducts: [Product!]!
+  profiles: [DepartmentProfile!]!
   createdAt: String!
   updatedAt: String!
   nursing: Boolean!
@@ -486,6 +519,7 @@ type VisitDepartment {
   department: Department!
   status: VisitDepartmentStatus!
   encounterType: EncounterType!
+  profile: DepartmentProfile
   completedAt: String
   processors: [Worker!]
   childVisitDepartments: [VisitDepartment!]!
@@ -605,6 +639,7 @@ type VisitDepartmentProduct {
   quantity: Float!
   price: Float!
   status: VisitProductStatus!
+  source: VisitDepartmentProductSource!
   addedBy: Worker
   billedBy: Worker
   processor: Worker
@@ -1124,11 +1159,18 @@ input SearchProductsInput {
   size: Int
 }
 
+input DepartmentProfileInput {
+  id: ID
+  name: String!
+  isDefault: Boolean
+  productIds: [ID!]
+}
+
 input CreateDepartmentInput {
   name: String!
   insurancePolicyMode: DepartmentInsurancePolicyMode
   insuranceProviderIds: [ID!]
-  defaultProductIds: [ID!]
+  profiles: [DepartmentProfileInput!]
   nursing: Boolean
   supportRequests: Boolean
   requestsProducts: Boolean
@@ -1138,7 +1180,7 @@ input UpdateDepartmentInput {
   name: String
   insurancePolicyMode: DepartmentInsurancePolicyMode
   insuranceProviderIds: [ID!]
-  defaultProductIds: [ID!]
+  profiles: [DepartmentProfileInput!]
   nursing: Boolean
   supportRequests: Boolean
   requestsProducts: Boolean
@@ -1167,6 +1209,7 @@ input ChangeVisitDateInput {
 input CreateVisitDepartmentInput {
   departmentId: ID!
   encounterType: EncounterType
+  profileId: ID
   processorId: ID
   products: [CreateVisitDepartmentProductItemInput!]
 }
@@ -1205,7 +1248,8 @@ All validations occur before the child department is created:
 input AddChildVisitDepartmentInput {
   parentVisitDepartmentId: ID!
   departmentId: ID!
-  products: [AddChildVisitDepartmentProductInput!]!
+  products: [AddChildVisitDepartmentProductInput!]
+  profileId: ID
   processorId: ID
   encounterType: EncounterType
 }
@@ -1516,9 +1560,26 @@ type Mutation {
   deleteProductInsuranceCoverage(productInsuranceCoverageId: ID!): BooleanResponse!
   createDepartment(input: CreateDepartmentInput!): DepartmentResponse!
   updateDepartment(departmentId: ID!, input: UpdateDepartmentInput!): DepartmentResponse!
+
+  """
+  Removes a department profile. Profiles are extra objects: they are added/updated
+  through createDepartment/updateDepartment and never deleted implicitly by an
+  update. This mutation is the only way to delete one. A profile still in use by a
+  visit department cannot be removed — switch those visits to another profile first.
+  """
+  removeDepartmentProfile(profileId: ID!): DepartmentResponse!
   createVisit(input: CreateVisitInput!): VisitResponse!
   changeVisitDate(input: ChangeVisitDateInput!): VisitResponse!
-  addVisitDepartment(visitId: ID!, departmentId: ID!, encounterType: EncounterType, processorId: ID): VisitResponse!
+  addVisitDepartment(visitId: ID!, departmentId: ID!, profileId: ID, encounterType: EncounterType, processorId: ID): VisitResponse!
+
+  """
+  Change the department profile used by a visit department. Replaces its
+  PROFILE-sourced products with the new profile's products (USER products are
+  kept). Profile products cannot be removed individually — this is the only way
+  to replace them. Pass no profileId to fall back to the department's default
+  profile (or clear the profile if none exists).
+  """
+  changeVisitDepartmentProfile(visitDepartmentId: ID!, profileId: ID): VisitDepartmentResponse!
 
   """
   Add a child visit department with products. Validations occur before creation:
@@ -1549,4 +1610,5 @@ type Mutation {
   cancelVisit(visitId: ID!): VisitResponse!
   updateClinicProfile(input: UpdateClinicProfileInput!): ClinicProfileResponse!
   deleteClinicProfile: BooleanResponse!
+  reindexSearchIndexes(indexes: [SearchIndexType!]!): BooleanResponse!
 }

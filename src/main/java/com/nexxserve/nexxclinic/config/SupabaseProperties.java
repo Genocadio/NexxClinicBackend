@@ -28,6 +28,21 @@ public class SupabaseProperties {
     /** Bucket name for private uploads. */
     private String bucketPrivate = "uploads-private";
 
+    /** Connect timeout (ms) for the Storage HTTP client. Default 5000. */
+    private int connectTimeoutMs = 5000;
+
+    /** Per-request timeout (ms). Default 15000 — invoices fail fast, never hang. */
+    private int requestTimeoutMs = 15000;
+
+    /**
+     * Retries for transient failures (HTTP 429 / 5xx) on uploads and other storage
+     * calls. 0 disables retry. Default 2.
+     */
+    private int retryMaxAttempts = 2;
+
+    /** Base backoff (ms) between retries; doubles each attempt. Default 500. */
+    private long retryBackoffMs = 500;
+
     public String getUrl() {
         return url;
     }
@@ -58,5 +73,37 @@ public class SupabaseProperties {
 
     public void setBucketPrivate(String bucketPrivate) {
         this.bucketPrivate = bucketPrivate;
+    }
+
+    public int getConnectTimeoutMs() {
+        return connectTimeoutMs;
+    }
+
+    public void setConnectTimeoutMs(int connectTimeoutMs) {
+        this.connectTimeoutMs = connectTimeoutMs;
+    }
+
+    public int getRequestTimeoutMs() {
+        return requestTimeoutMs;
+    }
+
+    public void setRequestTimeoutMs(int requestTimeoutMs) {
+        this.requestTimeoutMs = requestTimeoutMs;
+    }
+
+    public int getRetryMaxAttempts() {
+        return retryMaxAttempts;
+    }
+
+    public void setRetryMaxAttempts(int retryMaxAttempts) {
+        this.retryMaxAttempts = retryMaxAttempts;
+    }
+
+    public long getRetryBackoffMs() {
+        return retryBackoffMs;
+    }
+
+    public void setRetryBackoffMs(long retryBackoffMs) {
+        this.retryBackoffMs = retryBackoffMs;
     }
 }

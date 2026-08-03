@@ -6,10 +6,18 @@ spring:
     driver-class-name: org.h2.Driver
   jpa:
     hibernate:
+      # H2 tests keep Hibernate-managed schema; the Postgres-only Flyway
+      # migrations are not applicable here.
       ddl-auto: update
     properties:
       hibernate:
         dialect: org.hibernate.dialect.H2Dialect
+  flyway:
+    enabled: false
+
+meilisearch:
+  # Tests run without a Meilisearch instance; search falls back to the database.
+  enabled: false
 
 app:
   jwt:

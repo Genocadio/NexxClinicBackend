@@ -34,28 +34,35 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ProductService {
 
+    private static final Logger log = LoggerFactory.getLogger(ProductService.class);
+
     private final ProductRepository productRepository;
     private final ProductInsuranceCoverageRepository coverageRepository;
     private final InsuranceProviderRepository insuranceProviderRepository;
     private final ProductMapper productMapper;
+    private final MeilisearchIndexService meilisearchIndexService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ProductService(
             ProductRepository productRepository,
             ProductInsuranceCoverageRepository coverageRepository,
             InsuranceProviderRepository insuranceProviderRepository,
-            ProductMapper productMapper
+            ProductMapper productMapper,
+            MeilisearchIndexService meilisearchIndexService
     ) {
         this.productRepository = productRepository;
         this.coverageRepository = coverageRepository;
         this.insuranceProviderRepository = insuranceProviderRepository;
         this.productMapper = productMapper;
+        this.meilisearchIndexService = meilisearchIndexService;
     }
 
     @Transactional
@@ -115,6 +122,7 @@ public class ProductService {
         }
 
         Product latest = productRepository.findByIdWithCoverages(saved.getId()).orElse(saved);
+        meilisearchIndexService.indexProduct(latest);
         return ApiResponse.success("Product created.", toFilteredDto(latest, null));
     }
 
@@ -201,6 +209,7 @@ public class ProductService {
         }
 
         Product latest = productRepository.findByIdWithCoverages(saved.getId()).orElse(saved);
+        meilisearchIndexService.indexProduct(latest);
         return ApiResponse.success("Product updated.", toFilteredDto(latest, null));
     }
 
@@ -220,11 +229,34 @@ public class ProductService {
     public ApiResponse<List<ProductDto>> products(SearchProductsInput input) {
         int page = normalizePage(input == null ? null : input.page());
         int size = normalizeSize(input == null ? null : input.size());
+        UUID insuranceProviderId = input == null ? null : input.insuranceProviderId();
+        String name = input == null ? null : blankToNull(input.name());
+
+        // Meilisearch first (typo-tolerant, ranked); DB spec is the fallback.
+        if (meilisearchIndexService.isEnabled()) {
+            try {
+                MeilisearchIndexService.SearchHit hit = meilisearchIndexService.searchProducts(
+                        name,
+                        input == null ? null : input.type(),
+                        page,
+                        size
+                );
+                List<ProductDto> products = loadProductsByHits(hit.ids(), insuranceProviderId);
+                int totalPages = size == 0 ? 0 : (int) Math.ceil((double) hit.total() / size);
+                return ApiResponse.success(
+                        "Products fetched.",
+                        products,
+                        new PaginationDto(hit.total(), size, page, totalPages)
+                );
+            } catch (MeilisearchIndexService.SearchUnavailableException e) {
+                log.warn("Meilisearch unavailable for products, falling back to DB: {}", e.getMessage());
+            }
+        }
+
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
 
         Specification<Product> spec = (root, queryDef, builder) -> builder.conjunction();
 
-        String name = input == null ? null : blankToNull(input.name());
         if (name != null) {
             String normalized = name.toLowerCase();
             spec = spec.and((root, queryDef, builder) ->
@@ -239,8 +271,6 @@ public class ProductService {
         if (input != null && input.type() != null) {
             spec = spec.and((root, queryDef, builder) -> builder.equal(root.get("type"), input.type()));
         }
-
-        UUID insuranceProviderId = input == null ? null : input.insuranceProviderId();
 
         Page<Product> productPage = productRepository.findAll(spec, pageable);
 
@@ -260,6 +290,19 @@ public class ProductService {
                         productPage.getTotalPages()
                 )
         );
+    }
+
+    /** Hydrates full product DTOs from Meilisearch hit ids, preserving hit order. */
+    private List<ProductDto> loadProductsByHits(List<UUID> ids, UUID insuranceProviderId) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        List<ProductDto> products = new ArrayList<>();
+        for (UUID id : ids) {
+            productRepository.findByIdWithCoverages(id)
+                    .ifPresent(product -> products.add(toFilteredDto(product, insuranceProviderId)));
+        }
+        return products;
     }
 
     @Transactional(readOnly = true)

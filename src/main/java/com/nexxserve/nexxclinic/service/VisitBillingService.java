@@ -48,6 +48,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -56,8 +57,12 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class VisitBillingService {
@@ -84,6 +89,10 @@ public class VisitBillingService {
     private final ClinicProfileRepository clinicProfileRepository;
     private final VisitDepartmentNoteRepository visitDepartmentNoteRepository;
     private final SupabaseStorageService supabaseStorageService;
+    private final TransactionTemplate transactionTemplate;
+    private final TransactionTemplate readOnlyTransactionTemplate;
+
+    private static final Logger log = LoggerFactory.getLogger(VisitBillingService.class);
 
     public VisitBillingService(
         VisitRepository visitRepository,
@@ -102,7 +111,8 @@ public class VisitBillingService {
         WorkerRepository workerRepository,
         ClinicProfileRepository clinicProfileRepository,
         VisitDepartmentNoteRepository visitDepartmentNoteRepository,
-        SupabaseStorageService supabaseStorageService
+        SupabaseStorageService supabaseStorageService,
+        PlatformTransactionManager transactionManager
     ) {
         this.visitRepository = visitRepository;
         this.visitDepartmentRepository = visitDepartmentRepository;
@@ -125,6 +135,9 @@ public class VisitBillingService {
         this.clinicProfileRepository = clinicProfileRepository;
         this.visitDepartmentNoteRepository = visitDepartmentNoteRepository;
         this.supabaseStorageService = supabaseStorageService;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.readOnlyTransactionTemplate = new TransactionTemplate(transactionManager);
+        this.readOnlyTransactionTemplate.setReadOnly(true);
     }
 
     @Transactional
@@ -143,19 +156,50 @@ public class VisitBillingService {
         if (input == null) {
             return ApiResponse.error("input is required.");
         }
+        if (input.visitId() == null) {
+            return ApiResponse.error("visitId is required.");
+        }
+        // A1/A2/A4 fix: serialize all billing operations per visit. editBillVisit mutates
+        // products in Phase 1 (applyVisitProductCorrections) BEFORE billOrEditVisitInternal
+        // runs, so the pessimistic lock must be acquired here, before any mutation.
+        visitRepository.findByIdForUpdate(input.visitId());
 
         // Error-correction workflow:
         // 1) Synchronize visit department products (add/remove/update)
         // 2) Create a new immutable billing version from the corrected visit state
         ApiResponse sync = applyVisitProductCorrections(input, authUser);
         if (sync != null) {
+            // Phase 1 (applyVisitProductCorrections) may already have mutated and saved
+            // products for EARLIER departments before hitting this error (e.g. a product
+            // not found in a later department). Return an error ApiResponse alone would
+            // COMMIT those mutations (Spring only rolls back on exceptions), so mark the
+            // transaction rollback-only — a correction is all-or-nothing.
+            org.springframework.transaction.interceptor.TransactionAspectSupport
+                .currentTransactionStatus()
+                .setRollbackOnly();
             return sync;
         }
 
         try {
             BillVisitInput asBill = convertEditInputToBillVisitInput(input);
-            return billOrEditVisitInternal(asBill, authUser, true);
+            ApiResponse result = billOrEditVisitInternal(asBill, authUser, true);
+            // Phase 1 (applyVisitProductCorrections) may already have mutated and saved
+            // products. If Phase 2 returns ANY error — not just a thrown exception — the
+            // whole correction must roll back so a failed edit never leaves half-applied
+            // product changes. A correction is all-or-nothing.
+            if (result.status() != com.nexxserve.nexxclinic.model.ResponseStatus.SUCCESS) {
+                org.springframework.transaction.interceptor.TransactionAspectSupport
+                    .currentTransactionStatus()
+                    .setRollbackOnly();
+            }
+            return result;
         } catch (IllegalArgumentException e) {
+            // Phase 1 (applyVisitProductCorrections) may already have mutated and saved
+            // products. Mark the transaction rollback-only so those changes are NOT
+            // committed when Phase 2 fails — a correction must be all-or-nothing.
+            org.springframework.transaction.interceptor.TransactionAspectSupport
+                .currentTransactionStatus()
+                .setRollbackOnly();
             return ApiResponse.error(e.getMessage());
         }
     }
@@ -170,6 +214,12 @@ public class VisitBillingService {
         }
 
         Worker actingUser = resolveWorker(authUser);
+        // F3/F4 fix: fail closed. A null acting user would silently bypass the unread-notes
+        // gate (countUnreadNotesForVisit returns 0 for a null viewer) and stamp products
+        // with billedBy = null.
+        if (actingUser == null) {
+            return ApiResponse.error("Authentication is required to bill a visit.");
+        }
 
         // Block billing when the acting user has unread notes on any department in this visit.
         // (Business rule: cannot bill or edit if there are unread notes.)
@@ -186,7 +236,9 @@ public class VisitBillingService {
             return ApiResponse.error("At least one department is required.");
         }
 
-        Optional<Visit> visitOptional = visitRepository.findById(
+        // A1/A2 fix: pessimistic lock serializes concurrent bill/edit per visit so the
+        // version counter and product billing cannot race.
+        Optional<Visit> visitOptional = visitRepository.findByIdForUpdate(
             input.visitId()
         );
         if (visitOptional.isEmpty()) {
@@ -202,11 +254,74 @@ public class VisitBillingService {
             return ApiResponse.error("No existing billing found for this visit.");
         }
 
+        // B2 fix: billVisit is strictly first-time-only. A second plain billVisit on an
+        // already-billed visit would create a new version containing ONLY the departments
+        // in the request — an incomplete container that drops previously billed
+        // departments (and their payments) from the authoritative latest view. Corrections
+        // must go through editBillVisit, which carries payments and invalidates invoices.
+        if (!isEdit && hasAnyExistingBilling(input.visitId())) {
+            return ApiResponse.error(
+                "This visit has already been billed. Use editBillVisit to correct the billing."
+            );
+        }
+
+        // N2 fix: on edit, carry the previous billing version's payments forward so a
+        // correction never resets already-recorded payments to zero. The client may
+        // still supply payments explicitly — carried amounts are only used when the
+        // input has none for a department.
+        Map<UUID, List<BillVisitInput.BillingPaymentInput>> carriedPaymentsByDepartment = new HashMap<>();
+        Map<UUID, BigDecimal> carriedPaidByDepartment = new HashMap<>();
+        boolean previousVersionFullyPaid = false;
+        VisitBilling previousBilling = null;
+        if (isEdit) {
+            // F2 fix: the "latest" billing is the one with the highest version number, not
+            // necessarily the most recent createdAt (clock skew / backfill). Order by the
+            // version so carry-forward always reads the true latest container.
+            List<VisitBilling> existingBillings = orderByVersionDesc(
+                visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visit.getId())
+            );
+            if (!existingBillings.isEmpty()) {
+                previousBilling = existingBillings.get(0);
+                boolean fullyPaid = true;
+                boolean anyDepartment = false;
+                for (VisitDepartmentBilling deptBilling : previousBilling.getDepartments()) {
+                    if (deptBilling == null || deptBilling.getVisitDepartment() == null) {
+                        continue;
+                    }
+                    anyDepartment = true;
+                    UUID rootDeptId = deptBilling.getVisitDepartment().getId();
+                    carriedPaidByDepartment.put(
+                        rootDeptId,
+                        deptBilling.getPaidAmount() == null ? ZERO : deptBilling.getPaidAmount()
+                    );
+                    if (
+                        deptBilling.getOutstandingAmount() != null &&
+                        deptBilling.getOutstandingAmount().compareTo(ZERO) > 0
+                    ) {
+                        fullyPaid = false;
+                    }
+                    List<BillVisitInput.BillingPaymentInput> payments = deptBilling.getPayments() == null
+                        ? List.of()
+                        : deptBilling.getPayments().stream()
+                            .map(p -> new BillVisitInput.BillingPaymentInput(
+                                p.getAmount(),
+                                p.getPaymentMethod(),
+                                p.getReference()
+                            ))
+                            .toList();
+                    if (!payments.isEmpty()) {
+                        carriedPaymentsByDepartment.put(rootDeptId, payments);
+                    }
+                }
+                previousVersionFullyPaid = anyDepartment && fullyPaid;
+            }
+        }
+
         List<VisitDepartment> allVisitDepartments =
             visitDepartmentRepository.findByVisitId(visit.getId());
         Map<UUID, VisitDepartment> visitDepartmentsById = allVisitDepartments
             .stream()
-            .collect(Collectors.toMap(VisitDepartment::getId, d -> d));
+            .collect(Collectors.toMap(VisitDepartment::getId, d -> d, (a, b) -> a));
 
         Map<UUID, VisitDepartment> rootDepartments = new LinkedHashMap<>();
         Map<
@@ -254,14 +369,20 @@ public class VisitBillingService {
                 rootVisitDepartment.getId(),
                 rootVisitDepartment
             );
+            // N2: on edit, carry the previous version's payments for this department
+            // unless the client explicitly supplies new ones.
+            List<BillVisitInput.BillingPaymentInput> paymentsForDepartment = departmentInput.payments();
+            if (isEdit && (paymentsForDepartment == null || paymentsForDepartment.isEmpty())) {
+                paymentsForDepartment = carriedPaymentsByDepartment.get(rootVisitDepartment.getId());
+            }
             rootPaymentsByDepartment.put(
                 rootVisitDepartment.getId(),
-                departmentInput.payments()
+                paymentsForDepartment
             );
 
             BigDecimal totalPaid = ZERO;
-            if (departmentInput.payments() != null) {
-                for (BillVisitInput.BillingPaymentInput payment : departmentInput.payments()) {
+            if (paymentsForDepartment != null) {
+                for (BillVisitInput.BillingPaymentInput payment : paymentsForDepartment) {
                     if (
                         payment == null ||
                         payment.amount() == null ||
@@ -285,6 +406,50 @@ public class VisitBillingService {
                     rootVisitDepartment.getId(),
                     totalPaid
                 );
+            } else if (
+                isEdit &&
+                carriedPaymentsByDepartment.get(rootVisitDepartment.getId()) == null &&
+                carriedPaidByDepartment
+                    .getOrDefault(rootVisitDepartment.getId(), ZERO)
+                    .compareTo(ZERO) > 0
+            ) {
+                // Legacy data: the previous version recorded a paid amount without
+                // payment rows. Honor the paid amount so the corrected bill doesn't
+                // silently reset it to zero.
+                remainingPaidByDepartment.put(
+                    rootVisitDepartment.getId(),
+                    carriedPaidByDepartment.get(rootVisitDepartment.getId())
+                );
+            }
+        }
+
+        // B1 fix: the new billing version is a projection of the request's departments. If
+        // an edit omits a department that has products, that department silently vanishes
+        // from the authoritative latest billing view and its payments are never carried
+        // forward. Require edits to cover every ROOT department with non-deleted products
+        // (products may live on child departments, which bill under their root).
+        //
+        // Note: a department that appears in the previous billing container but has NO
+        // active products today (e.g. all products soft-deleted by an earlier edit, or a
+        // legacy hard-delete) is intentionally NOT required — it has nothing billable, so
+        // demanding it in the request would make the edit impossible. B5 already prevents
+        // hard-deleting billed products, so billed departments always still have rows.
+        if (isEdit) {
+            Set<UUID> requiredDeptIds = new LinkedHashSet<>();
+            for (VisitDepartmentProduct p :
+                    visitDepartmentProductRepository.findByVisitDepartmentVisitId(visit.getId())) {
+                if (!p.isDeleted()) {
+                    requiredDeptIds.add(resolveRootVisitDepartmentId(p.getVisitDepartment()));
+                }
+            }
+            List<UUID> missing = requiredDeptIds.stream()
+                .filter(id -> !rootDepartments.containsKey(id))
+                .toList();
+            if (!missing.isEmpty()) {
+                return ApiResponse.error(
+                    "editBillVisit must include every department that has products. Missing: " +
+                    missing + ". Submit the complete corrected bill for the whole visit."
+                );
             }
         }
 
@@ -304,7 +469,7 @@ public class VisitBillingService {
         );
         Map<UUID, VisitDepartmentProduct> allProductsById = allProducts
             .stream()
-            .collect(Collectors.toMap(VisitDepartmentProduct::getId, p -> p));
+            .collect(Collectors.toMap(VisitDepartmentProduct::getId, p -> p, (a, b) -> a));
 
         Map<UUID, UUID> requestedInsuranceByItem = new LinkedHashMap<>();
         Map<UUID, java.math.BigDecimal> requestedUnitPriceByItem =
@@ -364,13 +529,21 @@ public class VisitBillingService {
                     productInput.visitDepartmentProductId()
                 );
                 if (item == null) {
+                    // S7 fix: name the offending product id instead of a generic message.
                     return ApiResponse.error(
-                        "Invalid billing selection. Ensure product ids exist and are billable."
+                        "Invalid billing selection: product id " +
+                        productInput.visitDepartmentProductId() +
+                        " was not found or is not billable."
                     );
                 }
                 if (!isEdit && !requiresBilling(item)) {
+                    // S7 fix: name the offending product so the frontend can debug.
                     return ApiResponse.error(
-                        "Invalid billing selection. Ensure product ids exist and are billable."
+                        "Invalid billing selection: product '" +
+                        productName(item) +
+                        "' (id: " +
+                        item.getId() +
+                        ") is already billed or exempted and cannot be billed again. Use editBillVisit to correct billing."
                     );
                 }
 
@@ -488,6 +661,11 @@ public class VisitBillingService {
         final VisitBilling visitBillingFinal = visitBilling;
         final com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion billingVersionFinal = billingVersion;
 
+        // B1 fix: payments must be recorded ONCE per root department, not once per
+        // insurance billing group. Without this guard, a department with two insurance
+        // groups (one product insured, one not) would write its payments twice.
+        Set<UUID> paymentRecordedFor = new HashSet<>();
+
         for (Map.Entry<
             BillingGroup,
             List<VisitDepartmentProduct>
@@ -540,19 +718,22 @@ public class VisitBillingService {
             insuranceBilling.setOutstandingAmount(ZERO);
             departmentBilling.getInsuranceBillings().add(insuranceBilling);
 
-            List<BillVisitInput.BillingPaymentInput> payments =
-                rootPaymentsByDepartment.get(rootVisitDepartment.getId());
-            if (payments != null) {
-                for (BillVisitInput.BillingPaymentInput payment : payments) {
-                    VisitBillingPayment billingPayment =
-                        new VisitBillingPayment();
-                    billingPayment.setVisitDepartmentBilling(departmentBilling);
-                    billingPayment.setBillingVersion(billingVersionFinal);
-                    billingPayment.setAmount(toMoney(payment.amount()));
-                    billingPayment.setPaymentMethod(payment.paymentMethod());
-                    billingPayment.setReference(payment.reference());
-                    departmentBilling.getPayments().add(billingPayment);
+            if (!paymentRecordedFor.contains(rootVisitDepartment.getId())) {
+                List<BillVisitInput.BillingPaymentInput> payments =
+                    rootPaymentsByDepartment.get(rootVisitDepartment.getId());
+                if (payments != null) {
+                    for (BillVisitInput.BillingPaymentInput payment : payments) {
+                        VisitBillingPayment billingPayment =
+                            new VisitBillingPayment();
+                        billingPayment.setVisitDepartmentBilling(departmentBilling);
+                        billingPayment.setBillingVersion(billingVersionFinal);
+                        billingPayment.setAmount(toMoney(payment.amount()));
+                        billingPayment.setPaymentMethod(payment.paymentMethod());
+                        billingPayment.setReference(payment.reference());
+                        departmentBilling.getPayments().add(billingPayment);
+                    }
                 }
+                paymentRecordedFor.add(rootVisitDepartment.getId());
             }
 
             BigDecimal total = ZERO;
@@ -729,6 +910,20 @@ public class VisitBillingService {
                 String deptName = dept != null && dept.getDepartment() != null
                     ? dept.getDepartment().getName()
                     : "department";
+                if (isEdit && carriedPaidByDepartment.containsKey(entry.getKey())) {
+                    // N2: the corrected bill is smaller than the amount already paid
+                    // (e.g. a paid product was erased). Surface this clearly instead of
+                    // silently dropping the patient's money. The correction must be
+                    // adjusted (e.g. keep the paid product, or submit a smaller payment
+                    // set that matches the corrected bill) because the refund/adjustment
+                    // mechanism does not exist in editBillVisit.
+                    return ApiResponse.error(
+                        "The corrected bill for " + deptName + " (" +
+                        entry.getValue().toPlainString() +
+                        ") is smaller than the amount already paid. Keep the paid product or " +
+                        "adjust the payments before correcting the billing."
+                    );
+                }
                 return ApiResponse.error(
                     "Payment amount would exceed the patient payable amount for " + deptName + "."
                 );
@@ -757,6 +952,22 @@ public class VisitBillingService {
             visitBilling
         );
 
+        // B2 fix: invalidate invoices of ALL previous billing versions.
+        // The old code checked insuranceBilling.getInvoiceUrl() on a freshly created
+        // object (always null), so stale PDFs from earlier versions were never cleared.
+        if (isEdit) {
+            List<DepartmentInsuranceBilling> oldBillings =
+                departmentInsuranceBillingRepository.findAllByVisitIdExcludingVersion(
+                    visit.getId(),
+                    billingVersionFinal.getId()
+                );
+            for (DepartmentInsuranceBilling oldBilling : oldBillings) {
+                if (oldBilling.getInvoiceUrl() != null) {
+                    oldBilling.setInvoiceUrl(null);
+                    departmentInsuranceBillingRepository.save(oldBilling);
+                }
+            }
+        }
 
         visitDepartmentProductRepository.saveAll(productsToSave);
 
@@ -791,8 +1002,32 @@ public class VisitBillingService {
             // invoices for changed insurance billings.
         }
 
+        // D2 fix: surface which products are still pending billing instead of a
+        // generic success message that hides a partially-billed visit.
+        String successMessage = "Visit billed successfully.";
+        if (isEdit && previousVersionFullyPaid) {
+            successMessage =
+                "Visit re-billed successfully. Note: the previous billing version was fully paid — " +
+                "verify the carried-forward payments.";
+        }
+        if (!fullyBilled) {
+            List<String> pendingProductNames = loadVisitDepartmentProducts(visit.getId())
+                .stream()
+                .filter(p -> !p.isDeleted() && requiresBilling(p))
+                .map(p -> productName(p))
+                .toList();
+            if (!pendingProductNames.isEmpty()) {
+                successMessage =
+                    "Visit billed successfully. " +
+                    pendingProductNames.size() +
+                    " product(s) still pending billing: " +
+                    String.join(", ", pendingProductNames) +
+                    ".";
+            }
+        }
+
         return ApiResponse.success(
-            "Visit billed successfully.",
+            successMessage,
             visitBillingToMap(savedVisitBilling)
         );
     }
@@ -807,9 +1042,18 @@ public class VisitBillingService {
         }
 
         Worker actingUser = resolveWorker(authUser);
+        if (actingUser == null) {
+            // F3/F4 fix: fail closed (see billOrEditVisitInternal).
+            return ApiResponse.error("Authentication is required to record a payment.");
+        }
         // For consistency with billing/editing rules: block payments when user has unread notes.
         // (If you want payments allowed even with unread notes, we can relax this.)
-        UUID visitId = resolveVisitIdForDepartmentInsuranceBilling(input.departmentInsuranceBillingId());
+        // A3 fix: use the LIGHTWEIGHT visitId lookup here (it does not hydrate the billing
+        // entity), so the billing row is not cached in the persistence context with a
+        // pre-lock snapshot before we acquire the per-visit lock below.
+        UUID visitId = departmentInsuranceBillingRepository
+            .findVisitIdById(input.departmentInsuranceBillingId())
+            .orElse(null);
         if (visitId != null) {
             long unreadNotes = countUnreadNotesForVisit(visitId, actingUser);
             if (unreadNotes > 0) {
@@ -826,8 +1070,19 @@ public class VisitBillingService {
             return ApiResponse.error("amount must be greater than 0.");
         }
 
+        // A3/A4 fix: acquire the per-visit lock BEFORE reading paidAmount so the
+        // read-modify-write is serialized against concurrent payments/edits (otherwise two
+        // payments could both pass the <= patientPayable check and overpay or lose one).
+        if (visitId != null) {
+            visitRepository.findByIdForUpdate(visitId);
+        }
+
+        // A3 fix: load the billing row with a PESSIMISTIC_WRITE lock AFTER the per-visit
+        // lock. The FOR UPDATE re-reads committed state into the persistence context, so
+        // paidAmount below reflects any payment a concurrent transaction already committed
+        // (a plain findById here would return the stale pre-lock snapshot).
         Optional<DepartmentInsuranceBilling> billingOptional =
-            departmentInsuranceBillingRepository.findByIdWithDepartmentBillingAndVisit(
+            departmentInsuranceBillingRepository.findByIdWithDepartmentBillingAndVisitForUpdate(
                 input.departmentInsuranceBillingId()
             );
         if (billingOptional.isEmpty()) {
@@ -845,9 +1100,35 @@ public class VisitBillingService {
             );
         }
 
+        // H1/H2 fix: a payment must always target the LATEST billing version. Paying
+        // against an old version would silently mutate stale data the finance team no
+        // longer sees as authoritative. Legacy rows with no version are accepted only
+        // when the visit has no version rows at all (pre-version-system data).
+        Optional<com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion> latestVersionOpt =
+            visitBillingVersionRepository.findFirstByVisitIdOrderByVersionDesc(visit.getId());
+        UUID latestVersionId = latestVersionOpt
+            .map(com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion::getId)
+            .orElse(null);
+        UUID paymentVersionId = insuranceBilling.getBillingVersion() == null
+            ? null
+            : insuranceBilling.getBillingVersion().getId();
+        boolean isLatestVersion =
+            latestVersionId == null
+                ? paymentVersionId == null
+                : latestVersionId.equals(paymentVersionId);
+        if (!isLatestVersion) {
+            return ApiResponse.error(
+                "Payment must be recorded against the latest billing version. Refresh the billing data and try again."
+            );
+        }
+
         // Validate note requirement: mandatory when payment leaves an outstanding balance
+        // (null-safe: legacy rows may have a NULL paid_amount -> treat as zero).
+        BigDecimal currentPaid = insuranceBilling.getPaidAmount() == null
+            ? ZERO
+            : insuranceBilling.getPaidAmount();
         BigDecimal candidatePaid = toMoney(
-            insuranceBilling.getPaidAmount().add(input.amount())
+            currentPaid.add(input.amount())
         );
         if (
             candidatePaid.compareTo(
@@ -870,7 +1151,7 @@ public class VisitBillingService {
         }
 
         BigDecimal nextPaid = toMoney(
-            insuranceBilling.getPaidAmount().add(input.amount())
+            currentPaid.add(input.amount())
         );
         if (
             nextPaid.compareTo(insuranceBilling.getPatientPayableAmount()) > 0
@@ -897,6 +1178,9 @@ public class VisitBillingService {
             insuranceBilling.getVisitDepartmentBilling();
         VisitBillingPayment billingPayment = new VisitBillingPayment();
         billingPayment.setVisitDepartmentBilling(departmentBilling);
+        // S6 fix: populate the billing version on payments recorded outside the
+        // initial billing flow so the payment audit trail is complete.
+        billingPayment.setBillingVersion(insuranceBilling.getBillingVersion());
         billingPayment.setAmount(toMoney(input.amount()));
         billingPayment.setPaymentMethod(input.paymentMethod());
         billingPayment.setReference(input.reference());
@@ -961,8 +1245,9 @@ public class VisitBillingService {
             return ApiResponse.error("visitId is required.");
         }
 
-        List<VisitBilling> billings =
-            visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId);
+        List<VisitBilling> billings = orderByVersionDesc(
+            visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId)
+        );
         if (billings.isEmpty()) {
             return ApiResponse.error("Visit billing not found.");
         }
@@ -983,16 +1268,30 @@ public class VisitBillingService {
             return ApiResponse.error("Visit not found.");
         }
 
-        List<Map<String, Object>> billings = visitBillingRepository
-            .findByVisitIdOrderByCreatedAtDesc(visitId)
-            .stream()
+        List<Map<String, Object>> billings = orderByVersionDesc(
+            visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId)
+        ).stream()
             .map(this::visitBillingToMap)
             .toList();
 
         return ApiResponse.success("Visit billings fetched.", billings);
     }
 
-    @Transactional
+    /**
+     * Generates an invoice PDF for a department insurance billing row.
+     *
+     * <p>The work is split into three short phases so the slow PDF rendering and the
+     * Supabase HTTP upload NEVER hold a DB transaction/connection open:
+     * <ol>
+     *   <li><b>Snapshot</b> — a short read-only transaction authenticates, validates
+     *       and loads every association the renderer touches (via
+     *       {@code findByIdWithInvoiceData}) into an {@link InvoiceSnapshot}.</li>
+     *   <li><b>Render + upload</b> — runs entirely OUTSIDE any transaction.</li>
+     *   <li><b>Persist</b> — a short write transaction stores the object path.</li>
+     * </ol>
+     * Only {@code IOException} was caught before; a runtime failure inside the renderer
+     * or the HTTP client now degrades to a clean error instead of an uncaught 500.
+     */
     public ApiResponse generateInvoice(
         UUID departmentInsuranceBillingId,
         AuthenticatedUser authUser
@@ -1003,39 +1302,22 @@ public class VisitBillingService {
             );
         }
 
-        Worker actingUser = resolveWorker(authUser);
-        UUID visitId = resolveVisitIdForDepartmentInsuranceBilling(departmentInsuranceBillingId);
-        if (visitId != null) {
-            long unreadNotes = countUnreadNotesForVisit(visitId, actingUser);
-            if (unreadNotes > 0) {
-                return ApiResponse.error("You have unread notes. Please read them before generating an invoice.");
-            }
+        // Phase 1 — short read-only tx: authenticate, validate, snapshot the data the
+        // PDF needs. All lazy associations are eagerly fetched inside the tx.
+        InvoiceSnapshot snapshot = readOnlyTransactionTemplate.execute(
+            status -> loadInvoiceSnapshot(departmentInsuranceBillingId, authUser)
+        );
+        if (snapshot == null) {
+            return ApiResponse.error("Unable to load invoice data. Please try again.");
         }
-        Optional<DepartmentInsuranceBilling> billingOptional =
-            departmentInsuranceBillingRepository.findByIdWithDepartmentBillingAndVisit(
-                departmentInsuranceBillingId
-            );
-        if (billingOptional.isEmpty()) {
-            return ApiResponse.error("Department insurance billing not found.");
+        if (snapshot.error() != null) {
+            return snapshot.error();
         }
 
-        DepartmentInsuranceBilling billing = billingOptional.get();
-        Visit visit = billing
-            .getVisitDepartmentBilling()
-            .getVisitBilling()
-            .getVisit();
-        if (visit == null) {
-            return ApiResponse.error("Visit not found for billing.");
-        }
+        DepartmentInsuranceBilling billing = snapshot.billing();
 
-        if (!isVisitFullyBilled(visit.getId())) {
-            return ApiResponse.error(
-                "Invoice can only be generated after all visit products are billed."
-            );
-        }
-
+        // Invoice already stored — return a fresh signed URL (pure IO, no DB tx held).
         if (hasText(billing.getInvoiceUrl())) {
-            // Invoice already stored — return a fresh signed URL
             try {
                 String signed = supabaseStorageService.signedUrl(
                     billing.getInvoiceUrl(),
@@ -1052,61 +1334,168 @@ public class VisitBillingService {
             }
         }
 
+        // Phase 2 — PDF render + upload, entirely OUTSIDE any DB transaction.
+        String objectPath;
         try {
-            ClinicProfile clinicProfile = clinicProfileRepository
-                .findFirstByOrderByCreatedAtAsc()
-                .orElse(null);
-            String objectPath = generateInvoicePdfFile(billing, clinicProfile);
+            objectPath = generateInvoicePdfFile(snapshot);
+        } catch (Exception e) {
+            log.error(
+                "Invoice generation failed for billing {}: {}",
+                departmentInsuranceBillingId,
+                e.getMessage(),
+                e
+            );
+            return ApiResponse.error("Failed to generate or upload invoice.");
+        }
+
+        // Phase 3 — short write tx: persist the object path so getInvoice can sign it.
+        // If the persist fails (or the billing row vanished mid-flight), the uploaded
+        // file would be an orphan with no DB reference — clean it up best-effort.
+        boolean persisted;
+        try {
+            persisted = persistInvoiceUrl(departmentInsuranceBillingId, objectPath);
+        } catch (Exception e) {
+            log.error(
+                "Invoice uploaded for billing {} but object path could not be persisted: {}",
+                departmentInsuranceBillingId,
+                e.getMessage(),
+                e
+            );
+            cleanupOrphanedInvoice(departmentInsuranceBillingId, objectPath);
+            return ApiResponse.error(
+                "Invoice was generated but could not be saved. Please try again."
+            );
+        }
+        if (!persisted) {
+            // The billing row disappeared between snapshot and persist (concurrent
+            // edit/delete). Do not report success for a file nothing references.
+            log.warn(
+                "Invoice {} for billing {} could not be persisted — billing row not found; cleaning up upload.",
+                objectPath,
+                departmentInsuranceBillingId
+            );
+            cleanupOrphanedInvoice(departmentInsuranceBillingId, objectPath);
+            return ApiResponse.error(
+                "Invoice could not be saved because the billing record is no longer available. Please refresh and try again."
+            );
+        }
+
+        try {
             String signed = supabaseStorageService.signedUrl(objectPath, 300);
             return ApiResponse.success(
                 "Invoice generated successfully.",
                 Map.of("signedUrl", signed)
             );
         } catch (IOException e) {
-            return ApiResponse.error("Failed to generate or upload invoice.");
-        }
-    }
-
-    private void generateInvoicesWhenVisitFullyBilled(UUID visitId) {
-        ClinicProfile clinicProfile = clinicProfileRepository
-            .findFirstByOrderByCreatedAtAsc()
-            .orElse(null);
-        for (DepartmentInsuranceBilling billing : departmentInsuranceBillingRepository.findAllByVisitIdWithDetails(
-            visitId
-        )) {
-            if (hasText(billing.getInvoiceUrl())) {
-                continue;
-            }
-            try {
-                generateInvoicePdfFile(billing, clinicProfile);
-            } catch (IOException ignored) {
-                // Billing should remain successful even if PDF generation fails.
-            }
+            return ApiResponse.error(
+                "Invoice generated but could not create download URL."
+            );
         }
     }
 
     /**
-     * Generates the invoice PDF, uploads it to Supabase Storage, persists the
-     * object path in {@code billing.invoiceUrl}, and returns that path.
-     * The caller is responsible for turning the path into a signed URL.
+     * Phase-1 helper (runs inside a short read-only transaction): resolves the acting
+     * user, runs the unread-notes gate and the latest-version / fully-billed guards,
+     * and snapshots everything {@link InvoicePdfGenerator} needs. Returns an
+     * {@link InvoiceSnapshot} carrying either a clean error or the loaded data.
+     */
+    private InvoiceSnapshot loadInvoiceSnapshot(
+        UUID departmentInsuranceBillingId,
+        AuthenticatedUser authUser
+    ) {
+        Worker actingUser = resolveWorker(authUser);
+        if (actingUser == null) {
+            // F3/F4 fix: fail closed (see billOrEditVisitInternal).
+            return InvoiceSnapshot.error(
+                "Authentication is required to generate an invoice."
+            );
+        }
+        UUID visitId = resolveVisitIdForDepartmentInsuranceBilling(
+            departmentInsuranceBillingId
+        );
+        if (visitId != null) {
+            long unreadNotes = countUnreadNotesForVisit(visitId, actingUser);
+            if (unreadNotes > 0) {
+                return InvoiceSnapshot.error(
+                    "You have unread notes. Please read them before generating an invoice."
+                );
+            }
+        }
+        Optional<DepartmentInsuranceBilling> billingOptional =
+            departmentInsuranceBillingRepository.findByIdWithInvoiceData(
+                departmentInsuranceBillingId
+            );
+        if (billingOptional.isEmpty()) {
+            return InvoiceSnapshot.error("Department insurance billing not found.");
+        }
+
+        DepartmentInsuranceBilling billing = billingOptional.get();
+        Visit visit = billing
+            .getVisitDepartmentBilling()
+            .getVisitBilling()
+            .getVisit();
+        if (visit == null) {
+            return InvoiceSnapshot.error("Visit not found for billing.");
+        }
+
+        // Flow I: invoices are only ever generated for the LATEST billing version.
+        // Old versions have their invoiceUrl cleared by editBillVisit (B2 fix); this
+        // guard prevents regenerating a fresh PDF from stale data via an old row id.
+        Optional<com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion> latestVersionOpt =
+            visitBillingVersionRepository.findFirstByVisitIdOrderByVersionDesc(visit.getId());
+        UUID latestVersionId = latestVersionOpt
+            .map(com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion::getId)
+            .orElse(null);
+        UUID invoiceVersionId = billing.getBillingVersion() == null
+            ? null
+            : billing.getBillingVersion().getId();
+        boolean isLatestVersion =
+            latestVersionId == null
+                ? invoiceVersionId == null
+                : latestVersionId.equals(invoiceVersionId);
+        if (!isLatestVersion) {
+            return InvoiceSnapshot.error(
+                "Invoices can only be generated for the latest billing version. Use the current billing data."
+            );
+        }
+
+        if (!isVisitFullyBilled(visit.getId())) {
+            return InvoiceSnapshot.error(
+                "Invoice can only be generated after all visit products are billed."
+            );
+        }
+
+        ClinicProfile clinicProfile = clinicProfileRepository
+            .findFirstByOrderByCreatedAtAsc()
+            .orElse(null);
+
+        List<Map<String, Object>> items = visitBillingItemRepository
+            .findByDepartmentInsuranceBillingIdWithProduct(billing.getId())
+            .stream()
+            .map(this::visitBillingItemToMap)
+            .toList();
+
+        return InvoiceSnapshot.ready(billing, clinicProfile, items);
+    }
+
+    /**
+     * Phase-2 helper (runs OUTSIDE any DB transaction): renders the invoice PDF to a
+     * temp file and uploads it to Supabase Storage. Returns the uploaded object path.
+     * Persisting the path is the caller's job ({@link #persistInvoiceUrl}).
      */
     private String generateInvoicePdfFile(
-        DepartmentInsuranceBilling billing,
-        ClinicProfile clinicProfile
+        InvoiceSnapshot snapshot
     ) throws IOException {
+        DepartmentInsuranceBilling billing = snapshot.billing();
+        ClinicProfile clinicProfile = snapshot.clinicProfile();
+
         // Render PDF to a temp file
         Path tempFile = Files.createTempFile("invoice-", ".pdf");
         try {
-            List<Map<String, Object>> items = visitBillingItemRepository
-                .findByDepartmentInsuranceBillingIdWithProduct(billing.getId())
-                .stream()
-                .map(this::visitBillingItemToMap)
-                .toList();
-
             InvoicePdfGenerator.createInvoicePdf(
                 tempFile,
                 billing,
-                items,
+                snapshot.items(),
                 clinicProfile
             );
 
@@ -1120,13 +1509,86 @@ public class VisitBillingService {
                 billing.getId().toString()
             );
             supabaseStorageService.upload(pdfBytes, objectPath);
-
-            // Persist the object path (not a URL) so getInvoice can sign it later
-            billing.setInvoiceUrl(objectPath);
-            departmentInsuranceBillingRepository.save(billing);
             return objectPath;
         } finally {
             Files.deleteIfExists(tempFile);
+        }
+    }
+
+    /**
+     * Phase-3 helper (runs in its own short write transaction): persists the uploaded
+     * object path on the billing row so {@code getInvoice} can sign it later. Kept
+     * separate from the render/upload IO so the write never holds a DB connection
+     * during the slow PDF/HTTP work. Returns {@code false} when the billing row no
+     * longer exists (the caller must not report success).
+     */
+    private boolean persistInvoiceUrl(
+        UUID departmentInsuranceBillingId,
+        String objectPath
+    ) {
+        return transactionTemplate.execute(status -> {
+            Optional<DepartmentInsuranceBilling> billingOptional =
+                departmentInsuranceBillingRepository.findById(departmentInsuranceBillingId);
+            if (billingOptional.isEmpty()) {
+                return false;
+            }
+            DepartmentInsuranceBilling billing = billingOptional.get();
+            billing.setInvoiceUrl(objectPath);
+            departmentInsuranceBillingRepository.save(billing);
+            return true;
+        });
+    }
+
+    /**
+     * Best-effort removal of an uploaded invoice file that no DB row references
+     * (persist failed or the billing row vanished mid-flight). Never throws — the
+     * orphan is logged and left for manual cleanup if Supabase is unreachable.
+     */
+    private void cleanupOrphanedInvoice(
+        UUID departmentInsuranceBillingId,
+        String objectPath
+    ) {
+        if (objectPath == null || objectPath.isBlank()) {
+            return;
+        }
+        try {
+            supabaseStorageService.delete("data", objectPath);
+            log.info(
+                "Cleaned up orphaned invoice upload {} for billing {}.",
+                objectPath,
+                departmentInsuranceBillingId
+            );
+        } catch (Exception e) {
+            log.warn(
+                "Could not clean up orphaned invoice upload {} for billing {}: {}",
+                objectPath,
+                departmentInsuranceBillingId,
+                e.getMessage()
+            );
+        }
+    }
+
+    /**
+     * Immutable snapshot of everything the invoice PDF renderer needs, captured inside
+     * a short read-only transaction. All lazy associations on {@code billing} are
+     * eagerly fetched, so the entity can be safely rendered outside any transaction.
+     */
+    private record InvoiceSnapshot(
+        ApiResponse<?> error,
+        DepartmentInsuranceBilling billing,
+        ClinicProfile clinicProfile,
+        List<Map<String, Object>> items
+    ) {
+        static InvoiceSnapshot error(String message) {
+            return new InvoiceSnapshot(ApiResponse.error(message), null, null, List.of());
+        }
+
+        static InvoiceSnapshot ready(
+            DepartmentInsuranceBilling billing,
+            ClinicProfile clinicProfile,
+            List<Map<String, Object>> items
+        ) {
+            return new InvoiceSnapshot(null, billing, clinicProfile, items);
         }
     }
 
@@ -1141,6 +1603,11 @@ public class VisitBillingService {
         List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(visitId);
         long total = 0;
         for (VisitDepartment vd : departments) {
+            // F1 fix: notes on CANCELLED departments must not block billing of the
+            // departments that are actually being billed.
+            if (vd.getStatus() == com.nexxserve.nexxclinic.model.VisitDepartmentStatus.CANCELLED) {
+                continue;
+            }
             total += visitDepartmentNoteRepository.countNewNotesForViewer(vd.getId(), viewer.getId());
         }
         return total;
@@ -1152,6 +1619,10 @@ public class VisitBillingService {
         }
 
         Worker actingUser = resolveWorker(authUser);
+        if (actingUser == null) {
+            // F3/F4 fix: fail closed (see billOrEditVisitInternal).
+            return ApiResponse.error("Authentication is required to edit billing.");
+        }
         long unreadNotes = countUnreadNotesForVisit(input.visitId(), actingUser);
         if (unreadNotes > 0) {
             return ApiResponse.error("You have unread notes. Please read them before editing billing.");
@@ -1182,6 +1653,43 @@ public class VisitBillingService {
                 return ApiResponse.error("Visit department does not belong to the visit.");
             }
 
+            // B7 fix: validate updatedProducts vs billProducts quantity conflicts BEFORE
+            // any mutation so a rejected correction never leaves half-applied changes.
+            Map<UUID, BigDecimal> updatedQtyByProductId = new HashMap<>();
+            if (dept.updatedProducts() != null) {
+                for (EditBillVisitInput.EditBillVisitUpdateProductInput upd : dept.updatedProducts()) {
+                    if (upd != null && upd.productId() != null && upd.quantity() != null) {
+                        updatedQtyByProductId.put(upd.productId(), upd.quantity());
+                    }
+                }
+            }
+            if (dept.billProducts() != null) {
+                for (EditBillVisitInput.EditBillVisitBillProductInput bp : dept.billProducts()) {
+                    if (bp == null || bp.productId() == null) {
+                        continue;
+                    }
+                    BigDecimal updatedQty = updatedQtyByProductId.get(bp.productId());
+                    if (
+                        updatedQty != null &&
+                        bp.quantity() != null &&
+                        updatedQty.compareTo(bp.quantity()) != 0
+                    ) {
+                        VisitDepartmentProduct vdp = visitDepartmentProductRepository
+                            .findByVisitDepartmentIdAndProductId(dept.visitDepartmentId(), bp.productId())
+                            .orElse(null);
+                        return ApiResponse.error(
+                            "Quantity mismatch for product '" +
+                            (vdp != null ? productName(vdp) : bp.productId()) +
+                            "': updatedProducts.quantity (" +
+                            updatedQty +
+                            ") differs from billProducts.quantity (" +
+                            bp.quantity() +
+                            "). Provide the same quantity in both."
+                        );
+                    }
+                }
+            }
+
             // removals (by productId) — soft delete so historical billing items remain valid
             if (dept.removedProductIds() != null) {
                 for (UUID productId : dept.removedProductIds()) {
@@ -1192,9 +1700,22 @@ public class VisitBillingService {
                     if (vdp == null) {
                         return ApiResponse.error("Product to remove not found in the visit department.");
                     }
+                    // Profile-sourced products are managed by the visit department's
+                    // profile: they cannot be removed from billing individually —
+                    // changeVisitDepartmentProfile is the only way to replace them.
+                    if (vdp.getSource() == com.nexxserve.nexxclinic.model.VisitDepartmentProductSource.PROFILE) {
+                        return ApiResponse.error(
+                            "Product '" + productName(vdp) + "' is a profile product and cannot be removed from billing. " +
+                            "Change the visit department's profile instead."
+                        );
+                    }
                     if (!vdp.isDeleted()) {
                         vdp.setDeleted(true);
-                        visitDepartmentProductRepository.save(vdp);
+                        try {
+                            visitDepartmentProductRepository.saveAndFlush(vdp);
+                        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+                            return ApiResponse.error("Unable to remove the product due to a data conflict. Refresh and try again.");
+                        }
                     }
                 }
             }
@@ -1217,10 +1738,16 @@ public class VisitBillingService {
                     if (upd.quantity() != null) {
                         vdp.setQuantity(toQuantity(upd.quantity()));
                     }
-                    // On correction, mark as UNPAID so billing can re-evaluate.
-                    vdp.setStatus(VisitProductStatus.UNPAID);
+                    // On correction, mark as CORRECTION_PENDING (was BILLED/EXEMPTED)
+                    // so billing can re-evaluate. Transient: Phase 2 re-bills it in the
+                    // same transaction, moving it back to BILLED/EXEMPTED.
+                    vdp.setStatus(VisitProductStatus.CORRECTION_PENDING);
                     vdp.setBilledBy(null);
-                    visitDepartmentProductRepository.save(vdp);
+                    try {
+                        visitDepartmentProductRepository.saveAndFlush(vdp);
+                    } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+                        return ApiResponse.error("Unable to update the product due to a data conflict. Refresh and try again.");
+                    }
                 }
             }
 
@@ -1243,11 +1770,17 @@ public class VisitBillingService {
                         .findByVisitDepartmentIdAndProductIdIncludingDeleted(vd.getId(), product.getId())
                         .orElse(null);
                     if (existing != null) {
+                        // Un-delete + update: this product was billed in a previous
+                        // version, so mark it CORRECTION_PENDING.
                         existing.setQuantity(toQuantity(add.quantity()));
-                        existing.setStatus(VisitProductStatus.UNPAID);
+                        existing.setStatus(VisitProductStatus.CORRECTION_PENDING);
                         existing.setBilledBy(null);
                         existing.setDeleted(false);
-                        visitDepartmentProductRepository.save(existing);
+                        try {
+                            visitDepartmentProductRepository.saveAndFlush(existing);
+                        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+                            return ApiResponse.error("Unable to add the product due to a data conflict. Refresh and try again.");
+                        }
                         continue;
                     }
 
@@ -1255,14 +1788,37 @@ public class VisitBillingService {
                     vdp.setVisitDepartment(vd);
                     vdp.setProduct(product);
                     vdp.setQuantity(toQuantity(add.quantity()));
-                    // keep price as 0; billing uses unitPriceSnapshot from billProducts
-                    vdp.setPrice(BigDecimal.ZERO);
+                    // E1 fix: default the live-row price to the catalog price instead of 0.
+                    // billing falls back to item.getPrice() when billProducts.unitPrice is
+                    // omitted, so a 0 here silently billed the new product for free.
+                    vdp.setPrice(
+                        product.getClinicPrice() == null
+                            ? BigDecimal.ZERO
+                            : product.getClinicPrice()
+                    );
                     vdp.setAddedBy(actingUser);
-                    vdp.setStatus(VisitProductStatus.UNPAID);
+                    // Freshly added, never billed -> PENDING.
+                    vdp.setStatus(VisitProductStatus.PENDING);
 
-                    visitDepartmentProductRepository.save(vdp);
+                    try {
+                        visitDepartmentProductRepository.saveAndFlush(vdp);
+                    } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+                        // Partial unique index: a concurrent edit added the same product.
+                        return ApiResponse.error(
+                            "Product already exists in this visit department."
+                        );
+                    }
                 }
             }
+        }
+
+        // B3 fix: an edit-billing correction mutates the visit's products, so a
+        // COMPLETED visit must be reopened (IN_PROGRESS) for the correction window.
+        // Previously applyVisitProductCorrections never called reopenVisitIfCompleted,
+        // leaving the visit COMPLETED while products were being corrected.
+        if (visit.getStatus() == VisitStatus.COMPLETED) {
+            visit.setStatus(VisitStatus.IN_PROGRESS);
+            visitRepository.save(visit);
         }
 
         return null; // success
@@ -1273,6 +1829,18 @@ public class VisitBillingService {
             input.departments() == null
                 ? List.of()
                 : input.departments().stream().map(d -> {
+                    // Collect the quantities declared in updatedProducts so Phase 2 can
+                    // detect (and reject) conflicting quantities instead of silently
+                    // overwriting the correction (B7 fix).
+                    Map<UUID, BigDecimal> updatedQtyByProductId = new HashMap<>();
+                    if (d.updatedProducts() != null) {
+                        for (EditBillVisitInput.EditBillVisitUpdateProductInput upd : d.updatedProducts()) {
+                            if (upd != null && upd.productId() != null && upd.quantity() != null) {
+                                updatedQtyByProductId.put(upd.productId(), upd.quantity());
+                            }
+                        }
+                    }
+
                     // Map productId -> visitDepartmentProductId using the (corrected) current visit department state
                     List<BillVisitInput.BillVisitDepartmentProductInput> billProducts =
                         d.billProducts() == null
@@ -1283,6 +1851,26 @@ public class VisitBillingService {
                                     .orElse(null);
                                 if (vdp == null) {
                                     throw new IllegalArgumentException("Product not found in visit department for billing: " + bp.productId());
+                                }
+                                BigDecimal updatedQty = updatedQtyByProductId.get(
+                                    bp.productId()
+                                );
+                                if (
+                                    updatedQty != null &&
+                                    bp.quantity() != null &&
+                                    updatedQty.compareTo(bp.quantity()) != 0
+                                ) {
+                                    throw new IllegalArgumentException(
+                                        "Quantity mismatch for product '" +
+                                        productName(vdp) +
+                                        "' (id: " +
+                                        bp.productId() +
+                                        "): updatedProducts.quantity (" +
+                                        updatedQty +
+                                        ") differs from billProducts.quantity (" +
+                                        bp.quantity() +
+                                        "). Provide the same quantity in both."
+                                    );
                                 }
                                 return new BillVisitInput.BillVisitDepartmentProductInput(
                                     vdp.getId(),
@@ -1317,6 +1905,22 @@ public class VisitBillingService {
             .orElse(null);
     }
 
+    private List<VisitBilling> orderByVersionDesc(List<VisitBilling> billings) {
+        if (billings == null || billings.isEmpty()) {
+            return billings == null ? List.of() : billings;
+        }
+        return billings.stream()
+            .sorted(
+                java.util.Comparator.comparingInt(
+                    (VisitBilling b) ->
+                        b.getBillingVersion() == null
+                            ? -1
+                            : b.getBillingVersion().getVersion()
+                ).reversed()
+            )
+            .toList();
+    }
+
     private boolean hasAnyExistingBilling(UUID visitId) {
         if (visitId == null) {
             return false;
@@ -1329,16 +1933,32 @@ public class VisitBillingService {
             throw new IllegalArgumentException("visit is required");
         }
 
-        com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion latest = visitBillingVersionRepository
-            .findFirstByVisitIdOrderByVersionDesc(visit.getId())
-            .orElse(null);
+        // Retry once on a unique-index collision ((visit_id, version) unique): a
+        // concurrent un-locked path could have inserted a version between our read and
+        // save. Re-read the max version and retry; if it still collides, rethrow so the
+        // transaction fails loudly instead of writing a duplicate.
+        for (int attempt = 0; attempt < 2; attempt++) {
+            com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion latest = visitBillingVersionRepository
+                .findFirstByVisitIdOrderByVersionDesc(visit.getId())
+                .orElse(null);
 
-        com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion v =
-            new com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion();
-        v.setVisit(visit);
-        v.setVersion(latest == null ? 1 : (latest.getVersion() + 1));
-        v.setSupersedesVersionId(latest == null ? null : latest.getId());
-        return visitBillingVersionRepository.save(v);
+            com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion v =
+                new com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion();
+            v.setVisit(visit);
+            v.setVersion(latest == null ? 1 : (latest.getVersion() + 1));
+            v.setSupersedesVersionId(latest == null ? null : latest.getId());
+            try {
+                // saveAndFlush: the unique index on (visit_id, version) is only checked at
+                // flush time — a plain save() defers the INSERT and the violation would
+                // surface at commit, outside this catch, making the retry dead code.
+                return visitBillingVersionRepository.saveAndFlush(v);
+            } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+                if (attempt == 1) {
+                    throw ex;
+                }
+            }
+        }
+        throw new IllegalStateException("Unable to allocate a billing version. Please retry.");
     }
 
     private List<VisitDepartmentProduct> loadVisitDepartmentProducts(
@@ -1356,10 +1976,19 @@ public class VisitBillingService {
     }
 
     private boolean requiresBilling(VisitDepartmentProduct item) {
+        // PENDING, UNPAID and CORRECTION_PENDING all require billing.
         return (
             item.getStatus() != VisitProductStatus.BILLED &&
             item.getStatus() != VisitProductStatus.EXEMPTED
         );
+    }
+
+    private String productName(VisitDepartmentProduct item) {
+        if (item == null || item.getProduct() == null) {
+            return "Unknown product";
+        }
+        String name = item.getProduct().getName();
+        return name == null || name.isBlank() ? "Unknown product" : name;
     }
 
     private UUID resolveRootVisitDepartmentId(VisitDepartment visitDepartment) {
@@ -1487,9 +2116,15 @@ public class VisitBillingService {
     }
 
     private boolean isVisitFullyBilled(UUID visitId) {
-        List<VisitDepartmentProduct> items = loadVisitDepartmentProducts(
-            visitId
-        );
+        // B6 fix: evaluate ALL rows, including soft-deleted ones, explicitly.
+        // A soft-deleted product was removed from the current bill (it either has
+        // billing history from a previous version or was removed before ever being
+        // billed), so it never blocks completion. Only non-deleted products must be
+        // BILLED/EXEMPTED for the visit to be considered fully billed.
+        List<VisitDepartmentProduct> items =
+            visitDepartmentProductRepository.findByVisitDepartmentVisitIdIncludingDeleted(
+                visitId
+            );
         if (items.isEmpty()) {
             return false;
         }
@@ -1498,6 +2133,7 @@ public class VisitBillingService {
             .stream()
             .allMatch(
                 item ->
+                    item.isDeleted() ||
                     item.getStatus() == VisitProductStatus.BILLED ||
                     item.getStatus() == VisitProductStatus.EXEMPTED
             );
@@ -1723,11 +2359,17 @@ public class VisitBillingService {
         }
 
         int deletedCount = 0;
+        int skippedCount = 0;
         for (VisitDepartmentProduct vdp : softDeleted) {
+            // B4 fix: NEVER delete VisitBillingItem rows. A soft-deleted product with
+            // billing history must be kept (deleted = true) so historical billing
+            // versions keep a valid FK. Only hard-delete products without any
+            // billing history.
             List<VisitBillingItem> billingItems = visitBillingItemRepository
                 .findByVisitDepartmentProductId(vdp.getId());
             if (!billingItems.isEmpty()) {
-                visitBillingItemRepository.deleteAll(billingItems);
+                skippedCount++;
+                continue;
             }
             visitDepartmentProductRepository.delete(vdp);
             deletedCount++;
@@ -1735,7 +2377,7 @@ public class VisitBillingService {
 
         return ApiResponse.success(
             "Soft-deleted products flushed successfully.",
-            Map.of("deletedCount", deletedCount)
+            Map.of("deletedCount", deletedCount, "skippedCount", skippedCount)
         );
     }
 }
