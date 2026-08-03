@@ -439,7 +439,7 @@ type DepartmentProfile {
   updatedAt: String!
 }
 
-type Department {
+type ..Department {
   id: ID!
   name: String!
   insurancePolicyMode: DepartmentInsurancePolicyMode!
@@ -1244,6 +1244,8 @@ All validations occur before the child department is created:
 - processorId is required if the department has multiple processors or supportRequests is enabled
 - If any product cannot be added, the child department is NOT created
 - A child department with 0 products will never exist; it is deleted if the last product is removed
+- profileId is reserved and rejected: child departments always support requests,
+  and profiles can only be set on departments that do not support requests
 """
 input AddChildVisitDepartmentInput {
   parentVisitDepartmentId: ID!
@@ -1570,14 +1572,22 @@ type Mutation {
   removeDepartmentProfile(profileId: ID!): DepartmentResponse!
   createVisit(input: CreateVisitInput!): VisitResponse!
   changeVisitDate(input: ChangeVisitDateInput!): VisitResponse!
+
+  """
+  Add a department to a visit. The department's default profile is NEVER
+  auto-applied — a profile is set only when an explicit profileId is provided,
+  and only on departments that do not support requests. Without a profileId the
+  visit department is created without a profile (add products manually or change
+  the profile later via changeVisitDepartmentProfile).
+  """
   addVisitDepartment(visitId: ID!, departmentId: ID!, profileId: ID, encounterType: EncounterType, processorId: ID): VisitResponse!
 
   """
-  Change the department profile used by a visit department. Replaces its
-  PROFILE-sourced products with the new profile's products (USER products are
+  Set (or clear) the profile used by a visit department, swapping its
+  PROFILE-sourced products for the new profile's products (USER products are
   kept). Profile products cannot be removed individually — this is the only way
-  to replace them. Pass no profileId to fall back to the department's default
-  profile (or clear the profile if none exists).
+  to replace them. Profiles can only be set on departments that do not support
+  requests. Pass no profileId to clear the profile.
   """
   changeVisitDepartmentProfile(visitDepartmentId: ID!, profileId: ID): VisitDepartmentResponse!
 

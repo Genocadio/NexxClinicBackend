@@ -15,9 +15,10 @@ public record CreateVisitDepartmentInput(
         EncounterType encounterType,
 
         /**
-         * Optional department profile whose products are auto-added to the visit
-         * department as source=PROFILE. When omitted, the department's default
-         * profile (if any) is used.
+         * Optional department profile whose products are added to the visit
+         * department as source=PROFILE. Never auto-applied: when omitted, no
+         * profile is set on the visit department. Only departments that do not
+         * support requests can have a profile.
          */
         UUID profileId,
 

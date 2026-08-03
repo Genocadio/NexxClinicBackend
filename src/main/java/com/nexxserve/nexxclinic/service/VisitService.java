@@ -683,10 +683,11 @@ public class VisitService {
 
             VisitDepartment savedVisitDepartment = visitDepartmentRepository.save(visitDepartment);
 
-            // Apply the department profile (explicit or default) so its products are
-            // auto-added as source=PROFILE. Explicitly listed products are still applied
-            // afterwards (duplicates are skipped by addProductsToVisitDepartment's
-            // seen-products set).
+            // Apply the department profile ONLY when an explicit profileId is provided
+            // (profiles are never auto-applied) so its products are added as
+            // source=PROFILE. Explicitly listed products are still applied afterwards
+            // (duplicates are skipped by addProductsToVisitDepartment's seen-products
+            // set).
             ApiResponse profileError = visitDepartmentService.applyProfileToVisitDepartment(
                     savedVisitDepartment,
                     departmentInput.profileId(),

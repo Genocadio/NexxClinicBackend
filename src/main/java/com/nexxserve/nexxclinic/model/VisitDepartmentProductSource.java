@@ -7,9 +7,10 @@ package com.nexxserve.nexxclinic.model;
  * <ul>
  *   <li>{@link #USER} — added manually through the normal add-product flow
  *       (addVisitDepartmentProduct, createVisit products, editBillVisit additions).</li>
- *   <li>{@link #PROFILE} — added automatically from a department profile when the
- *       department was added to the visit (or the visit department's profile was
- *       changed). Profile products are managed by the profile: they cannot be
+ *   <li>{@link #PROFILE} — added from a department profile that was explicitly
+ *       applied to the visit department (via addVisitDepartment/createVisit with a
+ *       profileId, or changeVisitDepartmentProfile). Profiles are never
+ *       auto-applied. Profile products are managed by the profile: they cannot be
  *       removed individually — change the visit department's profile instead.</li>
  * </ul>
  */

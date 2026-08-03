@@ -16,9 +16,9 @@ public record AddChildVisitDepartmentInput(
         List<AddChildVisitDepartmentProductInput> products,
 
         /**
-         * Optional department profile whose products are auto-added as source=PROFILE.
-         * When omitted, the department's default profile (if any) is used. At least one
-         * product must exist on the child after creation (explicit + profile), because
+         * Deprecated/reserved: child departments always support requests, and
+         * profiles can only be set on departments that do not support requests — so
+         * a profile can never be used here. At least one product is required, since
          * child departments can never exist with zero products.
          */
         UUID profileId,

@@ -146,16 +146,25 @@ public class VisitDepartmentService {
             return ApiResponse.error("Department is already added to this visit.");
         }
 
-        // Resolve the profile to apply: an explicit profileId wins; otherwise the
-        // department's default profile is used (if one exists).
-        DepartmentProfile profile = resolveProfileForDepartment(departmentId, profileId);
-        if (profileId != null && profile == null) {
-            return ApiResponse.error("Profile not found or does not belong to this department.");
+        Department department = departmentOptional.get();
+
+        // Profiles are NEVER auto-applied anymore: a department is added without a
+        // profile unless an explicit profileId is provided, and only departments
+        // that do not support requests can have a profile set.
+        DepartmentProfile profile = null;
+        if (profileId != null) {
+            if (department.isSupportRequests()) {
+                return ApiResponse.error("Profiles can only be set on departments that do not support requests.");
+            }
+            profile = resolveProfileForDepartment(departmentId, profileId);
+            if (profile == null) {
+                return ApiResponse.error("Profile not found or does not belong to this department.");
+            }
         }
 
         VisitDepartment visitDepartment = new VisitDepartment();
         visitDepartment.setVisit(visit);
-        visitDepartment.setDepartment(departmentOptional.get());
+        visitDepartment.setDepartment(department);
         visitDepartment.setProfile(profile);
         if (encounterType != null) {
             visitDepartment.setEncounterType(encounterType);
@@ -224,6 +233,11 @@ public class VisitDepartmentService {
             return ApiResponse.error("Visit department has no linked department.");
         }
 
+        // Profiles can only be set on departments that do not support requests.
+        if (profileId != null && visitDepartment.getDepartment().isSupportRequests()) {
+            return ApiResponse.error("Profiles can only be set on departments that do not support requests.");
+        }
+
         DepartmentProfile profile = resolveProfileForDepartment(departmentId, profileId);
         if (profileId != null && profile == null) {
             return ApiResponse.error("Profile not found or does not belong to this department.");
@@ -272,28 +286,33 @@ public class VisitDepartmentService {
     }
 
     private DepartmentProfile resolveProfileForDepartment(UUID departmentId, UUID profileId) {
-        if (profileId != null) {
-            return departmentProfileRepository.findById(profileId)
-                .filter(p -> p.getDepartment() != null && departmentId.equals(p.getDepartment().getId()))
-                .orElse(null);
+        if (profileId == null) {
+            return null; // profiles are only ever set explicitly — never auto-applied
         }
-        return departmentProfileRepository.findFirstByDepartmentIdAndIsDefaultTrue(departmentId).orElse(null);
+        return departmentProfileRepository.findById(profileId)
+            .filter(p -> p.getDepartment() != null && departmentId.equals(p.getDepartment().getId()))
+            .orElse(null);
     }
 
     /**
-     * Resolves the profile (explicit {@code profileId} or the department's default),
-     * attaches it to the visit department and auto-adds its products as source=PROFILE.
-     * Used by createVisit so departments added during visit creation get their profile
-     * products too. Returns an error ApiResponse only when an explicit profileId was
-     * supplied but is invalid; otherwise null on success.
+     * Applies an explicitly provided profile to a visit department, adding its
+     * products as source=PROFILE. Profiles are never auto-applied: a null
+     * {@code profileId} leaves the department without a profile. Only departments
+     * that do not support requests can have a profile set.
      */
     public ApiResponse applyProfileToVisitDepartment(VisitDepartment visitDepartment, UUID profileId, Worker actingUser) {
         if (visitDepartment == null || visitDepartment.getDepartment() == null) {
             return ApiResponse.error("Visit department is required.");
         }
-        UUID departmentId = visitDepartment.getDepartment().getId();
-        DepartmentProfile profile = resolveProfileForDepartment(departmentId, profileId);
-        if (profileId != null && profile == null) {
+        if (profileId == null) {
+            visitDepartment.setProfile(null);
+            return null;
+        }
+        if (visitDepartment.getDepartment().isSupportRequests()) {
+            return ApiResponse.error("Profiles can only be set on departments that do not support requests.");
+        }
+        DepartmentProfile profile = resolveProfileForDepartment(visitDepartment.getDepartment().getId(), profileId);
+        if (profile == null) {
             return ApiResponse.error("Profile not found or does not belong to this department.");
         }
         visitDepartment.setProfile(profile);
@@ -360,11 +379,15 @@ public class VisitDepartmentService {
             return ApiResponse.error("parentVisitDepartmentId and departmentId are required.");
         }
         boolean hasExplicitProducts = input.products() != null && !input.products().isEmpty();
-        if (!hasExplicitProducts && input.profileId() == null) {
-            // Products can come from the request OR from a department profile. With
-            // neither, the child would be created with zero products, which is
-            // forbidden — children can never exist with zero products.
-            return ApiResponse.error("At least one product or a profile is required for a child department.");
+        // Child departments always support requests, and profiles can only be set on
+        // departments that do NOT support requests — so children can never use a
+        // profile and must come with at least one explicit product.
+        if (input.profileId() != null) {
+            return ApiResponse.error("Profiles cannot be used on child departments. Add products instead.");
+        }
+        if (!hasExplicitProducts) {
+            // Children can never exist with zero products.
+            return ApiResponse.error("At least one product is required for a child department.");
         }
 
         Optional<VisitDepartment> parentOptional = visitDepartmentRepository.findById(input.parentVisitDepartmentId());
@@ -454,66 +477,56 @@ public class VisitDepartmentService {
 
         VisitDepartment savedChild = visitDepartmentRepository.save(child);
 
-        // Apply the department profile first (explicit profileId or the department's
-        // default profile) so its products are added as source=PROFILE.
-        ApiResponse profileError = applyProfileToVisitDepartment(savedChild, input.profileId(), actingUser);
-        if (profileError != null) {
-            org.springframework.transaction.interceptor.TransactionAspectSupport
-                .currentTransactionStatus()
-                .setRollbackOnly();
-            return profileError;
-        }
+        // hasExplicitProducts is guaranteed true here (guards above reject the
+        // no-product case), so the loop always runs.
+        for (var productInput : input.products()) {
+            Optional<Product> productOptional = productRepository.findById(productInput.productId());
+            if (productOptional.isEmpty()) {
+                return ApiResponse.error("Product not found.");
+            }
 
-        if (hasExplicitProducts) {
-            for (var productInput : input.products()) {
-                Optional<Product> productOptional = productRepository.findById(productInput.productId());
-                if (productOptional.isEmpty()) {
-                    return ApiResponse.error("Product not found.");
-                }
+            // Skip products already present (same dedupe rule as
+            // addVisitDepartmentProduct / addProductsToVisitDepartment).
+            if (visitDepartmentProductRepository.findByVisitDepartmentIdAndProductId(
+                    savedChild.getId(), productInput.productId()).isPresent()) {
+                continue;
+            }
 
-                // Skip products already added by the profile (same dedupe rule as
-                // addVisitDepartmentProduct / addProductsToVisitDepartment).
-                if (visitDepartmentProductRepository.findByVisitDepartmentIdAndProductId(
-                        savedChild.getId(), productInput.productId()).isPresent()) {
-                    continue;
-                }
+            VisitDepartmentProduct item = new VisitDepartmentProduct();
+            item.setVisitDepartment(savedChild);
+            item.setProduct(productOptional.get());
+            item.setQuantity(normalizeQuantity(BigDecimal.valueOf(productInput.quantity())));
+            item.setPrice(resolveUnitPriceSnapshot(productOptional.get(), null));
+            item.setStatus(VisitProductStatus.PENDING);
 
-                VisitDepartmentProduct item = new VisitDepartmentProduct();
-                item.setVisitDepartment(savedChild);
-                item.setProduct(productOptional.get());
-                item.setQuantity(normalizeQuantity(BigDecimal.valueOf(productInput.quantity())));
-                item.setPrice(resolveUnitPriceSnapshot(productOptional.get(), null));
-                item.setStatus(VisitProductStatus.PENDING);
+            ApiResponse processorError = assignVisitDepartmentProductProcessor(savedChild, item, actingUser, input.processorId());
+            if (processorError != null) {
+                // C2 fix: the child department was already saved above. Returning an error
+                // ApiResponse would COMMIT it (Spring only rolls back on exceptions),
+                // leaving an empty child department behind. Mark rollback-only.
+                org.springframework.transaction.interceptor.TransactionAspectSupport
+                    .currentTransactionStatus()
+                    .setRollbackOnly();
+                return processorError;
+            }
 
-                ApiResponse processorError = assignVisitDepartmentProductProcessor(savedChild, item, actingUser, input.processorId());
-                if (processorError != null) {
-                    // C2 fix: the child department was already saved above. Returning an error
-                    // ApiResponse would COMMIT it (Spring only rolls back on exceptions),
-                    // leaving an empty child department behind. Mark rollback-only.
-                    org.springframework.transaction.interceptor.TransactionAspectSupport
-                        .currentTransactionStatus()
-                        .setRollbackOnly();
-                    return processorError;
-                }
-
-                item.setAddedBy(actingUser);
-                try {
-                    // saveAndFlush: unique index only checked at flush time.
-                    visitDepartmentProductRepository.saveAndFlush(item);
-                } catch (org.springframework.dao.DataIntegrityViolationException ex) {
-                    // Partial unique index: concurrent add of the same product raced us.
-                    org.springframework.transaction.interceptor.TransactionAspectSupport
-                        .currentTransactionStatus()
-                        .setRollbackOnly();
-                    return ApiResponse.error(
-                        "Product already exists in this child visit department."
-                    );
-                }
+            item.setAddedBy(actingUser);
+            try {
+                // saveAndFlush: unique index only checked at flush time.
+                visitDepartmentProductRepository.saveAndFlush(item);
+            } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+                // Partial unique index: concurrent add of the same product raced us.
+                org.springframework.transaction.interceptor.TransactionAspectSupport
+                    .currentTransactionStatus()
+                    .setRollbackOnly();
+                return ApiResponse.error(
+                    "Product already exists in this child visit department."
+                );
             }
         }
 
-        // A profile may legitimately contain zero products — but a child department can
-        // never exist with zero products. Roll back if both sources produced nothing.
+        // A child department can never exist with zero products. Roll back if nothing
+        // was actually added.
         List<VisitDepartmentProduct> childProducts = visitDepartmentProductRepository.findByVisitDepartmentId(savedChild.getId());
         if (childProducts.isEmpty()) {
             org.springframework.transaction.interceptor.TransactionAspectSupport

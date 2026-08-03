@@ -10,5 +10,5 @@ public interface DepartmentProfileRepository extends JpaRepository<DepartmentPro
 
     List<DepartmentProfile> findByDepartmentId(UUID departmentId);
 
-    Optional<DepartmentProfile> findFirstByDepartmentIdAndIsDefaultTrue(UUID departmentId);
+
 }

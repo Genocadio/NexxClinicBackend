@@ -46,9 +46,10 @@ public class VisitDepartment {
     private Department department;
 
     /**
-     * The department profile used when this department was added to the visit
-     * (or last changed via changeVisitDepartmentProfile). Null when added without
-     * a profile. Products auto-added from the profile carry source=PROFILE and are
+     * The department profile explicitly applied to this visit department (via
+     * addVisitDepartment/createVisit with a profileId, or
+     * changeVisitDepartmentProfile). Never auto-applied: null when added without
+     * a profile. Products added from the profile carry source=PROFILE and are
      * managed by the profile (they cannot be removed individually).
      */
     @ManyToOne(fetch = FetchType.LAZY)

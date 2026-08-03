@@ -52,9 +52,9 @@ public class VisitDepartmentProduct {
     /**
      * How this product was added to the visit department:
      * {@link VisitDepartmentProductSource#USER} (manual) or
-     * {@link VisitDepartmentProductSource#PROFILE} (auto-added from a department
-     * profile). Profile-sourced products cannot be removed individually — change
-     * the visit department's profile instead.
+     * {@link VisitDepartmentProductSource#PROFILE} (added from an explicitly
+     * applied department profile). Profile-sourced products cannot be removed
+     * individually — change the visit department's profile instead.
      */
     @Enumerated(EnumType.STRING)
     @Column(name = "source", nullable = false, length = 16)
