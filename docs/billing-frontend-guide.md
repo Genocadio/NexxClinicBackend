@@ -105,7 +105,7 @@ Query the visit first (e.g. `visit(visitId)`), which returns departments → pro
 | each product's `id` | `departments[].products[].visitDepartmentProductId` |
 | product's `quantity` | `departments[].products[].quantity` (only if you want to change it for billing) |
 | how the line is billed | `departments[].products[].coverageType` — **REQUIRED**, `PRIVATE` or `INSURANCE`. You must decide per line; the backend no longer auto-detects insurance (see §3.3) |
-| ~~product's shown price~~ | **DO NOT SEND.** The `price` field was removed from the input — the backend derives the price from the catalog (`clinicPrice` / `privateRhicPrice`) or the applied insurance coverage. The frontend only displays the price |
+| ~~product's shown price~~ | **DO NOT SEND.** The `price` field was removed from the input — the backend derives the price from the catalog (`clinicPrice` for PRIVATE; the applied insurance coverage cost for INSURANCE) or the applied insurance coverage. The frontend only displays the price |
 | child department's products | also `parentVisitDepartmentId` = the visit department that **owns** the product (the child's own id — the API field name "parent" is misleading). Products on child departments bill under their **root** department. |
 
 ```graphql
@@ -176,7 +176,7 @@ mutation Bill($input: BillVisitInput!) {
 
 ### 3.2 Price & quantity
 
-> 🚨 **Breaking change — the `price` field is GONE.** The `price` / `unitPrice` field has been **removed from both `BillVisitInput` and `EditBillVisitInput`**. Do not send it — the backend derives every line's unit price from the product catalog (`clinicPrice` → `privateRhicPrice`) or the applied insurance coverage cost. The frontend's only job is to **display** the price; it must never submit one. A wrong price is fixed in the product catalog / coverage, then the visit is re-billed.
+> 🚨 **Breaking change — the `price` field is GONE.** The `price` / `unitPrice` field has been **removed from both `BillVisitInput` and `EditBillVisitInput`**. Do not send it — the backend derives every line's unit price from the product catalog or the applied insurance coverage cost. PRIVATE lines are priced from `clinicPrice` only (internal clinic: the RHIC private price list is no longer used for billing); INSURANCE lines use the coverage cost. The frontend's only job is to **display** the price; it must never submit one. A wrong price is fixed in the product catalog / coverage, then the visit is re-billed.
 
 - `quantity` overrides the quantity **for the billing snapshot only** in `billVisit` mode.
 - Line total = unit price × quantity (money-rounded to 2 dp).

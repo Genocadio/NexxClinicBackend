@@ -103,7 +103,8 @@ public class BillingPricingCalculator {
     /**
      * Default unit price for a line when the request does not override it:
      * insurance coverage cost for covered products (throws if missing), otherwise
-     * the clinic price, otherwise the private RHIC price, otherwise zero.
+     * the clinic price for PRIVATE lines (internal clinic: the RHIC private price
+     * list is not used for billing), otherwise zero.
      */
     public BigDecimal resolveDefaultUnitPrice(
         VisitDepartmentProduct item,
@@ -130,9 +131,6 @@ public class BillingPricingCalculator {
         Product product = item.getProduct();
         if (product.getClinicPrice() != null) {
             return MoneyUtils.toMoney(product.getClinicPrice());
-        }
-        if (product.getPrivateRhicPrice() != null) {
-            return MoneyUtils.toMoney(product.getPrivateRhicPrice());
         }
         return MoneyUtils.ZERO;
     }

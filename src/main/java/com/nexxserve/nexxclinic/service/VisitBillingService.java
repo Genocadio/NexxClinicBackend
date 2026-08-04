@@ -473,6 +473,35 @@ public class VisitBillingService {
         // forward. Require edits to cover every ROOT department with non-deleted products
         // (products may live on child departments, which bill under their root).
         //
+
+        // DIAG: submitted payments and the running remaining-paid per department.
+        if (log.isInfoEnabled()) {
+            log.info(
+                "[BILL-DIAG] visit={} isEdit={} effectiveIsEdit={} departmentsInRequest={}",
+                visit.getId(), isEdit, effectiveIsEdit,
+                input.departments() == null ? 0 : input.departments().size()
+            );
+            for (UUID deptId : rootDepartments.keySet()) {
+                VisitDepartment dept = rootDepartments.get(deptId);
+                String deptName = dept != null && dept.getDepartment() != null
+                    ? dept.getDepartment().getName()
+                    : "department";
+                List<BillVisitInput.BillingPaymentInput> payments =
+                    rootPaymentsByDepartment.get(deptId);
+                String paymentsSummary = payments == null
+                    ? "[]"
+                    : payments.stream()
+                        .map(p -> p == null ? "null"
+                            : p.paymentMethod() + "=" + p.amount())
+                        .collect(Collectors.joining(", ", "[", "]"));
+                log.info(
+                    "[BILL-DIAG] visit={} dept={} ({}): submittedPayments={} totalPaid={} remainingPaid={}",
+                    visit.getId(), deptId, deptName, paymentsSummary,
+                    paymentDistributor.totalPayments(payments),
+                    remainingPaidByDepartment.getOrDefault(deptId, ZERO)
+                );
+            }
+        }
         // Note: a department that appears in the previous billing container but has NO
         // active products today (e.g. all products soft-deleted by an earlier edit, or a
         // legacy hard-delete) is intentionally NOT required — it has nothing billable, so
@@ -1006,6 +1035,35 @@ public class VisitBillingService {
                     patientAmount = toMoney(lineTotal.subtract(coveredAmount));
                 }
 
+                // DIAG: per-line money evaluation.
+                if (log.isInfoEnabled()) {
+                    String insuranceInfo = appliedInsurance == null
+                        ? "null"
+                        : appliedInsurance.getId()
+                            + "("
+                            + appliedInsurance.getInsuranceProvider().getInsuranceName()
+                            + ", card=" + appliedInsurance.getInsuranceCardNumber()
+                            + ", providerPct="
+                            + appliedInsurance.getInsuranceProvider().getDefaultCoveragePercentage()
+                            + ")";
+                    log.info(
+                        "[BILL-DIAG] visit={} rootDept={} product='{}' (id={}, qty={}, exempted={}, coverage={}, insurance={}): unitPrice={} lineTotal={} covered={} patientAmount={}",
+                        visit.getId(),
+                        group.rootVisitDepartmentId(),
+                        productName(item),
+                        item.getId(),
+                        quantity,
+                        isExempted,
+                        entry.getValue().isEmpty() ? "n/a" : appliedInsurance == null
+                            ? "PRIVATE" : "INSURANCE",
+                        insuranceInfo,
+                        unitPrice,
+                        lineTotal,
+                        coveredAmount,
+                        patientAmount
+                    );
+                }
+
                 // Snapshot the visit product for this billing version (immutable history).
                 // The snapshot is NOT persisted here — it is saved only after every
                 // validation has passed so a failed bill leaves no partial writes behind.
@@ -1118,6 +1176,42 @@ public class VisitBillingService {
                     departmentBilling.getPatientPayableAmount()
                 )
             );
+
+            // DIAG: bucket + department summary after money evaluation and payment
+            // allocation for this billing group.
+            if (log.isInfoEnabled()) {
+                String insuranceLabel = group.patientInsuranceId() == null
+                    ? "PRIVATE"
+                    : group.patientInsuranceId().toString();
+                log.info(
+                    "[BILL-DIAG] visit={} rootDept={} BUCKET insurance={}: total={} insuranceCovered={} patientPayable={} paidAmount={} outstanding={} status={} | remainingBefore={} allocatedNow={} remainingAfter={}",
+                    visit.getId(),
+                    group.rootVisitDepartmentId(),
+                    insuranceLabel,
+                    total,
+                    insuranceCovered,
+                    patientPayable,
+                    paidAmount,
+                    outstanding,
+                    insuranceBilling.getStatus(),
+                    remainingPaidAmount,
+                    paidAmount,
+                    remainingPaidByDepartment.getOrDefault(
+                        group.rootVisitDepartmentId(), ZERO
+                    )
+                );
+                log.info(
+                    "[BILL-DIAG] visit={} rootDept={} DEPT total={} insuranceCovered={} patientPayable={} paidAmount={} outstanding={} status={}",
+                    visit.getId(),
+                    group.rootVisitDepartmentId(),
+                    departmentBilling.getTotalAmount(),
+                    departmentBilling.getInsuranceCoveredAmount(),
+                    departmentBilling.getPatientPayableAmount(),
+                    departmentBilling.getPaidAmount(),
+                    departmentBilling.getOutstandingAmount(),
+                    departmentBilling.getStatus()
+                );
+            }
         }
 
         // Reject overpayment: if any department has remaining unapplied payments
@@ -1128,6 +1222,28 @@ public class VisitBillingService {
                 String deptName = dept != null && dept.getDepartment() != null
                     ? dept.getDepartment().getName()
                     : "department";
+                // DIAG: dump the overpayment context before rejecting.
+                if (log.isInfoEnabled()) {
+                    VisitDepartmentBilling deptBilling = departmentBillingByRoot.get(entry.getKey());
+                    log.info(
+                        "[BILL-DIAG] visit={} REJECT overpayment dept={} ({}): unallocatedRemaining={} effectiveIsEdit={} carriedPaid={} submittedTotal={} deptTotal={} deptInsuranceCovered={} deptPatientPayable={} deptPaid={} deptOutstanding={} deptStatus={}",
+                        visit.getId(),
+                        entry.getKey(),
+                        deptName,
+                        entry.getValue(),
+                        effectiveIsEdit,
+                        carriedPaidByDepartment.getOrDefault(entry.getKey(), ZERO),
+                        paymentDistributor.totalPayments(
+                            rootPaymentsByDepartment.get(entry.getKey())
+                        ),
+                        deptBilling == null ? null : deptBilling.getTotalAmount(),
+                        deptBilling == null ? null : deptBilling.getInsuranceCoveredAmount(),
+                        deptBilling == null ? null : deptBilling.getPatientPayableAmount(),
+                        deptBilling == null ? null : deptBilling.getPaidAmount(),
+                        deptBilling == null ? null : deptBilling.getOutstandingAmount(),
+                        deptBilling == null ? null : deptBilling.getStatus()
+                    );
+                }
                 if (effectiveIsEdit && carriedPaidByDepartment.containsKey(entry.getKey())) {
                     // N2: the corrected bill is smaller than the amount already paid
                     // (e.g. a paid product was erased). Surface this clearly instead of
