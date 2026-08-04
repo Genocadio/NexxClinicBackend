@@ -19,8 +19,6 @@ public record CreateVisitDepartmentProductInput(
 
         BigDecimal quantity,
 
-        BigDecimal price,
-
         VisitProductStatus status
 ) {
 }

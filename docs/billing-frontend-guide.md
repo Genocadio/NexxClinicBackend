@@ -2,6 +2,12 @@
 
 Everything the frontend needs to know to bill a visit, collect payments, correct billing, and fetch invoices. Written from the backend implementation (`VisitBillingService`, GraphQL schema, entities).
 
+> ## 🚨 What changed in this update (read before integrating)
+>
+> 1. **`price` was REMOVED from the billing inputs.** `BillVisitInput` and `EditBillVisitInput` no longer accept any price/unit-price field. The backend derives every line's price from the product catalog / insurance coverage. Your code must **stop sending prices** — it only displays them (see §3.2).
+> 2. **`coverageType` is now REQUIRED on every billed product line** — `PRIVATE` or `INSURANCE`. There is **no auto-detection**: the backend no longer picks an insurance for you. `PRIVATE` forbids `patientInsuranceId`; `INSURANCE` requires it (see §3.3).
+> 3. **Billed visits can no longer be cancelled.** `cancelVisit` is rejected once the visit has any billing container (see §6).
+
 ---
 
 ## 1. Mental model (read this first)
@@ -33,7 +39,7 @@ Money fields (all are `Float`, money = 2 decimals):
 - `0 < paid < patientPayable` → `PARTIALLY_PAID`
 - `paid >= patientPayable` → `PAID`
 
-Product lifecycle: `PENDING` (added, not billed) → `BILLED` (billed) or `EXEMPTED` (billed at zero). `CORRECTION_PENDING` is transient and only set/consumed inside `editBillVisit` — never send it.
+Product lifecycle: `PENDING` (added, not billed) → `BILLED` (billed) or `EXEMPTED` (billed at zero). `CORRECTION_PENDING` is transient and only set/consumed inside `editBillVisit` — never send it. Every billed line also carries an explicit `coverageType` (`PRIVATE` / `INSURANCE`) chosen by the frontend — the backend never infers it.
 
 **Global gate:** every billing operation (`billVisit`, `editBillVisit`, `recordVisitBillingPayment`, `generateInvoice`) is **blocked while the acting user has unread notes** on the visit. Check note read-state first.
 
@@ -66,7 +72,6 @@ mutation {
     departmentId: "...",     # the VISIT department id (from visit → departments[])
     productId: "...",        # catalog product id
     quantity: 2.0,           # optional, defaults to 1
-    price: 5000.0,           # optional override, defaults to the catalog clinic price
     processorId: "...",      # optional
     status: PENDING          # optional — only PENDING or UNPAID may be sent
   }) { status message data { ... } }
@@ -99,7 +104,8 @@ Query the visit first (e.g. `visit(visitId)`), which returns departments → pro
 | each **top-level** department's `id` | `departments[].visitDepartmentId` |
 | each product's `id` | `departments[].products[].visitDepartmentProductId` |
 | product's `quantity` | `departments[].products[].quantity` (only if you want to change it for billing) |
-| product's `price` | `departments[].products[].unitPrice` (only if you want to override the price) |
+| how the line is billed | `departments[].products[].coverageType` — **REQUIRED**, `PRIVATE` or `INSURANCE`. You must decide per line; the backend no longer auto-detects insurance (see §3.3) |
+| ~~product's shown price~~ | **DO NOT SEND.** The `price` field was removed from the input — the backend derives the price from the catalog (`clinicPrice` / `privateRhicPrice`) or the applied insurance coverage. The frontend only displays the price |
 | child department's products | also `parentVisitDepartmentId` = the visit department that **owns** the product (the child's own id — the API field name "parent" is misleading). Products on child departments bill under their **root** department. |
 
 ```graphql
@@ -145,8 +151,8 @@ mutation Bill($input: BillVisitInput!) {
           "visitDepartmentProductId": "uuid",  // REQUIRED
           "parentVisitDepartmentId": "uuid",   // for products on a child dept: the visit department that OWNS the product (the child's own id)
           "quantity": 2.0,                     // optional; billing-snapshot only (does NOT mutate the product)
-          "unitPrice": 5000.0,                 // optional; billing-snapshot only (does NOT mutate the product)
-          "patientInsuranceId": "uuid",        // optional; must be linked to the visit AND cover the product
+          "coverageType": "PRIVATE",           // REQUIRED — PRIVATE or INSURANCE (see §3.3)
+          "patientInsuranceId": "uuid",        // ONLY with coverageType: INSURANCE; must be linked to the visit, be active and cover the product
           "isExempted": true                   // optional; see §3.4
         }
       ],
@@ -163,26 +169,30 @@ mutation Bill($input: BillVisitInput!) {
 
 - Every `visitDepartmentId` must be a **top-level** visit department of this visit, and unique in the payload.
 - Every `visitDepartmentProductId` must exist, belong to (a descendant of) the declared department, and be **not yet billed** (`PENDING` / `UNPAID`). Already-`BILLED`/`EXEMPTED` products are rejected → use `editBillVisit`.
+- Every product line must set **`coverageType`** (`PRIVATE` / `INSURANCE`) — there is no default and no auto-detection. `PRIVATE` with a `patientInsuranceId` is rejected; `INSURANCE` without one is rejected.
 - **Self-healing:** if products carry `BILLED`/`EXEMPTED` status but the visit has **no billing container at all** (an orphaned status left behind by a failed billing attempt — `visitBilling(visitId)` returns *"Visit billing not found"*), `billVisit` automatically resets them to `PENDING` and bills them normally. Only products that belong to a real (existing) bill require `editBillVisit`.
 - Duplicate product ids are rejected.
-- `quantity > 0`, `unitPrice >= 0`, `amount > 0`.
+- `quantity > 0`, `amount > 0`.
 
-### 3.2 Price & quantity overrides
+### 3.2 Price & quantity
 
-- `unitPrice` overrides the price **for the billing snapshot only**. The stored product price (`visitDepartmentProduct.price`) is untouched by `billVisit`.
+> 🚨 **Breaking change — the `price` field is GONE.** The `price` / `unitPrice` field has been **removed from both `BillVisitInput` and `EditBillVisitInput`**. Do not send it — the backend derives every line's unit price from the product catalog (`clinicPrice` → `privateRhicPrice`) or the applied insurance coverage cost. The frontend's only job is to **display** the price; it must never submit one. A wrong price is fixed in the product catalog / coverage, then the visit is re-billed.
+
 - `quantity` overrides the quantity **for the billing snapshot only** in `billVisit` mode.
-- Line total = `unitPrice × quantity` (money-rounded to 2 dp).
+- Line total = unit price × quantity (money-rounded to 2 dp).
 
 ### 3.3 Insurance
 
-- Products are grouped into `insuranceBillings` by (root department, applied insurer). A product with no insurer goes into the uninsured bucket (`patientInsurance: null`).
-- `patientInsuranceId` — when sent, it must be one of the visit's linked insurances **and** the product must have a `ProductInsuranceCoverage` for that insurer with `covered = true`. Otherwise: error.
-- When omitted, the backend auto-picks the first visit insurance whose coverage covers the product.
-- Insurance covered amount = `coverage.cost × quantity`, **capped at the line total**. The patient pays the remainder.
+Coverage is now **explicit per line** via `coverageType` — there is **no auto-assignment** anymore. The backend never "picks" an insurance for you; the frontend declares each line's coverage.
+
+- `coverageType: PRIVATE` — the line bills without insurance. `patientInsuranceId` must be **omitted** (sending it → error).
+- `coverageType: INSURANCE` — `patientInsuranceId` is **required** and must satisfy **all** of: it is linked to the visit, it belongs to the visit's patient, its policy is active (covers today), and the product has a `ProductInsuranceCoverage` for that insurer with `covered = true`. Otherwise → *"Selected patientInsuranceId is invalid: it is not linked to this visit, does not cover the product, or the insurance policy is not active."*
+- Lines are grouped into `insuranceBillings` by (root department, applied insurer). A `PRIVATE` line goes into the uninsured bucket (`patientInsurance: null`).
+- **Money split:** the insurer's `defaultCoveragePercentage` is the **patient's share**. The insurer covers `(100 − defaultCoveragePercentage)%` of the coverage cost (`coverage.cost × quantity`), **capped at the line total**; the patient pays the remainder. E.g. `defaultCoveragePercentage = 15` → insurance covers 85%, patient pays 15%.
 
 ### 3.4 Exemptions (free/zero-priced lines)
 
-- `isExempted: true` forces the line to zero: `unitPrice = 0`, `quantity = 1`, `total = 0`, `insurance = 0`, `patient = 0`, product status → `EXEMPTED`.
+- `isExempted: true` forces the line to zero: unit price = 0, `quantity = 1`, `total = 0`, `insurance = 0`, `patient = 0`, product status → `EXEMPTED`.
 - **A billing `note` is REQUIRED for the department** when any of its products is exempted.
 
 ### 3.5 Payments & the remaining balance
@@ -247,8 +257,8 @@ mutation Pay($input: RecordVisitBillingPaymentInput!) {
         {
           "productId": "uuid",            // NOTE: productId (not visitDepartmentProductId) in edit mode
           "quantity": 3.0,
-          "unitPrice": 4800.0,
-          "patientInsuranceId": "uuid",
+          "coverageType": "PRIVATE",      // REQUIRED — PRIVATE or INSURANCE (see §3.3)
+          "patientInsuranceId": "uuid",   // ONLY with coverageType: INSURANCE
           "isExempted": false
         }
       ],
@@ -268,14 +278,15 @@ mutation Pay($input: RecordVisitBillingPaymentInput!) {
 | **Add a new product** | `addedProducts: [{ productId, quantity }]` **and** include it in `billProducts` so it is billed in the new version. |
 | **Remove a product** | `removedProductIds: [productId]` and **exclude** it from `billProducts`. The product is soft-deleted (billing history preserved). ⚠️ Each department entry must still bill **at least one** product — you cannot remove the last product of a department (`billProducts` may not end up empty). |
 | **Change quantity** | `updatedProducts: [{ productId, quantity }]` and the **same quantity** in the matching `billProducts.quantity` (mismatch → error). |
-| **Adjust price** | Only in `billProducts.unitPrice` (snapshot for the new version). No separate "update price" field. |
+| **Adjust price** | Not editable at bill level (the `price` field was **removed** from the input). Fix the price in the product catalog (or coverage), then re-run `editBillVisit` — the new version bills at the corrected catalog price. |
 | **Exempt a product** | `billProducts.isExempted: true` (plus the department `note`). |
-| **Change which insurance applies** | `billProducts.patientInsuranceId` (must be linked to the visit and cover the product). |
+| **Change which insurance applies** | `billProducts.coverageType: "INSURANCE"` + `billProducts.patientInsuranceId` (must be linked to the visit, active and cover the product). Set `coverageType: "PRIVATE"` to drop insurance off a line. |
 | **Add a payment / record balance** | `payments: [...]`, or leave it empty to carry the previous payments forward. |
 
 ### Rules & gotchas
 
 - **Must include every root department that has (non-deleted) products.** Omitting one → error: *"editBillVisit must include every department that has products…"*. The edit is a complete re-projection of the bill.
+- **`coverageType` is required on every `billProducts` entry** — same rules as §3.3: `PRIVATE` forbids `patientInsuranceId`; `INSURANCE` requires a valid one.
 - **Quantity conflicts** between `updatedProducts.quantity` and `billProducts.quantity` for the same product → error. Keep them identical.
 - **Products with billing history are never hard-deleted.** `removedProductIds` soft-deletes the row (`deleted = true`); historical billing items keep pointing at it.
 - **Every department entry must bill ≥ 1 product.** An edit that empties a department (`billProducts` resolves to zero billable products, e.g. removing its last product) is rejected: *"Each department must contain at least one product to bill."* If a department truly has nothing billable left, leave it out of the payload (departments with no active products are not required).
@@ -299,8 +310,9 @@ Once a department is in `BILLING` (and has billing rows) or the visit is `COMPLE
 | `removeVisitDepartmentProduct` | billed department, product with billing history, or `PROFILE` product | — |
 | `updateVisitDepartmentStatus` | terminal (`COMPLETED`/`CANCELLED`) and billed-`BILLING` states | — |
 | `changeVisitDepartmentProfile` | billed department | — |
+| `cancelVisit` | visit has **any billing container** (a billed visit) | *"Cannot cancel a billed visit. Use editBillVisit to correct the billing."* |
 
-Also note: once a visit is billed, `billVisit` accepts only **identical re-bills** (it auto-creates the next version for them). Any change to a billed line — quantity, price, insurance, exemption, add/remove — must go through `editBillVisit`, which is the only path that syncs the products and re-projects the bill.
+Also note: once a visit is billed, `billVisit` accepts only **identical re-bills** (it auto-creates the next version for them). Any change to a billed line — quantity, insurance, exemption, add/remove, or a catalog price change — must go through `editBillVisit`, which is the only path that syncs the products and re-projects the bill.
 
 ---
 
@@ -405,7 +417,10 @@ enum PaymentMethod { CASH MOBILE_MONEY CARD BANK_TRANSFER CHEQUE MIXED }
 
 | Message | Meaning / action |
 |---|---|
-| *"… is already billed and the request changes its price, quantity, exemption or insurance. Use editBillVisit to correct the billing."* | An incremental `billVisit` may only re-bill a billed line **identically**. Send the same quantity/price/insurance/exemption, or switch to `editBillVisit` for the correction. |
+| *"patientInsuranceId cannot be provided when coverageType is PRIVATE."* | The line is `PRIVATE` but an insurance was sent — drop `patientInsuranceId` for private lines. |
+| *"patientInsuranceId is required when coverageType is INSURANCE."* | The line is `INSURANCE` but no `patientInsuranceId` — pick one of the visit's linked insurances. |
+| *"Selected patientInsuranceId is invalid: it is not linked to this visit, does not cover the product, or the insurance policy is not active."* | Choose a different visit-linked, active insurer that covers the product, or switch the line to `PRIVATE`. |
+| *"… is already billed and its price (as configured in the product catalog), quantity, exemption or insurance differs from the previously billed line. Use editBillVisit to correct the billing."* | An incremental `billVisit` may only re-bill a billed line **identically**. Send the same quantity/coverage type/insurance/exemption (the price always comes from the catalog), or switch to `editBillVisit` for the correction. |
 | *"You have unread notes. Please read them before billing/editing/payments/invoice."* | Mark the visit's notes read for the acting user, then retry. |
 | *"Payment amount would exceed the patient payable amount."* | Payment input is too large — cap at `outstandingAmount`. |
 | *"A billing note is required when items are exempted or the patient payment is less than the payable amount."* | Add `note` to the department entry. |
@@ -414,6 +429,7 @@ enum PaymentMethod { CASH MOBILE_MONEY CARD BANK_TRANSFER CHEQUE MIXED }
 | *"The corrected bill for … is smaller than the amount already paid."* | No refund path — keep the paid product or adjust the payments. |
 | *"… is a profile product and cannot be removed from billing."* | Change the visit department's profile instead. |
 | *"Payment must be recorded against the latest billing version."* | Refetch `visitBilling(visitId)` and use the current ids. |
+| *"Cannot cancel a billed visit. Use editBillVisit to correct the billing."* | The visit has a billing container — cancellation is no longer allowed. Correct the bill via `editBillVisit` instead. |
 | *"Invoices can only be generated for the latest billing version."* / *"…only be generated after all visit products are billed."* | Refetch; bill the remaining pending products first. |
 | *"Invalid billing selection: product '…' is already billed or exempted…"* | Product already billed — correct via `editBillVisit`. (If `visitBilling` says there is no bill for the visit, retry `billVisit`: the backend detects orphaned `BILLED`/`EXEMPTED` statuses with no container and resets them to `PENDING` automatically. The reset only persists on a *successful* bill — a failed bill rolls everything back, so a product is never silently left re-billable.) |
 

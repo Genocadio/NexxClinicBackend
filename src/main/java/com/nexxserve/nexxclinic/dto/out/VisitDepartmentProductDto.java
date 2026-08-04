@@ -10,7 +10,6 @@ public record VisitDepartmentProductDto(
         UUID id,
         ProductDto product,
         BigDecimal quantity,
-        BigDecimal price,
         VisitProductStatus status,
         VisitDepartmentProductSource source,
         WorkerDto addedBy,

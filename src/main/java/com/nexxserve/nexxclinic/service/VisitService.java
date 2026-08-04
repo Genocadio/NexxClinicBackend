@@ -131,7 +131,11 @@ public class VisitService {
             return ApiResponse.error("patientId is required.");
         }
 
-        Optional<Patient> patientOptional = patientRepository.findById(input.patientId());
+        // Lock the patient row (PESSIMISTIC_WRITE) before the duplicate-open-visit
+        // check: two concurrent createVisit calls for the same patient would otherwise
+        // both pass the check and each commit a CREATED visit. Serializing on the
+        // patient row makes the second request see the first's committed visit.
+        Optional<Patient> patientOptional = patientRepository.findByIdForUpdate(input.patientId());
         if (patientOptional.isEmpty()) {
             return ApiResponse.error("Patient not found.");
         }
@@ -524,6 +528,12 @@ public class VisitService {
             return ApiResponse.error("Completed visit cannot be cancelled.");
         }
 
+        // Billing guard: a visit that has been billed (any billing container exists)
+        // cannot be cancelled — it has a financial and audit trail.
+        if (!visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId).isEmpty()) {
+            return ApiResponse.error("Cannot cancel a billed visit. Use editBillVisit to correct the billing.");
+        }
+
         List<VisitDepartmentProduct> visitProducts = visitDepartmentProductRepository.findByVisitDepartmentVisitId(visitId);
         if (!visitProducts.isEmpty()) {
             return ApiResponse.error("Cannot cancel visit with existing products. Remove all products first.");
@@ -831,7 +841,6 @@ public class VisitService {
 
             item.setDeleted(false);
             item.setQuantity(normalizeQuantity(productInput.quantity()));
-            item.setPrice(resolveUnitPriceSnapshot(productOptional.get(), productInput.price()));
             item.setStatus(requestedStatus);
             ApiResponse processorError = visitDepartmentService.assignVisitDepartmentProductProcessor(visitDepartment, item, actingUser, productInput.processorId());
             if (processorError != null) {
@@ -1104,25 +1113,6 @@ public class VisitService {
             return java.math.BigDecimal.ONE;
         }
         return value;
-    }
-
-    public java.math.BigDecimal normalizePrice(java.math.BigDecimal value) {
-        if (value == null || value.compareTo(java.math.BigDecimal.ZERO) < 0) {
-            return java.math.BigDecimal.ZERO.setScale(2, java.math.RoundingMode.HALF_UP);
-        }
-        return value.setScale(2, java.math.RoundingMode.HALF_UP);
-    }
-
-    public java.math.BigDecimal resolveUnitPriceSnapshot(com.nexxserve.nexxclinic.entity.Product product, java.math.BigDecimal inputPrice) {
-        if (inputPrice != null && inputPrice.compareTo(java.math.BigDecimal.ZERO) >= 0) {
-            return normalizePrice(inputPrice);
-        }
-
-        if (product != null && product.getClinicPrice() != null && product.getClinicPrice().compareTo(java.math.BigDecimal.ZERO) >= 0) {
-            return normalizePrice(product.getClinicPrice());
-        }
-
-        return java.math.BigDecimal.ZERO;
     }
 
     private String blankToNull(String value) {

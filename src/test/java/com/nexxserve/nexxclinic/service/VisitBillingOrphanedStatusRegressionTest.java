@@ -12,6 +12,7 @@ import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
 import com.nexxserve.nexxclinic.entity.Worker;
 import com.nexxserve.nexxclinic.graphql.input.BillVisitInput;
 import com.nexxserve.nexxclinic.model.AccountStatus;
+import com.nexxserve.nexxclinic.model.CoverageType;
 import com.nexxserve.nexxclinic.model.Gender;
 import com.nexxserve.nexxclinic.model.PaymentMethod;
 import com.nexxserve.nexxclinic.model.ProductType;
@@ -170,7 +171,6 @@ class VisitBillingOrphanedStatusRegressionTest {
         vdp.setVisitDepartment(vd);
         vdp.setProduct(product);
         vdp.setQuantity(BigDecimal.ONE);
-        vdp.setPrice(new BigDecimal("100.00"));
         vdp.setStatus(productStatus);
         vdp.setSource(VisitDepartmentProductSource.USER);
         vdp.setAddedBy(actor);
@@ -200,6 +200,9 @@ class VisitBillingOrphanedStatusRegressionTest {
     @Autowired
     private com.nexxserve.nexxclinic.repository.VisitDepartmentNoteRepository visitDepartmentNoteRepository;
 
+    @Autowired
+    private VisitService visitService;
+
     private AuthenticatedUser auth(Worker worker) {
         // Business rule: cannot bill or edit if there are unread notes.
         // We need to make sure the actor has read all notes.
@@ -219,7 +222,7 @@ class VisitBillingOrphanedStatusRegressionTest {
                         fx.product().getId(),
                         null,
                         BigDecimal.ONE,
-                        new BigDecimal("100.00"),
+                        CoverageType.PRIVATE,
                         null,
                         false
                 );
@@ -288,13 +291,7 @@ class VisitBillingOrphanedStatusRegressionTest {
 
         BillVisitInput.BillVisitDepartmentProductInput productInput =
             new BillVisitInput.BillVisitDepartmentProductInput(
-                fx.product().getId(),
-                null,
-                BigDecimal.ONE,
-                new BigDecimal("100.00"),
-                insurance.getId(),
-                false
-            );
+                fx.product().getId(), null, BigDecimal.ONE, CoverageType.INSURANCE, insurance.getId(), false);
         BillVisitInput.BillVisitDepartmentInput departmentInput =
             new BillVisitInput.BillVisitDepartmentInput(
                 fx.visitDepartment().getId(),
@@ -326,6 +323,39 @@ class VisitBillingOrphanedStatusRegressionTest {
         // Insurance should cover 85%, patient pays 15%
         assertEquals(new BigDecimal("85.00"), vdb.getInsuranceCoveredAmount());
         assertEquals(new BigDecimal("15.00"), vdb.getPatientPayableAmount());
+    }
+
+    @Test
+    void testCancelVisitRejectsBilledVisit() {
+        Fixture fx = persistVisit(VisitProductStatus.PENDING);
+
+        // Keep a second department ACTIVE so the bill does not auto-complete the visit,
+        // isolating the billing guard from the COMPLETED guard.
+        Department dept2 = new Department();
+        dept2.setName("Laboratory-" + UUID.randomUUID());
+        dept2 = departmentRepository.save(dept2);
+
+        VisitDepartment vd2 = new VisitDepartment();
+        vd2.setVisit(fx.visit());
+        vd2.setDepartment(dept2);
+        vd2.setStatus(VisitDepartmentStatus.ACTIVE);
+        visitDepartmentRepository.save(vd2);
+
+        ApiResponse<?> billResponse = visitBillingService.billVisit(
+            billInput(fx, new BigDecimal("100.00")),
+            auth(fx.actor())
+        );
+        if (billResponse.status() == ResponseStatus.ERROR) {
+            org.junit.jupiter.api.Assertions.fail("Success expected but got error: " + billResponse.message());
+        }
+        assertEquals(ResponseStatus.SUCCESS, billResponse.status());
+
+        Visit visit = visitRepository.findById(fx.visit().getId()).get();
+        assertTrue(visit.getStatus() != com.nexxserve.nexxclinic.model.VisitStatus.COMPLETED);
+
+        ApiResponse<?> response = visitService.cancelVisit(fx.visit().getId());
+        assertEquals(ResponseStatus.ERROR, response.status());
+        assertEquals("Cannot cancel a billed visit. Use editBillVisit to correct the billing.", response.message());
     }
 
     @Test
@@ -554,23 +584,25 @@ class VisitBillingOrphanedStatusRegressionTest {
     // ─────────────────────────────────────────────────────────────
 
     @Test
-    void testIncrementalRebillRejectsChangedPriceWithCleanError() {
+    void testIncrementalRebillRejectsChangedQuantityWithCleanError() {
         Fixture fx = persistVisit(VisitProductStatus.PENDING);
 
         assertEquals(ResponseStatus.SUCCESS, visitBillingService.billVisit(
                 billInput(fx, new BigDecimal("100.00")), auth(fx.actor())).status());
 
-        // Same product re-billed with a CHANGED price. An incremental billVisit must
-        // NOT accept it (a correction belongs in editBillVisit), must return a clean
-        // error, and must NOT create a second billing version.
-        BillVisitInput.BillVisitDepartmentProductInput changedPrice =
+        // Same product re-billed with a CHANGED quantity (prices are no longer
+        // client-settable — they always come from the product catalog, so a
+        // quantity drift is the remaining identity-check violation). An incremental
+        // billVisit must NOT accept it (a correction belongs in editBillVisit),
+        // must return a clean error, and must NOT create a second billing version.
+        BillVisitInput.BillVisitDepartmentProductInput changedQty =
                 new BillVisitInput.BillVisitDepartmentProductInput(
-                        fx.product().getId(), null, BigDecimal.ONE, new BigDecimal("150.00"), null, false);
+                        fx.product().getId(), null, new BigDecimal("2"), CoverageType.PRIVATE, null, false);
         BillVisitInput.BillVisitDepartmentInput deptInput =
                 new BillVisitInput.BillVisitDepartmentInput(
-                        fx.visitDepartment().getId(), List.of(changedPrice),
+                        fx.visitDepartment().getId(), List.of(changedQty),
                         List.of(new BillVisitInput.BillingPaymentInput(
-                                new BigDecimal("150.00"), PaymentMethod.CASH, null)),
+                                new BigDecimal("100.00"), PaymentMethod.CASH, null)),
                         null);
         ApiResponse<?> response = visitBillingService.billVisit(
                 new BillVisitInput(fx.visit().getId(), List.of(deptInput)), auth(fx.actor()));
@@ -641,8 +673,8 @@ class VisitBillingOrphanedStatusRegressionTest {
 
         BillVisitInput.BillVisitDepartmentProductInput productInput =
                 new BillVisitInput.BillVisitDepartmentProductInput(
-                        fx.product().getId(), null, BigDecimal.ONE, new BigDecimal("100.00"),
-                        insurance.getId(), false);
+                        fx.product().getId(), null, BigDecimal.ONE,
+                        CoverageType.INSURANCE, insurance.getId(), false);
         BillVisitInput.BillVisitDepartmentInput deptInput =
                 new BillVisitInput.BillVisitDepartmentInput(
                         fx.visitDepartment().getId(), List.of(productInput),
@@ -720,7 +752,6 @@ class VisitBillingOrphanedStatusRegressionTest {
         uninsuredVdp.setVisitDepartment(fx.visitDepartment());
         uninsuredVdp.setProduct(uninsured);
         uninsuredVdp.setQuantity(BigDecimal.ONE);
-        uninsuredVdp.setPrice(new BigDecimal("100.00"));
         uninsuredVdp.setStatus(VisitProductStatus.PENDING);
         uninsuredVdp.setSource(VisitDepartmentProductSource.USER);
         uninsuredVdp.setAddedBy(fx.actor());
@@ -731,12 +762,12 @@ class VisitBillingOrphanedStatusRegressionTest {
         // two buckets, and every bucket row must keep its original method/reference.
         BillVisitInput.BillVisitDepartmentProductInput insuredInput =
                 new BillVisitInput.BillVisitDepartmentProductInput(
-                        fx.product().getId(), null, BigDecimal.ONE, new BigDecimal("100.00"),
-                        insurance.getId(), false);
+                        fx.product().getId(), null, BigDecimal.ONE,
+                        CoverageType.INSURANCE, insurance.getId(), false);
         BillVisitInput.BillVisitDepartmentProductInput uninsuredInput =
                 new BillVisitInput.BillVisitDepartmentProductInput(
-                        uninsuredVdp.getId(), null, BigDecimal.ONE, new BigDecimal("100.00"),
-                        null, false);
+                        uninsuredVdp.getId(), null, BigDecimal.ONE,
+                        CoverageType.PRIVATE, null, false);
         BillVisitInput.BillVisitDepartmentInput deptInput =
                 new BillVisitInput.BillVisitDepartmentInput(
                         fx.visitDepartment().getId(),
@@ -793,7 +824,7 @@ class VisitBillingOrphanedStatusRegressionTest {
 
         BillVisitInput.BillVisitDepartmentProductInput productInput =
                 new BillVisitInput.BillVisitDepartmentProductInput(
-                        fx.product().getId(), null, BigDecimal.ONE, new BigDecimal("100.00"), null, false);
+                        fx.product().getId(), null, BigDecimal.ONE, CoverageType.PRIVATE, null, false);
         BillVisitInput.BillVisitDepartmentInput firstDept =
                 new BillVisitInput.BillVisitDepartmentInput(
                         fx.visitDepartment().getId(), List.of(productInput),
@@ -862,7 +893,6 @@ class VisitBillingOrphanedStatusRegressionTest {
         vdpB.setVisitDepartment(vdB);
         vdpB.setProduct(productB);
         vdpB.setQuantity(BigDecimal.ONE);
-        vdpB.setPrice(new BigDecimal("50.00"));
         vdpB.setStatus(VisitProductStatus.PENDING);
         vdpB.setSource(VisitDepartmentProductSource.USER);
         vdpB.setAddedBy(fx.actor());
@@ -872,7 +902,7 @@ class VisitBillingOrphanedStatusRegressionTest {
         // forward into the new version instead of being dropped.
         BillVisitInput.BillVisitDepartmentProductInput productBInput =
                 new BillVisitInput.BillVisitDepartmentProductInput(
-                        vdpB.getId(), null, BigDecimal.ONE, new BigDecimal("50.00"), null, false);
+                        vdpB.getId(), null, BigDecimal.ONE, CoverageType.PRIVATE, null, false);
         BillVisitInput.BillVisitDepartmentInput deptBInput =
                 new BillVisitInput.BillVisitDepartmentInput(
                         vdB.getId(), List.of(productBInput),
@@ -898,5 +928,185 @@ class VisitBillingOrphanedStatusRegressionTest {
                 .collect(java.util.stream.Collectors.toSet());
         assertTrue(deptIds.contains(fx.visitDepartment().getId()), "dept A must be carried forward");
         assertTrue(deptIds.contains(vdB.getId()), "dept B must be present");
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // CoverageType: explicit PRIVATE/INSURANCE per line (no auto-assignment)
+    // ─────────────────────────────────────────────────────────────
+
+    private UUID linkInsurance(Fixture fx, LocalDate validFrom, LocalDate validUntil) {
+        com.nexxserve.nexxclinic.entity.InsuranceProvider provider =
+            new com.nexxserve.nexxclinic.entity.InsuranceProvider();
+        provider.setInsuranceName("Coverage Insurance-" + UUID.randomUUID());
+        provider.setSupportedByClinic(true);
+        provider.setDefaultCoveragePercentage(15);
+        provider = insuranceProviderRepository.save(provider);
+
+        com.nexxserve.nexxclinic.entity.PatientInsurance insurance =
+            new com.nexxserve.nexxclinic.entity.PatientInsurance();
+        insurance.setPatient(fx.visit().getPatient());
+        insurance.setInsuranceProvider(provider);
+        insurance.setInsuranceCardNumber("COV-" + UUID.randomUUID());
+        insurance.setPrincipalMember(true);
+        insurance.setValidFrom(validFrom);
+        insurance.setValidUntil(validUntil);
+        insurance = patientInsuranceRepository.save(insurance);
+
+        com.nexxserve.nexxclinic.entity.ProductInsuranceCoverage coverage =
+            new com.nexxserve.nexxclinic.entity.ProductInsuranceCoverage();
+        coverage.setProduct(fx.product().getProduct());
+        coverage.setInsuranceProvider(provider);
+        coverage.setCost(new BigDecimal("100.00"));
+        coverage.setCovered(true);
+        coverage.setMustPrescribedBy(com.nexxserve.nexxclinic.model.MustPrescribedBy.ALL);
+        coverage.setDrugAdministrationFrequency(
+            com.nexxserve.nexxclinic.model.DrugAdministrationFrequency.CUSTOM_HOURS);
+        productInsuranceCoverageRepository.save(coverage);
+
+        com.nexxserve.nexxclinic.entity.VisitInsurance visitInsurance =
+            new com.nexxserve.nexxclinic.entity.VisitInsurance();
+        visitInsurance.setVisit(fx.visit());
+        visitInsurance.setPatientInsurance(insurance);
+        visitInsuranceRepository.save(visitInsurance);
+        return insurance.getId();
+    }
+
+    @Test
+    void testCoverageTypeRequiredNoAutoAssignment() {
+        Fixture fx = persistVisit(VisitProductStatus.PENDING);
+        // A covering insurance is linked, but the client omits coverageType. The
+        // product must NOT auto-assign to the first covering insurance — it must be
+        // rejected.
+        linkInsurance(fx, LocalDate.now().minusDays(1), LocalDate.now().plusDays(10));
+
+        BillVisitInput.BillVisitDepartmentProductInput productInput =
+            new BillVisitInput.BillVisitDepartmentProductInput(
+                fx.product().getId(), null, BigDecimal.ONE, null, null, false);
+        BillVisitInput.BillVisitDepartmentInput deptInput =
+            new BillVisitInput.BillVisitDepartmentInput(
+                fx.visitDepartment().getId(), List.of(productInput),
+                List.of(new BillVisitInput.BillingPaymentInput(
+                    new BigDecimal("100.00"), PaymentMethod.CASH, null)),
+                "Note");
+        ApiResponse<?> response = visitBillingService.billVisit(
+            new BillVisitInput(fx.visit().getId(), List.of(deptInput)), auth(fx.actor()));
+
+        assertEquals(ResponseStatus.ERROR, response.status());
+        assertTrue(response.message().contains("coverageType is required"), response.message());
+        assertEquals(0, billingContainerCount(fx));
+    }
+
+    @Test
+    void testCoverageTypePrivateDoesNotAutoAssignCoveringInsurance() {
+        Fixture fx = persistVisit(VisitProductStatus.PENDING);
+        linkInsurance(fx, LocalDate.now().minusDays(1), LocalDate.now().plusDays(10));
+
+        BillVisitInput.BillVisitDepartmentProductInput productInput =
+            new BillVisitInput.BillVisitDepartmentProductInput(
+                fx.product().getId(), null, BigDecimal.ONE, CoverageType.PRIVATE, null, false);
+        BillVisitInput.BillVisitDepartmentInput deptInput =
+            new BillVisitInput.BillVisitDepartmentInput(
+                fx.visitDepartment().getId(), List.of(productInput),
+                List.of(new BillVisitInput.BillingPaymentInput(
+                    new BigDecimal("100.00"), PaymentMethod.CASH, null)),
+                "Note");
+        ApiResponse<?> response = visitBillingService.billVisit(
+            new BillVisitInput(fx.visit().getId(), List.of(deptInput)), auth(fx.actor()));
+        if (response.status() == ResponseStatus.ERROR) {
+            org.junit.jupiter.api.Assertions.fail("Bill failed: " + response.message());
+        }
+        assertEquals(ResponseStatus.SUCCESS, response.status());
+
+        // Billed at the catalog price (100.00) with NO insurance coverage.
+        com.nexxserve.nexxclinic.entity.VisitDepartmentBilling vdb =
+            visitDepartmentBillingRepository.findByVisitDepartmentId(fx.visitDepartment().getId()).get(0);
+        assertEquals(new BigDecimal("0.00"), vdb.getInsuranceCoveredAmount());
+        assertEquals(new BigDecimal("100.00"), vdb.getPatientPayableAmount());
+    }
+
+    @Test
+    void testCoverageTypePrivateRejectsPatientInsuranceId() {
+        Fixture fx = persistVisit(VisitProductStatus.PENDING);
+        UUID insuranceId = linkInsurance(fx, LocalDate.now().minusDays(1), LocalDate.now().plusDays(10));
+
+        BillVisitInput.BillVisitDepartmentProductInput productInput =
+            new BillVisitInput.BillVisitDepartmentProductInput(
+                fx.product().getId(), null, BigDecimal.ONE, CoverageType.PRIVATE, insuranceId, false);
+        BillVisitInput.BillVisitDepartmentInput deptInput =
+            new BillVisitInput.BillVisitDepartmentInput(
+                fx.visitDepartment().getId(), List.of(productInput),
+                List.of(new BillVisitInput.BillingPaymentInput(
+                    new BigDecimal("100.00"), PaymentMethod.CASH, null)),
+                "Note");
+        ApiResponse<?> response = visitBillingService.billVisit(
+            new BillVisitInput(fx.visit().getId(), List.of(deptInput)), auth(fx.actor()));
+
+        assertEquals(ResponseStatus.ERROR, response.status());
+        assertTrue(response.message().contains("patientInsuranceId cannot be provided"), response.message());
+        assertEquals(0, billingContainerCount(fx));
+    }
+
+    @Test
+    void testCoverageTypeInsuranceRequiresPatientInsuranceId() {
+        Fixture fx = persistVisit(VisitProductStatus.PENDING);
+
+        BillVisitInput.BillVisitDepartmentProductInput productInput =
+            new BillVisitInput.BillVisitDepartmentProductInput(
+                fx.product().getId(), null, BigDecimal.ONE, CoverageType.INSURANCE, null, false);
+        BillVisitInput.BillVisitDepartmentInput deptInput =
+            new BillVisitInput.BillVisitDepartmentInput(
+                fx.visitDepartment().getId(), List.of(productInput),
+                List.of(new BillVisitInput.BillingPaymentInput(
+                    new BigDecimal("100.00"), PaymentMethod.CASH, null)),
+                "Note");
+        ApiResponse<?> response = visitBillingService.billVisit(
+            new BillVisitInput(fx.visit().getId(), List.of(deptInput)), auth(fx.actor()));
+
+        assertEquals(ResponseStatus.ERROR, response.status());
+        assertTrue(response.message().contains("patientInsuranceId is required"), response.message());
+        assertEquals(0, billingContainerCount(fx));
+    }
+
+    @Test
+    void testCoverageTypeInsuranceNotLinkedToVisitRejected() {
+        Fixture fx = persistVisit(VisitProductStatus.PENDING);
+
+        BillVisitInput.BillVisitDepartmentProductInput productInput =
+            new BillVisitInput.BillVisitDepartmentProductInput(
+                fx.product().getId(), null, BigDecimal.ONE, CoverageType.INSURANCE, UUID.randomUUID(), false);
+        BillVisitInput.BillVisitDepartmentInput deptInput =
+            new BillVisitInput.BillVisitDepartmentInput(
+                fx.visitDepartment().getId(), List.of(productInput),
+                List.of(new BillVisitInput.BillingPaymentInput(
+                    new BigDecimal("100.00"), PaymentMethod.CASH, null)),
+                "Note");
+        ApiResponse<?> response = visitBillingService.billVisit(
+            new BillVisitInput(fx.visit().getId(), List.of(deptInput)), auth(fx.actor()));
+
+        assertEquals(ResponseStatus.ERROR, response.status());
+        assertTrue(response.message().contains("Selected patientInsuranceId is invalid"), response.message());
+        assertEquals(0, billingContainerCount(fx));
+    }
+
+    @Test
+    void testCoverageTypeInsuranceExpiredPolicyRejected() {
+        Fixture fx = persistVisit(VisitProductStatus.PENDING);
+        UUID insuranceId = linkInsurance(fx, LocalDate.now().minusDays(30), LocalDate.now().minusDays(1));
+
+        BillVisitInput.BillVisitDepartmentProductInput productInput =
+            new BillVisitInput.BillVisitDepartmentProductInput(
+                fx.product().getId(), null, BigDecimal.ONE, CoverageType.INSURANCE, insuranceId, false);
+        BillVisitInput.BillVisitDepartmentInput deptInput =
+            new BillVisitInput.BillVisitDepartmentInput(
+                fx.visitDepartment().getId(), List.of(productInput),
+                List.of(new BillVisitInput.BillingPaymentInput(
+                    new BigDecimal("100.00"), PaymentMethod.CASH, null)),
+                "Note");
+        ApiResponse<?> response = visitBillingService.billVisit(
+            new BillVisitInput(fx.visit().getId(), List.of(deptInput)), auth(fx.actor()));
+
+        assertEquals(ResponseStatus.ERROR, response.status());
+        assertTrue(response.message().contains("Selected patientInsuranceId is invalid"), response.message());
+        assertEquals(0, billingContainerCount(fx));
     }
 }

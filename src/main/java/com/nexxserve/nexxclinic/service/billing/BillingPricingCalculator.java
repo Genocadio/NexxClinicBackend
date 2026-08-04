@@ -5,10 +5,12 @@ import com.nexxserve.nexxclinic.entity.Product;
 import com.nexxserve.nexxclinic.entity.ProductInsuranceCoverage;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
 import com.nexxserve.nexxclinic.entity.VisitInsurance;
+import com.nexxserve.nexxclinic.model.CoverageType;
 import com.nexxserve.nexxclinic.repository.PatientInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.ProductInsuranceCoverageRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -35,56 +37,62 @@ public class BillingPricingCalculator {
     }
 
     /**
-     * Resolves the insurance that applies to this product:
+     * Resolves the insurance that applies to this product line.
+     *
+     * <p>There is no automatic assignment: every line must be explicitly marked
+     * with a {@link CoverageType}.
      * <ul>
-     *   <li>If a {@code requestedPatientInsuranceId} is supplied it must be linked
-     *       to the visit AND cover the product, otherwise {@code null}.</li>
-     *   <li>Otherwise the first visit insurance whose provider covers the product
-     *       wins.</li>
+     *   <li>{@code PRIVATE} — returns {@code null} (billed without insurance). The
+     *       caller must already have rejected a provided {@code patientInsuranceId}.</li>
+     *   <li>{@code INSURANCE} — the requested insurance must be linked to the visit,
+     *       must belong to the visit's patient, must be active (its policy period
+     *       covers today) and must cover the product. Returns {@code null} when any
+     *       of those checks fail.</li>
      * </ul>
      */
     public PatientInsurance resolveAppliedInsurance(
         VisitDepartmentProduct item,
+        CoverageType coverageType,
         UUID requestedPatientInsuranceId,
         Set<UUID> visitInsurancePatientInsuranceIds,
         List<VisitInsurance> visitInsurances
     ) {
-        if (requestedPatientInsuranceId != null) {
-            if (!visitInsurancePatientInsuranceIds.contains(requestedPatientInsuranceId)) {
-                return null;
-            }
-            Optional<PatientInsurance> insuranceOptional = patientInsuranceRepository.findById(
-                requestedPatientInsuranceId
-            );
-            if (insuranceOptional.isEmpty()) {
-                return null;
-            }
-            PatientInsurance insurance = insuranceOptional.get();
-            ProductInsuranceCoverage coverage = productInsuranceCoverageRepository
-                .findByProductIdAndInsuranceProviderId(
-                    item.getProduct().getId(),
-                    insurance.getInsuranceProvider().getId()
-                )
-                .orElse(null);
-            if (coverage == null || !coverage.isCovered()) {
-                return null;
-            }
-            return insurance;
+        if (coverageType == CoverageType.PRIVATE) {
+            return null;
         }
-
-        for (VisitInsurance visitInsurance : visitInsurances) {
-            PatientInsurance insurance = visitInsurance.getPatientInsurance();
-            ProductInsuranceCoverage coverage = productInsuranceCoverageRepository
-                .findByProductIdAndInsuranceProviderId(
-                    item.getProduct().getId(),
-                    insurance.getInsuranceProvider().getId()
-                )
-                .orElse(null);
-            if (coverage != null && coverage.isCovered()) {
-                return insurance;
-            }
+        if (coverageType != CoverageType.INSURANCE) {
+            return null;
         }
-        return null;
+        if (requestedPatientInsuranceId == null) {
+            return null;
+        }
+        if (!visitInsurancePatientInsuranceIds.contains(requestedPatientInsuranceId)) {
+            return null;
+        }
+        Optional<PatientInsurance> insuranceOptional = patientInsuranceRepository.findById(
+            requestedPatientInsuranceId
+        );
+        if (insuranceOptional.isEmpty()) {
+            return null;
+        }
+        PatientInsurance insurance = insuranceOptional.get();
+        LocalDate today = LocalDate.now();
+        if (insurance.getValidFrom() != null && insurance.getValidFrom().isAfter(today)) {
+            return null;
+        }
+        if (insurance.getValidUntil() != null && insurance.getValidUntil().isBefore(today)) {
+            return null;
+        }
+        ProductInsuranceCoverage coverage = productInsuranceCoverageRepository
+            .findByProductIdAndInsuranceProviderId(
+                item.getProduct().getId(),
+                insurance.getInsuranceProvider().getId()
+            )
+            .orElse(null);
+        if (coverage == null || !coverage.isCovered()) {
+            return null;
+        }
+        return insurance;
     }
 
     /**
@@ -170,11 +178,16 @@ public class BillingPricingCalculator {
             }
         } else {
             // I1 fix: if explicit coverage cost is missing, fall back to the provider's
-            // defaultCoveragePercentage of the lineTotal.
+            // defaultCoveragePercentage of the lineTotal. pct is the PATIENT's share,
+            // so the insurance covers (100 - pct)% of the line total — same rule as the
+            // cost-based branch above.
             Integer pct = appliedInsurance.getInsuranceProvider().getDefaultCoveragePercentage();
             if (pct != null && pct > 0) {
+                BigDecimal insuranceSharePct = BigDecimal.valueOf(100).subtract(
+                    BigDecimal.valueOf(pct)
+                );
                 coverageAmount = MoneyUtils.toMoney(
-                    lineTotal.multiply(BigDecimal.valueOf(pct)).divide(
+                    lineTotal.multiply(insuranceSharePct).divide(
                         BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP
                     )
                 );

@@ -157,6 +157,19 @@ enum VisitBillingStatus {
   PAID
 }
 
+"""
+How a billed product line is covered. There is NO automatic insurance assignment
+per product — each line must be explicit:
+- PRIVATE: billed without insurance; patientInsuranceId must NOT be provided.
+- INSURANCE: billed against an explicit insurance; patientInsuranceId is
+  required and must be linked to the visit, belong to the visit's patient,
+  be active (policy period covers today) and cover the product.
+"""
+enum CoverageType {
+  PRIVATE
+  INSURANCE
+}
+
 enum ClinicContactType {
   PHONE
   EMAIL
@@ -637,7 +650,6 @@ type VisitDepartmentProduct {
   id: ID!
   product: Product!
   quantity: Float!
-  price: Float!
   status: VisitProductStatus!
   source: VisitDepartmentProductSource!
   addedBy: Worker
@@ -1224,7 +1236,6 @@ input CreateVisitDepartmentProductItemInput {
   productId: ID!
   processorId: ID
   quantity: Float
-  price: Float
   status: VisitProductStatus
 }
 
@@ -1234,7 +1245,6 @@ input CreateVisitDepartmentProductInput {
   productId: ID!
   processorId: ID
   quantity: Float
-  price: Float
   status: VisitProductStatus
 }
 
@@ -1280,17 +1290,17 @@ input UpdateVisitDepartmentProductQuantityInput {
 input BillVisitDepartmentProductInput {
   visitDepartmentProductId: ID!
   parentVisitDepartmentId: ID
-  patientInsuranceId: ID
   quantity: Float
-  unitPrice: Float
+  coverageType: CoverageType!
+  patientInsuranceId: ID
   isExempted: Boolean
 }
 
 input EditBillVisitBillProductInput {
   productId: ID!
   patientInsuranceId: ID
+  coverageType: CoverageType!
   quantity: Float
-  unitPrice: Float
   isExempted: Boolean
 }
 

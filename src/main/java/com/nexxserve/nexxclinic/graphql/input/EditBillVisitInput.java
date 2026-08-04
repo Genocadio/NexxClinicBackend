@@ -1,5 +1,6 @@
 package com.nexxserve.nexxclinic.graphql.input;
 
+import com.nexxserve.nexxclinic.model.CoverageType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
@@ -41,9 +42,9 @@ public record EditBillVisitInput(
 
         UUID patientInsuranceId,
 
-        BigDecimal quantity,
+        CoverageType coverageType,
 
-        BigDecimal unitPrice,
+        BigDecimal quantity,
 
         Boolean isExempted
     ) {}

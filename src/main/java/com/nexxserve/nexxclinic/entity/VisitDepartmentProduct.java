@@ -42,9 +42,6 @@ public class VisitDepartmentProduct {
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal quantity;
 
-    @Column(nullable = false, precision = 19, scale = 2)
-    private BigDecimal price;
-
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     private VisitProductStatus status;
@@ -96,9 +93,6 @@ public class VisitDepartmentProduct {
         if (this.quantity == null || this.quantity.compareTo(BigDecimal.ZERO) <= 0) {
             this.quantity = BigDecimal.ONE;
         }
-        if (this.price == null || this.price.compareTo(BigDecimal.ZERO) < 0) {
-            this.price = BigDecimal.ZERO;
-        }
     }
 
     @PreUpdate
@@ -109,9 +103,6 @@ public class VisitDepartmentProduct {
         }
         if (this.quantity == null || this.quantity.compareTo(BigDecimal.ZERO) <= 0) {
             this.quantity = BigDecimal.ONE;
-        }
-        if (this.price == null || this.price.compareTo(BigDecimal.ZERO) < 0) {
-            this.price = BigDecimal.ZERO;
         }
     }
 
@@ -145,14 +136,6 @@ public class VisitDepartmentProduct {
 
     public void setQuantity(BigDecimal quantity) {
         this.quantity = quantity;
-    }
-
-    public BigDecimal getPrice() {
-        return price;
-    }
-
-    public void setPrice(BigDecimal price) {
-        this.price = price;
     }
 
     public VisitProductStatus getStatus() {

@@ -130,7 +130,12 @@ public class VisitDepartmentService {
             return ApiResponse.error("visitId and departmentId are required.");
         }
 
-        Optional<Visit> visitOptional = visitRepository.findById(visitId);
+        // Lock the visit row (PESSIMISTIC_WRITE) before the duplicate check: two
+        // concurrent adds of the same (visit, department) would otherwise both pass
+        // existsByVisitIdAndDepartmentId and one would 500 on uk_visit_department.
+        // Serializing on the visit row makes the second request see the first's
+        // committed department and return the friendly error below.
+        Optional<Visit> visitOptional = visitRepository.findByIdForUpdate(visitId);
         if (visitOptional.isEmpty()) {
             return ApiResponse.error("Visit not found.");
         }
@@ -186,7 +191,21 @@ public class VisitDepartmentService {
             addProcessorToVisitDepartment(visitDepartment, processorOptional.get());
         }
 
-        VisitDepartment saved = visitDepartmentRepository.save(visitDepartment);
+        VisitDepartment saved;
+        try {
+            // saveAndFlush (not save): uk_visit_department is only checked at flush
+            // time, so a plain save() would defer the violation past this catch.
+            saved = visitDepartmentRepository.saveAndFlush(visitDepartment);
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            // uk_visit_department (visit_id, department_id): a concurrent request
+            // added the same department between the check above and this save.
+            log.debug("Concurrent visit department addition detected for visit {} and department {}: {}",
+                visitId, departmentId, ex.getMessage());
+            org.springframework.transaction.interceptor.TransactionAspectSupport
+                .currentTransactionStatus()
+                .setRollbackOnly();
+            return ApiResponse.error("Department is already added to this visit.");
+        }
 
         // Auto-add the profile's products (source=PROFILE) when a profile is applied.
         if (profile != null) {
@@ -353,7 +372,6 @@ public class VisitDepartmentService {
             item.setVisitDepartment(visitDepartment);
             item.setProduct(link.getProduct());
             item.setQuantity(BigDecimal.ONE);
-            item.setPrice(resolveUnitPriceSnapshot(link.getProduct(), null));
             item.setStatus(VisitProductStatus.PENDING);
             item.setSource(VisitDepartmentProductSource.PROFILE);
             item.setAddedBy(actingUser);
@@ -369,6 +387,8 @@ public class VisitDepartmentService {
             } catch (org.springframework.dao.DataIntegrityViolationException ex) {
                 // Partial unique index (visit_department_id, product_id): concurrent
                 // profile application or explicit add raced this insert.
+                log.debug("Concurrent profile product addition detected for visitDepartment {} and product {}: {}",
+                    visitDepartment.getId(), link.getProduct().getId(), ex.getMessage());
                 org.springframework.transaction.interceptor.TransactionAspectSupport
                     .currentTransactionStatus()
                     .setRollbackOnly();
@@ -434,6 +454,17 @@ public class VisitDepartmentService {
             return ApiResponse.error("Visit not found.");
         }
 
+        // Lock the visit row too: uk_visit_department is unique on (visit_id,
+        // department_id) — NOT parent-scoped — so two concurrent child adds of the
+        // same department under DIFFERENT parents both pass the parent-scoped
+        // existsBy check below and one would 500. The visit lock serializes them;
+        // the try/catch on the save below is the belt-and-braces backstop.
+        Optional<Visit> lockedVisit = visitRepository.findByIdForUpdate(visit.getId());
+        if (lockedVisit.isEmpty()) {
+            return ApiResponse.error("Visit not found.");
+        }
+        visit = lockedVisit.get();
+
         if (visitDepartmentRepository.existsByVisitIdAndDepartmentIdAndParentVisitDepartmentId(visit.getId(), input.departmentId(), input.parentVisitDepartmentId())) {
             return ApiResponse.error("Child department already exists for this parent.");
         }
@@ -481,7 +512,21 @@ public class VisitDepartmentService {
         }
         child.setStatus(VisitDepartmentStatus.PENDING);
 
-        VisitDepartment savedChild = visitDepartmentRepository.save(child);
+        VisitDepartment savedChild;
+        try {
+            // saveAndFlush (not save): uk_visit_department is only checked at flush
+            // time, so a plain save() would defer the violation past this catch.
+            savedChild = visitDepartmentRepository.saveAndFlush(child);
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            // uk_visit_department (visit_id, department_id): a concurrent add of the
+            // same department (same or different parent) raced us.
+            log.debug("Concurrent visit department addition detected for visit {} and department {}: {}",
+                visit.getId(), input.departmentId(), ex.getMessage());
+            org.springframework.transaction.interceptor.TransactionAspectSupport
+                .currentTransactionStatus()
+                .setRollbackOnly();
+            return ApiResponse.error("Department already exists in this visit.");
+        }
 
         // hasExplicitProducts is guaranteed true here (guards above reject the
         // no-product case), so the loop always runs.
@@ -502,7 +547,6 @@ public class VisitDepartmentService {
             item.setVisitDepartment(savedChild);
             item.setProduct(productOptional.get());
             item.setQuantity(normalizeQuantity(BigDecimal.valueOf(productInput.quantity())));
-            item.setPrice(resolveUnitPriceSnapshot(productOptional.get(), null));
             item.setStatus(VisitProductStatus.PENDING);
 
             ApiResponse processorError = assignVisitDepartmentProductProcessor(savedChild, item, actingUser, input.processorId());
@@ -522,6 +566,8 @@ public class VisitDepartmentService {
                 visitDepartmentProductRepository.saveAndFlush(item);
             } catch (org.springframework.dao.DataIntegrityViolationException ex) {
                 // Partial unique index: concurrent add of the same product raced us.
+                log.debug("Concurrent product addition detected for visitDepartment {} and product {}: {}",
+                    savedChild.getId(), productInput.productId(), ex.getMessage());
                 org.springframework.transaction.interceptor.TransactionAspectSupport
                     .currentTransactionStatus()
                     .setRollbackOnly();
@@ -682,7 +728,6 @@ public class VisitDepartmentService {
 
         item.setDeleted(false);
         item.setQuantity(normalizeQuantity(input.quantity()));
-        item.setPrice(resolveUnitPriceSnapshot(productOptional.get(), input.price()));
         item.setStatus(requestedStatus);
 
         Worker actingUser = resolveWorker(authUser);
@@ -1305,7 +1350,6 @@ public class VisitDepartmentService {
                 item.getId(),
                 productMapper.toDto(item.getProduct()),
                 item.getQuantity(),
-                item.getPrice(),
                 item.getStatus(),
                 item.getSource(),
                 workerMapper.toDto(item.getAddedBy()),
@@ -1555,27 +1599,4 @@ public class VisitDepartmentService {
         return value;
     }
 
-    private BigDecimal normalizePrice(BigDecimal value) {
-        if (value == null || value.compareTo(BigDecimal.ZERO) < 0) {
-            return BigDecimal.ZERO.setScale(2, java.math.RoundingMode.HALF_UP);
-        }
-        return value.setScale(2, java.math.RoundingMode.HALF_UP);
-    }
-
-    public BigDecimal resolveUnitPriceSnapshot(Product product, BigDecimal inputPrice) {
-        if (inputPrice != null && inputPrice.compareTo(BigDecimal.ZERO) >= 0) {
-            return normalizePrice(inputPrice);
-        }
-
-        if (product != null) {
-            if (product.getClinicPrice() != null) {
-                return normalizePrice(product.getClinicPrice());
-            }
-            if (product.getPrivateRhicPrice() != null) {
-                return normalizePrice(product.getPrivateRhicPrice());
-            }
-        }
-
-        return BigDecimal.ZERO;
-    }
 }

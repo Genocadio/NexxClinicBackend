@@ -179,7 +179,6 @@ class InvoiceGenerationIntegrationTest {
         vdp.setVisitDepartment(vd);
         vdp.setProduct(product);
         vdp.setQuantity(BigDecimal.ONE);
-        vdp.setPrice(new BigDecimal("100.00"));
         vdp.setStatus(productStatus);
         vdp.setSource(VisitDepartmentProductSource.USER);
         vdp = visitDepartmentProductRepository.save(vdp);

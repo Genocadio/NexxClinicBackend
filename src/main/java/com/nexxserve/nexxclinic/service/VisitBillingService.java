@@ -19,6 +19,7 @@ import com.nexxserve.nexxclinic.entity.Worker;
 import com.nexxserve.nexxclinic.graphql.input.BillVisitInput;
 import com.nexxserve.nexxclinic.graphql.input.EditBillVisitInput;
 import com.nexxserve.nexxclinic.graphql.input.RecordVisitBillingPaymentInput;
+import com.nexxserve.nexxclinic.model.CoverageType;
 import com.nexxserve.nexxclinic.model.NoteType;
 import com.nexxserve.nexxclinic.model.VisitBillingStatus;
 import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
@@ -513,8 +514,10 @@ public class VisitBillingService {
         // from the previous version that is NOT in the current request and still has
         // billable products, so incremental billing never drops previously billed
         // departments from the authoritative latest view. Carried departments are
-        // re-billed with their EXACT previous amounts, so they are excluded from the
-        // fresh-balance note rule below (their notes were already recorded). Their
+        // re-billed at the current catalog/coverage price (no client price override
+        // exists anymore); the identity guard below rejects an incremental re-bill if
+        // the derived price drifted from the previous snapshot. They are excluded from
+        // the fresh-balance note rule below (their notes were already recorded). Their
         // payments are also carried forward with their original method/reference.
         Set<UUID> carriedDepartmentIds = new HashSet<>();
         if (effectiveIsEdit && previousBilling != null) {
@@ -540,14 +543,20 @@ public class VisitBillingService {
                         .flatMap(ib -> ib.getItems().stream())
                         .filter(item -> item != null && item.getVisitDepartmentProduct() != null)
                         .filter(item -> allProductsById.containsKey(item.getVisitDepartmentProduct().getId()))
-                        .map(item -> new BillVisitInput.BillVisitDepartmentProductInput(
-                            item.getVisitDepartmentProduct().getId(),
-                            null,
-                            item.getQuantitySnapshot(),
-                            item.getUnitPriceSnapshot(),
-                            item.getAppliedPatientInsurance() != null ? item.getAppliedPatientInsurance().getId() : null,
-                            item.getVisitDepartmentProduct().getStatus() == VisitProductStatus.EXEMPTED
-                        ))
+                        .map(item -> {
+                            UUID carriedInsuranceId =
+                                item.getAppliedPatientInsurance() != null
+                                    ? item.getAppliedPatientInsurance().getId()
+                                    : null;
+                            return new BillVisitInput.BillVisitDepartmentProductInput(
+                                item.getVisitDepartmentProduct().getId(),
+                                null,
+                                item.getQuantitySnapshot(),
+                                carriedInsuranceId != null ? CoverageType.INSURANCE : CoverageType.PRIVATE,
+                                carriedInsuranceId,
+                                item.getVisitDepartmentProduct().getStatus() == VisitProductStatus.EXEMPTED
+                            );
+                        })
                         .toList();
                 if (products.isEmpty()) {
                     continue;
@@ -618,8 +627,6 @@ public class VisitBillingService {
             paymentDistributor.buildPaymentQueues(rootPaymentsByDepartment);
 
         Map<UUID, UUID> requestedInsuranceByItem = new LinkedHashMap<>();
-        Map<UUID, java.math.BigDecimal> requestedUnitPriceByItem =
-            new LinkedHashMap<>();
         Map<UUID, java.math.BigDecimal> requestedQuantityByItem =
             new LinkedHashMap<>();
         Map<UUID, Boolean> requestedExemptedByItem = new LinkedHashMap<>();
@@ -758,15 +765,6 @@ public class VisitBillingService {
                         "quantity must be greater than 0."
                     );
                 }
-                if (
-                    productInput.unitPrice() != null &&
-                    productInput.unitPrice().compareTo(ZERO) < 0
-                ) {
-                    return PreparedBill.error(
-                        "unitPrice must be zero or positive."
-                    );
-                }
-
                 if (productInput.patientInsuranceId() != null) {
                     requestedInsuranceByItem.put(
                         item.getId(),
@@ -779,12 +777,6 @@ public class VisitBillingService {
                         productInput.quantity()
                     );
                 }
-                if (productInput.unitPrice() != null) {
-                    requestedUnitPriceByItem.put(
-                        item.getId(),
-                        productInput.unitPrice()
-                    );
-                }
                 if (productInput.isExempted() != null) {
                     requestedExemptedByItem.put(
                         item.getId(),
@@ -795,18 +787,39 @@ public class VisitBillingService {
                 UUID requestedPatientInsuranceId = requestedInsuranceByItem.get(
                     item.getId()
                 );
+                // Coverage is explicit per line — there is no auto-assignment.
+                // PRIVATE: no insurance may be provided. INSURANCE: a patient
+                // insurance id is required (and validated below against the visit,
+                // the patient and the product coverage).
+                CoverageType coverageType = productInput.coverageType();
+                if (coverageType == null) {
+                    return PreparedBill.error(
+                        "coverageType is required for each product. Use PRIVATE or INSURANCE."
+                    );
+                }
+                if (coverageType == CoverageType.PRIVATE && requestedPatientInsuranceId != null) {
+                    return PreparedBill.error(
+                        "patientInsuranceId cannot be provided when coverageType is PRIVATE."
+                    );
+                }
+                if (coverageType == CoverageType.INSURANCE && requestedPatientInsuranceId == null) {
+                    return PreparedBill.error(
+                        "patientInsuranceId is required when coverageType is INSURANCE."
+                    );
+                }
                 PatientInsurance appliedInsurance = pricingCalculator.resolveAppliedInsurance(
                     item,
+                    coverageType,
                     requestedPatientInsuranceId,
                     visitInsurancePatientInsuranceIds,
                     visitInsurances
                 );
                 if (
-                    requestedPatientInsuranceId != null &&
+                    coverageType == CoverageType.INSURANCE &&
                     appliedInsurance == null
                 ) {
                     return PreparedBill.error(
-                        "Selected patientInsuranceId is invalid for the visit or does not cover the product."
+                        "Selected patientInsuranceId is invalid: it is not linked to this visit, does not cover the product, or the insurance policy is not active."
                     );
                 }
 
@@ -820,9 +833,14 @@ public class VisitBillingService {
                 // editBillVisit, which carries the same role gate (FINANCE/ADMIN).
                 if (effectiveIsEdit && !isEdit && !requiresBilling(item)) {
                     PreviousItemSnapshot prev = previousItemSnapshots.get(item.getId());
-                    BigDecimal reqPrice = requestedUnitPriceByItem.containsKey(item.getId())
-                        ? toMoney(requestedUnitPriceByItem.get(item.getId()))
-                        : toMoney(item.getPrice());
+                    // Price is always derived from the product catalog / applied
+                    // insurance (clients can no longer pass a price), so the
+                    // "same as before?" comparison uses the live-derived price
+                    // against the previous snapshot instead of a stored row price.
+                    BigDecimal reqPrice = pricingCalculator.resolveDefaultUnitPrice(
+                        item,
+                        appliedInsurance
+                    );
                     BigDecimal reqQty = requestedQuantityByItem.containsKey(item.getId())
                         ? toQuantity(requestedQuantityByItem.get(item.getId()))
                         : toQuantity(item.getQuantity());
@@ -850,7 +868,7 @@ public class VisitBillingService {
                         return PreparedBill.error(
                             "Product '" +
                             productName(item) +
-                            "' is already billed and the request changes its price, quantity, exemption or insurance. Use editBillVisit to correct the billing."
+                            "' is already billed and its price (as configured in the product catalog), quantity, exemption or insurance differs from the previously billed line. Use editBillVisit to correct the billing."
                         );
                     }
                 }
@@ -957,11 +975,10 @@ public class VisitBillingService {
                         group.rootVisitDepartmentId()
                     );
                 }
-                BigDecimal unitPrice = requestedUnitPriceByItem.containsKey(
-                    item.getId()
-                )
-                    ? toMoney(requestedUnitPriceByItem.get(item.getId()))
-                    : pricingCalculator.resolveDefaultUnitPrice(item, appliedInsurance);
+                BigDecimal unitPrice = pricingCalculator.resolveDefaultUnitPrice(
+                    item,
+                    appliedInsurance
+                );
                 BigDecimal quantity = requestedQuantityByItem.containsKey(
                     item.getId()
                 )
@@ -1733,12 +1750,6 @@ public class VisitBillingService {
                     vdp.setVisitDepartment(vd);
                     vdp.setProduct(product);
                     vdp.setQuantity(toQuantity(add.quantity()));
-                    // E1 fix: default the live-row price to the catalog price instead of 0.
-                    // billing falls back to item.getPrice() when billProducts.unitPrice is
-                    // omitted, so a 0 here silently billed the new product for free.
-                    vdp.setPrice(
-                        pricingCalculator.resolveDefaultUnitPrice(vdp, null)
-                    );
                     vdp.setAddedBy(actingUser);
                     // Freshly added, never billed -> PENDING.
                     vdp.setStatus(VisitProductStatus.PENDING);
@@ -1819,7 +1830,7 @@ public class VisitBillingService {
                                     vdp.getId(),
                                     d.visitDepartmentId(),
                                     bp.quantity(),
-                                    bp.unitPrice(),
+                                    bp.coverageType(),
                                     bp.patientInsuranceId(),
                                     bp.isExempted()
                                 );

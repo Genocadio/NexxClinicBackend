@@ -1,5 +1,6 @@
 package com.nexxserve.nexxclinic.graphql.input;
 
+import com.nexxserve.nexxclinic.model.CoverageType;
 import com.nexxserve.nexxclinic.model.PaymentMethod;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -32,7 +33,7 @@ public record BillVisitInput(
             UUID visitDepartmentProductId,
             UUID parentVisitDepartmentId,
             java.math.BigDecimal quantity,
-            java.math.BigDecimal unitPrice,
+            CoverageType coverageType,
             UUID patientInsuranceId,
             Boolean isExempted
     ) {

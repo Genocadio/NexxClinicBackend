@@ -66,12 +66,12 @@ Frontend should:
 #### 3) `departments[*].updatedProducts`
 Use when quantity was incorrect.
 
-If a product is updated, it should also appear in `billProducts` with the corrected `quantity` and/or `unitPrice` (billing uses snapshots).
+If a product is updated, it should also appear in `billProducts` with the corrected `quantity` (billing uses snapshots).
 
 #### 4) `departments[*].billProducts`
 This controls the **new billing version** selections:
 - `productId`
-- optional overrides: `quantity`, `unitPrice`, `patientInsuranceId`, `isExempted`
+- optional: `quantity`, `patientInsuranceId`, `isExempted` — the unit price is always resolved from the product catalog / insurance coverage and is no longer client-settable
 
 #### 5) Payments
 Payments are recorded on the new billing version.
