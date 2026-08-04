@@ -145,7 +145,21 @@ public class VisitBillingService {
         BillVisitInput input,
         AuthenticatedUser authUser
     ) {
-        return billOrEditVisitInternal(input, authUser, false);
+        ApiResponse result = billOrEditVisitInternal(input, authUser, false);
+        // A bill must be all-or-nothing. billOrEditVisitInternal may have mutated and
+        // stamped managed visit-department products (status BILLED/EXEMPTED, billedBy)
+        // BEFORE hitting a later validation error (overpayment, missing note, etc.). A
+        // returned error ApiResponse alone would COMMIT those dirty entities (Spring
+        // only rolls back on exceptions), leaving products permanently BILLED with NO
+        // billing container — a state from which neither billVisit nor editBillVisit
+        // can recover. Mark the transaction rollback-only so a failed bill never
+        // leaves partial product mutations behind.
+        if (result.status() != com.nexxserve.nexxclinic.model.ResponseStatus.SUCCESS) {
+            org.springframework.transaction.interceptor.TransactionAspectSupport
+                .currentTransactionStatus()
+                .setRollbackOnly();
+        }
+        return result;
     }
 
     @Transactional
@@ -263,6 +277,37 @@ public class VisitBillingService {
             return ApiResponse.error(
                 "This visit has already been billed. Use editBillVisit to correct the billing."
             );
+        }
+
+        // Recovery (orphaned BILLED/EXEMPTED): an earlier billVisit could have returned
+        // an error AFTER stamping product statuses but BEFORE creating the billing
+        // container, and that error committed the product mutations (the rollback guard
+        // in billVisit now prevents this, but visits corrupted before the fix still
+        // exist). Because the check above verified this visit has NO billing container,
+        // any BILLED/EXEMPTED product here is an orphaned status — a real bill always
+        // pairs the status with a container. Reset them to PENDING so the visit can
+        // actually be billed. (editBillVisit is untouched: it requires an existing
+        // container and handles genuine corrections.)
+        if (!isEdit) {
+            List<VisitDepartmentProduct> orphanedStatusProducts = loadVisitDepartmentProducts(
+                visit.getId()
+            )
+                .stream()
+                .filter(p -> !p.isDeleted())
+                .filter(p -> !requiresBilling(p))
+                .toList();
+            if (!orphanedStatusProducts.isEmpty()) {
+                log.warn(
+                    "Reset {} orphaned BILLED/EXEMPTED product(s) to PENDING for visit {} (no billing container exists).",
+                    orphanedStatusProducts.size(),
+                    visit.getId()
+                );
+                for (VisitDepartmentProduct p : orphanedStatusProducts) {
+                    p.setStatus(VisitProductStatus.PENDING);
+                    p.setBilledBy(null);
+                }
+                visitDepartmentProductRepository.saveAll(orphanedStatusProducts);
+            }
         }
 
         // N2 fix: on edit, carry the previous billing version's payments forward so a

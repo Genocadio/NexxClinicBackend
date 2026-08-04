@@ -147,6 +147,7 @@ mutation Bill($input: BillVisitInput!) {
 
 - Every `visitDepartmentId` must be a **top-level** visit department of this visit, and unique in the payload.
 - Every `visitDepartmentProductId` must exist, belong to (a descendant of) the declared department, and be **not yet billed** (`PENDING` / `UNPAID`). Already-`BILLED`/`EXEMPTED` products are rejected → use `editBillVisit`.
+- **Self-healing:** if products carry `BILLED`/`EXEMPTED` status but the visit has **no billing container at all** (an orphaned status left behind by a failed billing attempt — `visitBilling(visitId)` returns *"Visit billing not found"*), `billVisit` automatically resets them to `PENDING` and bills them normally. Only products that belong to a real (existing) bill require `editBillVisit`.
 - Duplicate product ids are rejected.
 - `quantity > 0`, `unitPrice >= 0`, `amount > 0`.
 
@@ -398,7 +399,7 @@ enum PaymentMethod { CASH MOBILE_MONEY CARD BANK_TRANSFER CHEQUE MIXED }
 | *"… is a profile product and cannot be removed from billing."* | Change the visit department's profile instead. |
 | *"Payment must be recorded against the latest billing version."* | Refetch `visitBilling(visitId)` and use the current ids. |
 | *"Invoices can only be generated for the latest billing version."* / *"…only be generated after all visit products are billed."* | Refetch; bill the remaining pending products first. |
-| *"Invalid billing selection: product '…' is already billed or exempted…"* | Product already billed — correct via `editBillVisit`. |
+| *"Invalid billing selection: product '…' is already billed or exempted…"* | Product already billed — correct via `editBillVisit`. (If `visitBilling` says there is no bill for the visit, retry `billVisit`: the backend detects orphaned `BILLED`/`EXEMPTED` statuses with no container and resets them to `PENDING` automatically. The reset only persists on a *successful* bill — a failed bill rolls everything back, so a product is never silently left re-billable.) |
 
 ---
 
