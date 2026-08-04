@@ -704,10 +704,16 @@ type VisitBillingPayment {
   updatedAt: String!
 }
 
+type VisitBillingVersion {
+  id: ID!
+  version: Int!
+}
+
 type VisitBilling {
   id: ID!
   visitId: ID!
   departments: [VisitDepartmentBilling!]!
+  version: VisitBillingVersion
   createdAt: String!
   updatedAt: String!
 }

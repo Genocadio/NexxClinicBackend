@@ -1,26 +1,26 @@
 > Task :compileJava UP-TO-DATE
 > Task :processResources UP-TO-DATE
 > Task :classes UP-TO-DATE
-> Task :compileTestJava UP-TO-DATE
+> Task :compileTestJava
 > Task :processTestResources UP-TO-DATE
-> Task :testClasses UP-TO-DATE
+> Task :testClasses
+OpenJDK 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
 
 > Task :test
 
-DepartmentServiceTest > testDepartmentsFiltersSupportRequestsAndRequestsProducts() FAILED
-    java.lang.IllegalStateException at DefaultCacheAwareContextLoaderDelegate.java:195
-        Caused by: org.springframework.beans.factory.BeanCreationException at AbstractAutowireCapableBeanFactory.java:1817
-            Caused by: org.springframework.beans.factory.UnsatisfiedDependencyException at ConstructorResolver.java:804
-                Caused by: org.springframework.beans.factory.UnsatisfiedDependencyException at ConstructorResolver.java:804
-                    Caused by: org.springframework.beans.factory.UnsatisfiedDependencyException at ConstructorResolver.java:804
-                        Caused by: org.springframework.beans.factory.UnsatisfiedDependencyException at ConstructorResolver.java:804
-                            Caused by: org.springframework.beans.factory.BeanCreationException at ConstructorResolver.java:657
-                                Caused by: org.springframework.beans.BeanInstantiationException at SimpleInstantiationStrategy.java:183
-                                    Caused by: graphql.schema.idl.errors.SchemaProblem at SchemaGenerator.java:110
+VisitBillingOrphanedStatusRegressionTest > testBillVisitDoesNotAutoCompleteWithEmptySecondDepartment() FAILED
+    org.opentest4j.AssertionFailedError at VisitBillingOrphanedStatusRegressionTest.java:346
 
-1 test completed, 1 failed
+VisitBillingOrphanedStatusRegressionTest > testCoveragePercentageMath() FAILED
+    org.opentest4j.AssertionFailedError at VisitBillingOrphanedStatusRegressionTest.java:288
+
+2026-08-04T11:27:33.089+02:00  INFO 27000 --- [ionShutdownHook] j.LocalContainerEntityManagerFactoryBean : Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-08-04T11:27:33.091+02:00  INFO 27000 --- [ionShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
+2026-08-04T11:27:33.092+02:00  INFO 27000 --- [ionShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.
 
 > Task :test FAILED
+
+6 tests completed, 2 failed
 
 FAILURE: Build failed with an exception.
 
@@ -31,5 +31,5 @@ Execution failed for task ':test'.
 * Try:
 > Run with --scan to get full insights from a Build Scan (powered by Develocity).
 
-BUILD FAILED in 5s
-5 actionable tasks: 1 executed, 4 up-to-date
+BUILD FAILED in 9s
+5 actionable tasks: 2 executed, 3 up-to-date

@@ -22,6 +22,7 @@ import com.nexxserve.nexxclinic.model.AnswerStatus;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.FormStatus;
 import com.nexxserve.nexxclinic.model.ResponseStatus;
+import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
 import com.nexxserve.nexxclinic.repository.ConsultationAnswerRepository;
 import com.nexxserve.nexxclinic.repository.DepartmentFormRepository;
 import com.nexxserve.nexxclinic.repository.DepartmentFormVersionRepository;
@@ -287,6 +288,16 @@ public class DepartmentFormService {
         Optional<DepartmentFormVersion> versionOptional = departmentFormVersionRepository.findByFormIdAndVersionNumber(form.getId(), targetVersion);
         if (versionOptional.isEmpty()) {
             return ApiResponse.error("Requested form version does not exist.");
+        }
+
+        // C1: once a department is handed to finance (BILLING), clinical data is frozen.
+        // We resolve the VisitDepartment to check its status.
+        Optional<VisitDepartment> visitDeptOptional = visitDepartmentRepository.findByVisitIdAndDepartmentId(input.visitId(), input.departmentId());
+        if (visitDeptOptional.isPresent()) {
+            VisitDepartmentStatus status = visitDeptOptional.get().getStatus();
+            if (status == VisitDepartmentStatus.BILLING || status == VisitDepartmentStatus.COMPLETED || status == VisitDepartmentStatus.CANCELLED) {
+                return ApiResponse.error("Cannot modify forms for a department in " + status + " status.");
+            }
         }
 
         if (input.status() == AnswerStatus.FINAL && versionOptional.get().getStatus() != FormStatus.FINAL) {

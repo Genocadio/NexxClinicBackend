@@ -36,6 +36,7 @@ import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
 import com.nexxserve.nexxclinic.repository.VisitRepository;
 import com.nexxserve.nexxclinic.repository.WorkerRepository;
+import com.nexxserve.nexxclinic.service.billing.InvoiceGenerator;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -52,6 +53,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -61,7 +63,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * Integration test for the refactored {@link VisitBillingService#generateInvoice}
+ * Integration test for the refactored {@link InvoiceGenerator#generateInvoice}
  * (three-phase split: snapshot in a short read-only tx, PDF render + Supabase upload
  * OUTSIDE any transaction, then a short write tx to persist the object path).
  *
@@ -85,7 +87,7 @@ import static org.mockito.Mockito.when;
 class InvoiceGenerationIntegrationTest {
 
     @Autowired
-    private VisitBillingService visitBillingService;
+    private InvoiceGenerator invoiceGenerator;
 
     @Autowired
     private WorkerRepository workerRepository;
@@ -111,7 +113,7 @@ class InvoiceGenerationIntegrationTest {
     @Autowired
     private VisitBillingRepository visitBillingRepository;
 
-    @Autowired
+    @MockitoSpyBean
     private VisitBillingVersionRepository visitBillingVersionRepository;
 
     @Autowired
@@ -258,7 +260,7 @@ class InvoiceGenerationIntegrationTest {
         when(supabaseStorageService.signedUrl(objectPath, 300))
             .thenReturn("https://signed/" + objectPath);
 
-        ApiResponse<?> response = visitBillingService.generateInvoice(
+        ApiResponse<?> response = invoiceGenerator.generateInvoice(
                 fx.billing().getId(),
                 auth(fx.actor())
         );
@@ -300,7 +302,7 @@ class InvoiceGenerationIntegrationTest {
         note.setNoteType(NoteType.BILLING);
         visitDepartmentNoteRepository.save(note);
 
-        ApiResponse<?> response = visitBillingService.generateInvoice(
+        ApiResponse<?> response = invoiceGenerator.generateInvoice(
                 fx.billing().getId(),
                 auth(fx.actor())
         );
@@ -321,7 +323,7 @@ class InvoiceGenerationIntegrationTest {
         newer.setVersion(2);
         visitBillingVersionRepository.save(newer);
 
-        ApiResponse<?> response = visitBillingService.generateInvoice(
+        ApiResponse<?> response = invoiceGenerator.generateInvoice(
                 fx.billing().getId(),
                 auth(fx.actor())
         );
@@ -335,7 +337,7 @@ class InvoiceGenerationIntegrationTest {
     void generateInvoiceRejectsNotFullyBilledWithoutTouchingSupabase() {
         Fixture fx = persistBilledVisit(VisitProductStatus.PENDING);
 
-        ApiResponse<?> response = visitBillingService.generateInvoice(
+        ApiResponse<?> response = invoiceGenerator.generateInvoice(
                 fx.billing().getId(),
                 auth(fx.actor())
         );
@@ -361,13 +363,55 @@ class InvoiceGenerationIntegrationTest {
         String objectPath = "invoices/TestClinic/invoice-" + fx.billing().getId() + ".pdf";
         stubStorage(objectPath);
 
-        ApiResponse<?> response = visitBillingService.generateInvoice(
+        ApiResponse<?> response = invoiceGenerator.generateInvoice(
                 fx.billing().getId(),
                 auth(fx.actor())
         );
 
         assertEquals(ResponseStatus.ERROR, response.status());
         assertTrue(response.message().contains("no longer available"));
+        // The file was uploaded, then orphaned and deleted.
+        verify(supabaseStorageService).upload(any(byte[].class), eq(objectPath));
+        verify(supabaseStorageService).delete("data", objectPath);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // TOCTOU race: a newer version minted between snapshot and persist
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    void generateInvoiceDoesNotPersistUrlWhenNewerVersionAppearsDuringUpload() throws Exception {
+        Fixture fx = persistBilledVisit(VisitProductStatus.BILLED);
+
+        // A concurrent editBillVisit mints version 2 while the PDF renders/upload
+        // (Phase 2). Simulate the race via sequential stubbing of the latest-version
+        // lookup: it returns version 1 during the Phase-1 snapshot (validation passes),
+        // then version 2 during the Phase-3 persist re-check (the row under test is
+        // stale and must be rejected).
+        VisitBillingVersion newer = new VisitBillingVersion();
+        newer.setVisit(fx.visit());
+        newer.setVersion(2);
+        newer = visitBillingVersionRepository.save(newer);
+        when(visitBillingVersionRepository.findFirstByVisitIdOrderByVersionDesc(fx.visit().getId()))
+            .thenReturn(
+                Optional.of(fx.billing().getBillingVersion()), // Phase 1: version 1 is latest
+                Optional.of(newer)                             // Phase 3: version 2 is latest now
+            );
+
+        String objectPath = "invoices/TestClinic/invoice-" + fx.billing().getId() + ".pdf";
+        stubStorage(objectPath);
+
+        ApiResponse<?> response = invoiceGenerator.generateInvoice(
+                fx.billing().getId(),
+                auth(fx.actor())
+        );
+
+        assertEquals(ResponseStatus.ERROR, response.status());
+        assertTrue(response.message().contains("no longer available"));
+        // The stale row must NOT receive a fresh invoice URL.
+        assertNull(departmentInsuranceBillingRepository
+                .findById(fx.billing().getId()).orElseThrow().getInvoiceUrl(),
+                "stale billing must not receive a fresh invoice URL");
         // The file was uploaded, then orphaned and deleted.
         verify(supabaseStorageService).upload(any(byte[].class), eq(objectPath));
         verify(supabaseStorageService).delete("data", objectPath);

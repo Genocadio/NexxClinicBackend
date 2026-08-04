@@ -40,6 +40,9 @@ public interface VisitRepository extends JpaRepository<Visit, UUID>, JpaSpecific
 	@Query("SELECT v FROM Visit v WHERE v.patient.id = :patientId ORDER BY v.visitDate DESC, v.createdAt DESC")
 	List<Visit> findLastVisitsByPatientId(@Param("patientId") UUID patientId, Pageable pageable);
 
+	@Query("SELECT v FROM Visit v WHERE v.patient.id = :patientId AND v.status IN :statuses")
+	List<Visit> findByPatientIdAndStatusIn(@Param("patientId") UUID patientId, @Param("statuses") java.util.Collection<com.nexxserve.nexxclinic.model.VisitStatus> statuses);
+
 	@Query("""
 		SELECT v FROM Visit v
 		WHERE v.patient.id = :patientId

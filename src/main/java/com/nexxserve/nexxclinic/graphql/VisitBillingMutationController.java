@@ -8,6 +8,7 @@ import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.security.HasRole;
 import com.nexxserve.nexxclinic.service.VisitBillingService;
+import com.nexxserve.nexxclinic.service.billing.InvoiceGenerator;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.graphql.data.method.annotation.Argument;
@@ -19,9 +20,14 @@ import org.springframework.stereotype.Controller;
 public class VisitBillingMutationController {
 
     private final VisitBillingService visitBillingService;
+    private final InvoiceGenerator invoiceGenerator;
 
-    public VisitBillingMutationController(VisitBillingService visitBillingService) {
+    public VisitBillingMutationController(
+        VisitBillingService visitBillingService,
+        InvoiceGenerator invoiceGenerator
+    ) {
         this.visitBillingService = visitBillingService;
+        this.invoiceGenerator = invoiceGenerator;
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
@@ -57,7 +63,7 @@ public class VisitBillingMutationController {
             @Argument("departmentInsuranceBillingId") UUID departmentInsuranceBillingId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitBillingService.generateInvoice(departmentInsuranceBillingId, authUser);
+        return invoiceGenerator.generateInvoice(departmentInsuranceBillingId, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.FINANCE})

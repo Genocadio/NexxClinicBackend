@@ -1,5 +1,6 @@
 package com.nexxserve.nexxclinic.entity;
 
+import com.nexxserve.nexxclinic.entity.DepartmentInsuranceBilling;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentBilling;
 import com.nexxserve.nexxclinic.model.PaymentMethod;
 import jakarta.persistence.Column;
@@ -29,6 +30,10 @@ public class VisitBillingPayment {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "visit_department_billing_id", nullable = false)
     private VisitDepartmentBilling visitDepartmentBilling;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "department_insurance_billing_id")
+    private DepartmentInsuranceBilling departmentInsuranceBilling;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "billing_version_id")
@@ -82,6 +87,14 @@ public class VisitBillingPayment {
 
     public void setVisitDepartmentBilling(VisitDepartmentBilling visitDepartmentBilling) {
         this.visitDepartmentBilling = visitDepartmentBilling;
+    }
+
+    public DepartmentInsuranceBilling getDepartmentInsuranceBilling() {
+        return departmentInsuranceBilling;
+    }
+
+    public void setDepartmentInsuranceBilling(DepartmentInsuranceBilling departmentInsuranceBilling) {
+        this.departmentInsuranceBilling = departmentInsuranceBilling;
     }
 
     public com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion getBillingVersion() {

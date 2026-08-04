@@ -37,6 +37,22 @@ Product lifecycle: `PENDING` (added, not billed) → `BILLED` (billed) or `EXEMP
 
 **Global gate:** every billing operation (`billVisit`, `editBillVisit`, `recordVisitBillingPayment`, `generateInvoice`) is **blocked while the acting user has unread notes** on the visit. Check note read-state first.
 
+### 1.1 Start here — you have a visit with departments
+
+This is the end-to-end sequence to follow whenever you are billing a visit:
+
+| Step | What you do | Where |
+|---|---|---|
+| 1 | Fetch the visit → `visit(visitId)` returns `departments[]`, each with `products[]`. **Top-level** departments are the billing unit (each becomes one `VisitDepartmentBilling`); child-department products bill under their **root** department. | §3 |
+| 2 | Make sure the acting user has **read the visit's notes** — billing is blocked while any are unread. | §1 |
+| 3 | Build `BillVisitInput` from the billable (`PENDING`/`UNPAID`) products and call **`billVisit`** — the starting mutation. It bills and records first payments in one call. Already-billed visits auto-pivot to an incremental re-bill (identical lines only). | §3, §3.5 |
+| 4 | Read the result: `visitBilling(visitId)` returns the **latest** version with departments → insurance buckets → items and the outstanding balance. | §8 |
+| 5 | Collect later / partial payments on the existing bill via **`recordVisitBillingPayment`** (target an `insuranceBillings[].id`). | §4 |
+| 6 | **Error found?** Fix via **`editBillVisit`** — it corrects products, mints a new version, carries payments forward, and invalidates old invoices. | §5 |
+| 7 | Generate / download the PDF via **`generateInvoice`** (same `insuranceBillings[].id`). Regenerate any time to get a fresh signed URL. | §7 |
+
+> **Rule of thumb:** `billVisit` to start, `recordVisitBillingPayment` to keep collecting money, `editBillVisit` whenever you must change a billed visit, `generateInvoice` to hand the patient their bill. Exact payloads, rules and error messages are in the sections above.
+
 ---
 
 ## 2. Before billing — how products get onto a visit
@@ -71,7 +87,7 @@ Other pre-billing product mutations: `updateVisitDepartmentProductQuantity`, `up
 
 This is **the mutation to start with**. It bills the current, not-yet-billed products of one or more top-level departments and records payments in the same call.
 
-> ⚠️ `billVisit` is **first-time only**. If the visit already has any billing, it errors with *"This visit has already been billed. Use editBillVisit to correct the billing."*
+> ⚠️ `billVisit` handles both cases: a **first bill** (no billing container yet) and an **incremental re-bill** (a container already exists — it automatically pivots to the version flow and mints the next version). If the visit was billed before, the request is only accepted when it is an **identical re-bill** of the already-billed lines; any price/quantity/exemption/insurance change — or any add/remove — must go through `editBillVisit` (§5). Use `editBillVisit` for every correction.
 
 ### Building the input from the visit
 
@@ -284,7 +300,7 @@ Once a department is in `BILLING` (and has billing rows) or the visit is `COMPLE
 | `updateVisitDepartmentStatus` | terminal (`COMPLETED`/`CANCELLED`) and billed-`BILLING` states | — |
 | `changeVisitDepartmentProfile` | billed department | — |
 
-Also note: `billVisit` itself is blocked once the visit is billed — only `editBillVisit` can create further versions.
+Also note: once a visit is billed, `billVisit` accepts only **identical re-bills** (it auto-creates the next version for them). Any change to a billed line — quantity, price, insurance, exemption, add/remove — must go through `editBillVisit`, which is the only path that syncs the products and re-projects the bill.
 
 ---
 
@@ -389,7 +405,7 @@ enum PaymentMethod { CASH MOBILE_MONEY CARD BANK_TRANSFER CHEQUE MIXED }
 
 | Message | Meaning / action |
 |---|---|
-| *"This visit has already been billed. Use editBillVisit…"* | You called `billVisit` on a billed visit — switch to `editBillVisit`. |
+| *"… is already billed and the request changes its price, quantity, exemption or insurance. Use editBillVisit to correct the billing."* | An incremental `billVisit` may only re-bill a billed line **identically**. Send the same quantity/price/insurance/exemption, or switch to `editBillVisit` for the correction. |
 | *"You have unread notes. Please read them before billing/editing/payments/invoice."* | Mark the visit's notes read for the acting user, then retry. |
 | *"Payment amount would exceed the patient payable amount."* | Payment input is too large — cap at `outstandingAmount`. |
 | *"A billing note is required when items are exempted or the patient payment is less than the payable amount."* | Add `note` to the department entry. |

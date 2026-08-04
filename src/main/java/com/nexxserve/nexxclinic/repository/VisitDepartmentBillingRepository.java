@@ -13,4 +13,6 @@ public interface VisitDepartmentBillingRepository extends JpaRepository<VisitDep
      * actual billing history (frozen — editBillVisit only).
      */
     boolean existsByVisitDepartmentId(UUID visitDepartmentId);
+
+    java.util.List<VisitDepartmentBilling> findByVisitDepartmentId(UUID visitDepartmentId);
 }

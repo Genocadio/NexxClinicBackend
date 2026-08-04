@@ -30,6 +30,8 @@ import com.nexxserve.nexxclinic.repository.DepartmentRepository;
 import com.nexxserve.nexxclinic.repository.PatientInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.PatientRepository;
 import com.nexxserve.nexxclinic.repository.ProductRepository;
+import com.nexxserve.nexxclinic.repository.VisitBillingRepository;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentNoteRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
 import com.nexxserve.nexxclinic.repository.VisitInsuranceRepository;
@@ -42,6 +44,8 @@ import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.*;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -53,10 +57,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class VisitService {
 
+    private static final Logger log = LoggerFactory.getLogger(VisitService.class);
+
     private final VisitRepository visitRepository;
     private final VisitInsuranceRepository visitInsuranceRepository;
     private final VisitDepartmentRepository visitDepartmentRepository;
     private final VisitDepartmentProductRepository visitDepartmentProductRepository;
+    private final VisitBillingRepository visitBillingRepository;
+    private final VisitDepartmentNoteRepository visitDepartmentNoteRepository;
     private final VisitVitalSignsGroupRepository visitVitalSignsGroupRepository;
     private final VitalMeasurementRepository vitalMeasurementRepository;
     private final DepartmentFormService departmentFormService;
@@ -78,6 +86,8 @@ public class VisitService {
             VisitInsuranceRepository visitInsuranceRepository,
             VisitDepartmentRepository visitDepartmentRepository,
             VisitDepartmentProductRepository visitDepartmentProductRepository,
+            VisitBillingRepository visitBillingRepository,
+            VisitDepartmentNoteRepository visitDepartmentNoteRepository,
             VisitVitalSignsGroupRepository visitVitalSignsGroupRepository,
             VitalMeasurementRepository vitalMeasurementRepository,
             DepartmentFormService departmentFormService,
@@ -95,6 +105,8 @@ public class VisitService {
         this.visitInsuranceRepository = visitInsuranceRepository;
         this.visitDepartmentRepository = visitDepartmentRepository;
         this.visitDepartmentProductRepository = visitDepartmentProductRepository;
+        this.visitBillingRepository = visitBillingRepository;
+        this.visitDepartmentNoteRepository = visitDepartmentNoteRepository;
         this.visitVitalSignsGroupRepository = visitVitalSignsGroupRepository;
         this.vitalMeasurementRepository = vitalMeasurementRepository;
         this.departmentFormService = departmentFormService;
@@ -122,6 +134,15 @@ public class VisitService {
         Optional<Patient> patientOptional = patientRepository.findById(input.patientId());
         if (patientOptional.isEmpty()) {
             return ApiResponse.error("Patient not found.");
+        }
+
+        // V1 fix: check for duplicate open visits for the same patient.
+        List<Visit> openVisits = visitRepository.findByPatientIdAndStatusIn(
+            input.patientId(),
+            List.of(VisitStatus.CREATED, VisitStatus.IN_PROGRESS)
+        );
+        if (!openVisits.isEmpty()) {
+            return ApiResponse.error("Patient already has an active visit.");
         }
 
         List<PatientInsurance> linkedInsurances = resolveLinkedInsurances(input.patientId(), input.linkedPatientInsuranceIds());
@@ -162,7 +183,7 @@ public class VisitService {
         }
 
         Visit latest = visitRepository.findById(saved.getId()).orElse(saved);
-        return ApiResponse.success("Visit created.", visitToDto(latest));
+        return ApiResponse.success("Visit created.", visitToDto(latest, null, authUser));
     }
 
     @Transactional
@@ -355,9 +376,14 @@ public class VisitService {
     // ─────────────────────────────────────────────────────────────
 
     @Transactional
-    public ApiResponse<VisitDto> completeVisit(UUID visitId) {
+    public ApiResponse<VisitDto> completeVisit(UUID visitId, AuthenticatedUser authUser) {
         if (visitId == null) {
             return ApiResponse.error("visitId is required.");
+        }
+
+        Worker actingUser = resolveWorker(authUser);
+        if (actingUser == null) {
+            return ApiResponse.error("Authentication is required to complete a visit.");
         }
 
         Optional<Visit> visitOptional = visitRepository.findById(visitId);
@@ -368,6 +394,18 @@ public class VisitService {
         Visit visit = visitOptional.get();
         if (visit.getStatus() == VisitStatus.CANCELLED) {
             return ApiResponse.error("Cancelled visit cannot be completed.");
+        }
+
+        // D1/D2 fix: enforce unread-notes gate during completion.
+        long unreadNotes = visitDepartmentNoteRepository.countUnreadNotesForVisit(visitId, actingUser.getId());
+        if (unreadNotes > 0) {
+            return ApiResponse.error("You have unread notes. Please read them before completing the visit.");
+        }
+
+        // D2 fix: verify a billing container exists before completion.
+        boolean hasBilling = !visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId).isEmpty();
+        if (!hasBilling) {
+            return ApiResponse.error("Cannot complete a visit that has not been billed. Use billVisit first.");
         }
 
         List<VisitDepartmentProduct> visitProducts = visitDepartmentProductRepository.findByVisitDepartmentVisitId(visitId);
@@ -381,8 +419,21 @@ public class VisitService {
         }
 
         List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(visitId);
+        // Requirement: don't auto-complete while any department is non-CANCELLED/non-COMPLETED.
+        // This likely refers to medical/clinical status transitions.
+        // In the context of completeVisit(UUID), if we find any department that is not COMPLETED or CANCELLED,
+        // we should probably error or at least ensure we are not force-completing an active clinical flow.
+        boolean hasActiveDepartments = departments.stream()
+                .anyMatch(dept -> dept.getStatus() != VisitDepartmentStatus.CANCELLED
+                        && dept.getStatus() != VisitDepartmentStatus.COMPLETED
+                        && dept.getStatus() != VisitDepartmentStatus.BILLING); // BILLING is okay as it's at finance
+
+        if (hasActiveDepartments) {
+            return ApiResponse.error("Cannot complete visit while some departments are still active (not COMPLETED or CANCELLED).");
+        }
+
         for (VisitDepartment dept : departments) {
-            if (dept.getStatus() != VisitDepartmentStatus.CANCELLED) {
+            if (dept.getStatus() == VisitDepartmentStatus.BILLING) {
                 dept.setStatus(VisitDepartmentStatus.COMPLETED);
                 visitDepartmentRepository.save(dept);
             }
@@ -607,6 +658,13 @@ public class VisitService {
             return ApiResponse.error("Cannot add vital signs to a cancelled visit.");
         }
 
+        // C1: once a visit is fully billed, clinical records should be frozen to prevent
+        // retrospective medical entries that aren't marked as addenda.
+        boolean alreadyBilled = !visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visit.getId()).isEmpty();
+        if (alreadyBilled) {
+            return ApiResponse.error("Cannot add vital signs to a visit that has already been billed.");
+        }
+
         Worker actingUser = resolveWorker(authUser);
         VisitVitalSignsGroup group = new VisitVitalSignsGroup();
         group.setVisit(visit);
@@ -749,9 +807,29 @@ public class VisitService {
                 return ApiResponse.error("Status " + requestedStatus + " cannot be set manually. Only PENDING or UNPAID can be set when adding a product.");
             }
 
-            VisitDepartmentProduct item = new VisitDepartmentProduct();
-            item.setVisitDepartment(visitDepartment);
-            item.setProduct(productOptional.get());
+            // SD1: if the product exists but was soft-deleted, restore it instead of
+            // creating a new row. This preserves historical IDs and avoids growing the
+            // database with redundant rows for the same product-department pair.
+            VisitDepartmentProduct item = visitDepartmentProductRepository
+                .findByVisitDepartmentIdAndProductIdIncludingDeleted(
+                    visitDepartment.getId(),
+                    productInput.productId()
+                )
+                .orElse(null);
+
+            if (item != null && !item.isDeleted()) {
+                // Should have been caught by findByVisitDepartmentIdAndProductId above,
+                // but handle it here for safety.
+                continue;
+            }
+
+            if (item == null) {
+                item = new VisitDepartmentProduct();
+                item.setVisitDepartment(visitDepartment);
+                item.setProduct(productOptional.get());
+            }
+
+            item.setDeleted(false);
             item.setQuantity(normalizeQuantity(productInput.quantity()));
             item.setPrice(resolveUnitPriceSnapshot(productOptional.get(), productInput.price()));
             item.setStatus(requestedStatus);
@@ -772,6 +850,8 @@ public class VisitService {
                 // Partial unique index (visit_department_id, product_id): a concurrent
                 // request added the same product between the check above and this save.
                 // Roll back so a failed visit creation is atomic (C1 pattern).
+                log.debug("Concurrent product addition detected for visitDepartment {} and product {}: {}",
+                    visitDepartment.getId(), productInput.productId(), ex.getMessage());
                 org.springframework.transaction.interceptor.TransactionAspectSupport
                     .currentTransactionStatus()
                     .setRollbackOnly();
@@ -1028,9 +1108,9 @@ public class VisitService {
 
     public java.math.BigDecimal normalizePrice(java.math.BigDecimal value) {
         if (value == null || value.compareTo(java.math.BigDecimal.ZERO) < 0) {
-            return java.math.BigDecimal.ZERO;
+            return java.math.BigDecimal.ZERO.setScale(2, java.math.RoundingMode.HALF_UP);
         }
-        return value;
+        return value.setScale(2, java.math.RoundingMode.HALF_UP);
     }
 
     public java.math.BigDecimal resolveUnitPriceSnapshot(com.nexxserve.nexxclinic.entity.Product product, java.math.BigDecimal inputPrice) {

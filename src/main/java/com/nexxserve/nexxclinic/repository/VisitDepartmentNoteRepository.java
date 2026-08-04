@@ -35,4 +35,18 @@ public interface VisitDepartmentNoteRepository extends JpaRepository<VisitDepart
             @Param("visitDepartmentId") UUID visitDepartmentId,
             @Param("viewerId") UUID viewerId
     );
+
+    @Query("""
+            SELECT COUNT(n) FROM VisitDepartmentNote n
+            WHERE n.visitDepartment.visit.id = :visitId
+            AND (n.createdBy IS NULL OR n.createdBy.id <> :viewerId)
+            AND NOT EXISTS (
+                SELECT v FROM VisitDepartmentNoteViewer v
+                WHERE v.note = n AND v.viewer.id = :viewerId
+            )
+            """)
+    long countUnreadNotesForVisit(
+            @Param("visitId") UUID visitId,
+            @Param("viewerId") UUID viewerId
+    );
 }

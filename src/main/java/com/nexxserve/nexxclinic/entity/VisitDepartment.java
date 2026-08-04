@@ -68,15 +68,19 @@ public class VisitDepartment {
     private LocalDateTime completedAt;
 
     @OneToMany(mappedBy = "visitDepartment", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @org.hibernate.annotations.BatchSize(size = 20)
     private List<VisitDepartmentDiagnosis> diagnostics = new ArrayList<>();
 
     @OneToMany(mappedBy = "visitDepartment", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @org.hibernate.annotations.BatchSize(size = 20)
     private List<VisitDepartmentMedication> medications = new ArrayList<>();
 
     @OneToMany(mappedBy = "visitDepartment", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @org.hibernate.annotations.BatchSize(size = 20)
     private List<VisitPreInstruction> preInstructions = new ArrayList<>();
 
     @OneToMany(mappedBy = "visitDepartment", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @org.hibernate.annotations.BatchSize(size = 20)
     private List<VisitDepartmentNote> notes = new ArrayList<>();
 
     @ManyToOne(fetch = FetchType.LAZY)

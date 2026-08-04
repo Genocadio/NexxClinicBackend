@@ -44,12 +44,16 @@ import com.nexxserve.nexxclinic.repository.WorkerRepository;
 import java.math.BigDecimal;
 import java.util.*;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class VisitDepartmentService {
+
+    private static final Logger log = LoggerFactory.getLogger(VisitDepartmentService.class);
 
     private final VisitRepository visitRepository;
     private final VisitDepartmentRepository visitDepartmentRepository;
@@ -72,6 +76,7 @@ public class VisitDepartmentService {
 
     // Lazy to break circular dependency with VisitService
     private final VisitDepartmentNoteService visitDepartmentNoteService;
+    private final VisitService visitService;
 
     public VisitDepartmentService(
             VisitRepository visitRepository,
@@ -91,7 +96,8 @@ public class VisitDepartmentService {
             WorkerMapper workerMapper,
             DepartmentMapper departmentMapper,
             ProductMapper productMapper,
-            @Lazy VisitDepartmentNoteService visitDepartmentNoteService
+            @Lazy VisitDepartmentNoteService visitDepartmentNoteService,
+            @Lazy VisitService visitService
     ) {
         this.visitRepository = visitRepository;
         this.visitDepartmentRepository = visitDepartmentRepository;
@@ -111,6 +117,7 @@ public class VisitDepartmentService {
         this.departmentMapper = departmentMapper;
         this.productMapper = productMapper;
         this.visitDepartmentNoteService = visitDepartmentNoteService;
+        this.visitService = visitService;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -195,7 +202,7 @@ public class VisitDepartmentService {
 
         // Return refreshed visit DTO via visitRepository – caller can map if needed
         Visit refreshed = visitRepository.findById(visitId).orElse(visit);
-        return ApiResponse.success("Department added to visit.", null); // DTO built by caller
+        return ApiResponse.success("Department added to visit.", visitService.visitToDto(refreshed, null, authUser));
     }
 
     /**
@@ -390,7 +397,7 @@ public class VisitDepartmentService {
             return ApiResponse.error("At least one product is required for a child department.");
         }
 
-        Optional<VisitDepartment> parentOptional = visitDepartmentRepository.findById(input.parentVisitDepartmentId());
+        Optional<VisitDepartment> parentOptional = visitDepartmentRepository.findByIdForUpdate(input.parentVisitDepartmentId());
         if (parentOptional.isEmpty()) {
             return ApiResponse.error("Parent visit department not found.");
         }
@@ -427,8 +434,7 @@ public class VisitDepartmentService {
             return ApiResponse.error("Visit not found.");
         }
 
-        if (visitDepartmentRepository.existsByVisitIdAndDepartmentId(visit.getId(), input.departmentId())
-                || visitDepartmentRepository.existsByVisitIdAndDepartmentIdAndParentVisitDepartmentId(visit.getId(), input.departmentId(), input.parentVisitDepartmentId())) {
+        if (visitDepartmentRepository.existsByVisitIdAndDepartmentIdAndParentVisitDepartmentId(visit.getId(), input.departmentId(), input.parentVisitDepartmentId())) {
             return ApiResponse.error("Child department already exists for this parent.");
         }
 
@@ -614,7 +620,10 @@ public class VisitDepartmentService {
             return ApiResponse.error("Department is not linked to this visit.");
         }
 
-        VisitDepartment visitDepartment = visitDepartmentOptional.get();
+        // Lock for update to prevent TOCTOU race with consultation completion
+        VisitDepartment visitDepartment = visitDepartmentRepository.findByIdForUpdate(visitDepartmentOptional.get().getId())
+                .orElseThrow(() -> new RuntimeException("Visit department disappeared while locking"));
+
         if (visitDepartment.getStatus() == VisitDepartmentStatus.COMPLETED) {
             return ApiResponse.error("Cannot add products to a completed department.");
         }
@@ -652,9 +661,26 @@ public class VisitDepartmentService {
             return ApiResponse.error("Status " + requestedStatus + " cannot be set manually. Only PENDING or UNPAID can be set when adding a product.");
         }
 
-        VisitDepartmentProduct item = new VisitDepartmentProduct();
-        item.setVisitDepartment(visitDepartment);
-        item.setProduct(productOptional.get());
+        // SD1: if the product exists but was soft-deleted, restore it instead of
+        // creating a new row.
+        VisitDepartmentProduct item = visitDepartmentProductRepository
+            .findByVisitDepartmentIdAndProductIdIncludingDeleted(
+                visitDepartment.getId(),
+                input.productId()
+            )
+            .orElse(null);
+
+        if (item != null && !item.isDeleted()) {
+            return ApiResponse.error("Product already exists for this visit department.");
+        }
+
+        if (item == null) {
+            item = new VisitDepartmentProduct();
+            item.setVisitDepartment(visitDepartment);
+            item.setProduct(productOptional.get());
+        }
+
+        item.setDeleted(false);
         item.setQuantity(normalizeQuantity(input.quantity()));
         item.setPrice(resolveUnitPriceSnapshot(productOptional.get(), input.price()));
         item.setStatus(requestedStatus);
@@ -677,6 +703,8 @@ public class VisitDepartmentService {
         } catch (org.springframework.dao.DataIntegrityViolationException ex) {
             // Partial unique index (visit_department_id, product_id): the check above
             // raced with a concurrent add of the same product.
+            log.debug("Concurrent product addition detected for visitDepartment {} and product {}: {}",
+                visitDepartment.getId(), input.productId(), ex.getMessage());
             org.springframework.transaction.interceptor.TransactionAspectSupport
                 .currentTransactionStatus()
                 .setRollbackOnly();
@@ -1529,9 +1557,9 @@ public class VisitDepartmentService {
 
     private BigDecimal normalizePrice(BigDecimal value) {
         if (value == null || value.compareTo(BigDecimal.ZERO) < 0) {
-            return BigDecimal.ZERO;
+            return BigDecimal.ZERO.setScale(2, java.math.RoundingMode.HALF_UP);
         }
-        return value;
+        return value.setScale(2, java.math.RoundingMode.HALF_UP);
     }
 
     public BigDecimal resolveUnitPriceSnapshot(Product product, BigDecimal inputPrice) {
@@ -1539,8 +1567,13 @@ public class VisitDepartmentService {
             return normalizePrice(inputPrice);
         }
 
-        if (product != null && product.getClinicPrice() != null && product.getClinicPrice().compareTo(BigDecimal.ZERO) >= 0) {
-            return normalizePrice(product.getClinicPrice());
+        if (product != null) {
+            if (product.getClinicPrice() != null) {
+                return normalizePrice(product.getClinicPrice());
+            }
+            if (product.getPrivateRhicPrice() != null) {
+                return normalizePrice(product.getPrivateRhicPrice());
+            }
         }
 
         return BigDecimal.ZERO;

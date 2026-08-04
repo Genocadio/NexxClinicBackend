@@ -212,7 +212,7 @@ public class VisitMutationController {
             @Argument UUID visitId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.completeVisit(visitId);
+        return visitService.completeVisit(visitId, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
