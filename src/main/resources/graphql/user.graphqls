@@ -378,6 +378,7 @@ type PatientInsurance {
   principalMemberPhoneNumber: String
   validFrom: String!
   validUntil: String!
+  deactivated: Boolean!
   createdAt: String!
   updatedAt: String!
 }

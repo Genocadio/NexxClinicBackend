@@ -2,6 +2,7 @@ package com.nexxserve.nexxclinic.graphql.input;
 
 import com.nexxserve.nexxclinic.model.Gender;
 import com.nexxserve.nexxclinic.validation.NotFutureDate;
+import com.nexxserve.nexxclinic.validation.ValidPhoneNumber;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 
@@ -21,9 +22,11 @@ public record UpdatePatientInput(
         Gender gender,
 
         @Size(max = 30, message = "primaryPhoneNumber must not exceed 30 characters")
+        @ValidPhoneNumber
         String primaryPhoneNumber,
 
         @Size(max = 30, message = "alternativePhone must not exceed 30 characters")
+        @ValidPhoneNumber
         String alternativePhone,
 
         @Size(max = 120, message = "village must not exceed 120 characters")
@@ -54,6 +57,7 @@ public record UpdatePatientInput(
         String emergencyContactRelationship,
 
         @Size(max = 30, message = "emergencyContactPhoneNumber must not exceed 30 characters")
+        @ValidPhoneNumber
         String emergencyContactPhoneNumber
 ) {
 }

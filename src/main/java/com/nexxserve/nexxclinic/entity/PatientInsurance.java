@@ -47,6 +47,9 @@ public class PatientInsurance {
     @Column(nullable = false)
     private LocalDate validUntil;
 
+    @Column(nullable = false)
+    private boolean deactivated;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -143,6 +146,14 @@ public class PatientInsurance {
 
     public void setValidUntil(LocalDate validUntil) {
         this.validUntil = validUntil;
+    }
+
+    public boolean isDeactivated() {
+        return deactivated;
+    }
+
+    public void setDeactivated(boolean deactivated) {
+        this.deactivated = deactivated;
     }
 
     public LocalDateTime getCreatedAt() {

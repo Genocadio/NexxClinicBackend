@@ -9,9 +9,11 @@ import com.nexxserve.nexxclinic.graphql.input.*;
 import com.nexxserve.nexxclinic.mappers.out.PatientInsuranceMapper;
 import com.nexxserve.nexxclinic.mappers.out.PatientMapper;
 import com.nexxserve.nexxclinic.model.ResponseStatus;
+import com.nexxserve.nexxclinic.repository.DepartmentInsuranceBillingRepository;
 import com.nexxserve.nexxclinic.repository.InsuranceProviderRepository;
 import com.nexxserve.nexxclinic.repository.PatientInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.PatientRepository;
+import com.nexxserve.nexxclinic.repository.VisitBillingItemRepository;
 import com.nexxserve.nexxclinic.repository.VisitInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.VisitRepository;
 import org.slf4j.Logger;
@@ -37,6 +39,8 @@ public class PatientService {
     private final InsuranceProviderRepository insuranceProviderRepository;
     private final VisitRepository visitRepository;
     private final VisitInsuranceRepository visitInsuranceRepository;
+    private final VisitBillingItemRepository visitBillingItemRepository;
+    private final DepartmentInsuranceBillingRepository departmentInsuranceBillingRepository;
     private final VisitService visitService;
     private final MeilisearchIndexService meilisearchIndexService;
 
@@ -48,6 +52,8 @@ public class PatientService {
             PatientInsuranceMapper patientInsuranceMapper,
             VisitRepository visitRepository,
             VisitInsuranceRepository visitInsuranceRepository,
+            VisitBillingItemRepository visitBillingItemRepository,
+            DepartmentInsuranceBillingRepository departmentInsuranceBillingRepository,
             VisitService visitService,
             MeilisearchIndexService meilisearchIndexService
     ) {
@@ -58,6 +64,8 @@ public class PatientService {
         this.patientInsuranceMapper = patientInsuranceMapper;
         this.visitRepository = visitRepository;
         this.visitInsuranceRepository = visitInsuranceRepository;
+        this.visitBillingItemRepository = visitBillingItemRepository;
+        this.departmentInsuranceBillingRepository = departmentInsuranceBillingRepository;
         this.visitService = visitService;
         this.meilisearchIndexService = meilisearchIndexService;
     }
@@ -202,7 +210,7 @@ public class PatientService {
         }
 
         Page<Patient> patientPage = patientRepository.findAll(spec, pageable);
-        List<PatientDto> dtos = patientPage.getContent().stream().map(this::mapToDto).toList();
+        List<PatientDto> dtos = mapToDtos(patientPage.getContent());
 
         return ApiResponse.success(
                 "Patients fetched.",
@@ -223,14 +231,14 @@ public class PatientService {
         }
         Map<UUID, Patient> byId = new HashMap<>();
         patientRepository.findAllById(ids).forEach(p -> byId.put(p.getId(), p));
-        List<PatientDto> dtos = new ArrayList<>();
+        List<Patient> ordered = new ArrayList<>();
         for (UUID id : ids) {
             Patient patient = byId.get(id);
             if (patient != null) {
-                dtos.add(mapToDto(patient));
+                ordered.add(patient);
             }
         }
-        return dtos;
+        return mapToDtos(ordered);
     }
 
     // =========================
@@ -348,10 +356,7 @@ public class PatientService {
     // =========================
     @Transactional(readOnly = true)
     public ApiResponse<List<PatientDto>> patients() {
-        List<PatientDto> dtos = patientRepository.findAll()
-                .stream()
-                .map(this::mapToDto)
-                .toList();
+        List<PatientDto> dtos = mapToDtos(patientRepository.findAll());
         return ApiResponse.success("Patients fetched.", dtos);
     }
 
@@ -567,6 +572,15 @@ public class PatientService {
             return ApiResponse.error(businessRuleError.message());
         }
 
+        // One active policy per provider + one card number per patient.
+        ApiResponse<Void> duplicateError = checkInsuranceDuplicates(
+                patientInsuranceRepository.findByPatientId(patient.getId()),
+                patientInsurance
+        );
+        if (duplicateError != null) {
+            return ApiResponse.error(duplicateError.message());
+        }
+
         PatientInsurance saved = patientInsuranceRepository.save(patientInsurance);
         meilisearchIndexService.indexPatient(patient.getId());
         return ApiResponse.success("Patient insurance added.", patientInsuranceMapper.toDto(saved));
@@ -590,6 +604,14 @@ public class PatientService {
             Optional<Patient> patientOptional = patientRepository.findById(input.patientId());
             if (patientOptional.isEmpty()) {
                 return ApiResponse.error("Patient not found.");
+            }
+            // A used insurance is part of the original patient's financial/visit audit
+            // trail; moving it to another patient would orphan those references.
+            if (!patientOptional.get().getId().equals(patientInsurance.getPatient().getId())
+                    && isInsuranceInUse(patientInsuranceId)) {
+                return ApiResponse.error(
+                    "This insurance is in use and cannot be moved to another patient."
+                );
             }
             patientInsurance.setPatient(patientOptional.get());
         }
@@ -620,13 +642,35 @@ public class PatientService {
                 false
         );
         if (validationError != null) {
+            // applyPatientInsuranceInput mutates the managed entity before returning;
+            // an error ApiResponse does not roll back by itself, so mark the
+            // transaction rollback-only to avoid committing the partial mutation.
+            org.springframework.transaction.interceptor.TransactionAspectSupport
+                .currentTransactionStatus()
+                .setRollbackOnly();
             return ApiResponse.error(validationError.message());
         }
 
         // Validate business rules
         ApiResponse<Void> businessRuleError = validateInsuranceBusinessRules(patientInsurance.getPatient(), patientInsurance);
         if (businessRuleError != null) {
+            org.springframework.transaction.interceptor.TransactionAspectSupport
+                .currentTransactionStatus()
+                .setRollbackOnly();
             return ApiResponse.error(businessRuleError.message());
+        }
+
+        // One active policy per provider + one card number per patient. The record
+        // itself (same id) is excluded; the effective patient is the possibly-changed one.
+        ApiResponse<Void> duplicateError = checkInsuranceDuplicates(
+                patientInsuranceRepository.findByPatientId(patientInsurance.getPatient().getId()),
+                patientInsurance
+        );
+        if (duplicateError != null) {
+            org.springframework.transaction.interceptor.TransactionAspectSupport
+                .currentTransactionStatus()
+                .setRollbackOnly();
+            return ApiResponse.error(duplicateError.message());
         }
 
         PatientInsurance saved = patientInsuranceRepository.save(patientInsurance);
@@ -647,11 +691,18 @@ public class PatientService {
 
         UUID patientId = patientInsuranceOptional.get().getPatient().getId();
 
-        // FK guard: insurances linked to a visit cannot be removed — the FK in
-        // visit_insurances would throw DataIntegrityViolationException -> 500.
-        if (visitInsuranceRepository.existsByPatientInsuranceId(patientInsuranceId)) {
-            return ApiResponse.error(
-                "This insurance is linked to one or more visits and cannot be deleted. Unlink it from the visits first."
+        // A used insurance (linked to a visit or applied to a billing line) keeps an
+        // audit/financial trail pointing at it, so it can never be hard-deleted.
+        // Deactivate it instead; it stays visible in the patient's list and remains
+        // editable, but can no longer be applied to new bills or linked to visits.
+        if (isInsuranceInUse(patientInsuranceId)) {
+            PatientInsurance insurance = patientInsuranceOptional.get();
+            insurance.setDeactivated(true);
+            patientInsuranceRepository.save(insurance);
+            meilisearchIndexService.indexPatient(patientId);
+            return ApiResponse.success(
+                "This insurance is in use and cannot be deleted. It has been deactivated instead.",
+                true
             );
         }
 
@@ -777,11 +828,94 @@ public class PatientService {
         return null;
     }
 
+    /**
+     * Rejects a candidate policy against the patient's other policies:
+     * <ul>
+     *   <li>a duplicate card number (case-insensitive) is never allowed, and</li>
+     *   <li>a patient cannot hold two non-deactivated policies from the same
+     *       provider whose validity windows overlap (one active policy per provider).</li>
+     * </ul>
+     * The candidate itself (matched by id) is skipped, so this also works for updates.
+     */
+    private ApiResponse<Void> checkInsuranceDuplicates(
+            List<PatientInsurance> patientInsurances,
+            PatientInsurance candidate) {
+        if (patientInsurances == null) {
+            return null;
+        }
+
+        UUID candidateId = candidate.getId();
+        String candidateCard = candidate.getInsuranceCardNumber();
+        for (PatientInsurance pi : patientInsurances) {
+            if (candidateId != null && candidateId.equals(pi.getId())) {
+                continue;
+            }
+            if (candidateCard != null && pi.getInsuranceCardNumber() != null
+                    && candidateCard.equalsIgnoreCase(pi.getInsuranceCardNumber().trim())) {
+                return ApiResponse.error(
+                    "An insurance with this card number already exists for this patient."
+                );
+            }
+        }
+
+        for (PatientInsurance pi : patientInsurances) {
+            if (candidateId != null && candidateId.equals(pi.getId())) {
+                continue;
+            }
+            if (pi.isDeactivated()) {
+                continue;
+            }
+            if (!pi.getInsuranceProvider().getId().equals(candidate.getInsuranceProvider().getId())) {
+                continue;
+            }
+            if (validityOverlaps(
+                    candidate.getValidFrom(),
+                    candidate.getValidUntil(),
+                    pi.getValidFrom(),
+                    pi.getValidUntil()
+            )) {
+                return ApiResponse.error(
+                    "This patient already has an active insurance from the same provider. "
+                    + "Deactivate the existing one before adding another."
+                );
+            }
+        }
+
+        return null;
+    }
+
+    private boolean validityOverlaps(
+            LocalDate fromA, LocalDate untilA,
+            LocalDate fromB, LocalDate untilB) {
+        if (fromA == null || untilA == null || fromB == null || untilB == null) {
+            return false;
+        }
+        return !fromA.isAfter(untilB) && !fromB.isAfter(untilA);
+    }
+
+    /**
+     * Whether an insurance is referenced by any visit link, billing line or
+     * generated invoice — once referenced it must never be hard-deleted, only
+     * deactivated.
+     */
+    private boolean isInsuranceInUse(UUID patientInsuranceId) {
+        return visitInsuranceRepository.existsByPatientInsuranceId(patientInsuranceId)
+                || visitBillingItemRepository.existsByAppliedPatientInsuranceId(patientInsuranceId)
+                || departmentInsuranceBillingRepository
+                       .existsByPatientInsuranceIdAndInvoiceUrlIsNotNull(patientInsuranceId);
+    }
+
     private ApiResponse<List<PatientInsuranceDto>> validateAndCreateInsurances(
             Patient patient,
             List<CreatePatientInsuranceInput> insurances) {
 
         List<PatientInsuranceDto> createdInsurances = new ArrayList<>();
+        // Existing policies plus the ones created earlier in this payload; every
+        // candidate is checked against all of them so duplicate card numbers and
+        // overlapping same-provider policies are rejected even within one request.
+        List<PatientInsurance> known = new ArrayList<>(
+                patientInsuranceRepository.findByPatientId(patient.getId())
+        );
 
         for (CreatePatientInsuranceInput input : insurances) {
             if (input == null || input.insuranceProviderId() == null) {
@@ -822,7 +956,13 @@ public class PatientService {
                 return ApiResponse.error(businessRuleError.message());
             }
 
+            ApiResponse<Void> duplicateError = checkInsuranceDuplicates(known, patientInsurance);
+            if (duplicateError != null) {
+                return ApiResponse.error(duplicateError.message());
+            }
+
             PatientInsurance saved = patientInsuranceRepository.save(patientInsurance);
+            known.add(saved);
             createdInsurances.add(patientInsuranceMapper.toDto(saved));
         }
 
@@ -908,6 +1048,31 @@ public class PatientService {
     private PatientDto mapToDto(Patient patient) {
         List<PatientInsurance> insurances = patientInsuranceRepository.findByPatientId(patient.getId());
         return patientMapper.toDto(patient, insurances);
+    }
+
+    /**
+     * Maps many patients with a SINGLE insurance lookup (N+1 avoidance): loads all
+     * insurances for the given patients in one query and groups them by patient.
+     */
+    private List<PatientDto> mapToDtos(List<Patient> patients) {
+        if (patients == null || patients.isEmpty()) {
+            return List.of();
+        }
+        Set<UUID> patientIds = patients.stream()
+                .map(Patient::getId)
+                .collect(java.util.stream.Collectors.toSet());
+        Map<UUID, List<PatientInsurance>> insurancesByPatient =
+                patientInsuranceRepository.findByPatientIdIn(patientIds)
+                        .stream()
+                        .collect(java.util.stream.Collectors.groupingBy(
+                                pi -> pi.getPatient().getId()
+                        ));
+        return patients.stream()
+                .map(p -> patientMapper.toDto(
+                        p,
+                        insurancesByPatient.getOrDefault(p.getId(), List.of())
+                ))
+                .toList();
     }
 
     private String mapPatientPersistenceError(org.springframework.dao.DataIntegrityViolationException ex) {

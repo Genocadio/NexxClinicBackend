@@ -30,4 +30,6 @@ public interface VisitBillingItemRepository extends JpaRepository<VisitBillingIt
     List<VisitBillingItem> findByVisitBillingIdWithProduct(@Param("billingId") UUID billingId);
 
     List<VisitBillingItem> findByVisitDepartmentProductId(UUID visitDepartmentProductId);
+
+    boolean existsByAppliedPatientInsuranceId(UUID appliedPatientInsuranceId);
 }

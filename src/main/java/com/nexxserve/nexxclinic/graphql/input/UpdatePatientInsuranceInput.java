@@ -1,5 +1,6 @@
 package com.nexxserve.nexxclinic.graphql.input;
 
+import com.nexxserve.nexxclinic.validation.ValidPhoneNumber;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.util.UUID;
@@ -20,6 +21,7 @@ public record UpdatePatientInsuranceInput(
         String principalMemberName,
 
         @Size(max = 30, message = "principalMemberPhoneNumber must not exceed 30 characters")
+        @ValidPhoneNumber
         String principalMemberPhoneNumber,
         LocalDate validFrom,
         LocalDate validUntil

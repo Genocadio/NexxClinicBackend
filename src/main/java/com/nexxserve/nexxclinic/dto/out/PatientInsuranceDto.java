@@ -15,6 +15,7 @@ public record PatientInsuranceDto(
         String principalMemberPhoneNumber,
         LocalDate validFrom,
         LocalDate validUntil,
+        boolean deactivated,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {}

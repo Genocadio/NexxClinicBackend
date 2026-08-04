@@ -1,5 +1,6 @@
 package com.nexxserve.nexxclinic.graphql.input;
 
+import com.nexxserve.nexxclinic.validation.ValidPhoneNumber;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -26,6 +27,7 @@ public record CreatePatientInsuranceInput(
         String principalMemberName,
 
         @Size(max = 30, message = "principalMemberPhoneNumber must not exceed 30 characters")
+        @ValidPhoneNumber
         String principalMemberPhoneNumber,
 
         @NotNull(message = "validFrom is required")

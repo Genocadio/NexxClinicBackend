@@ -76,6 +76,11 @@ public class BillingPricingCalculator {
             return null;
         }
         PatientInsurance insurance = insuranceOptional.get();
+        // Deactivated policies (soft-deleted because they were already used) can
+        // never be applied to a new bill.
+        if (insurance.isDeactivated()) {
+            return null;
+        }
         LocalDate today = LocalDate.now();
         if (insurance.getValidFrom() != null && insurance.getValidFrom().isAfter(today)) {
             return null;

@@ -1,6 +1,7 @@
 package com.nexxserve.nexxclinic.repository;
 
 import com.nexxserve.nexxclinic.entity.PatientInsurance;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -10,6 +11,9 @@ public interface PatientInsuranceRepository extends JpaRepository<PatientInsuran
 
     @EntityGraph(attributePaths = {"patient", "insuranceProvider"})
     List<PatientInsurance> findByPatientId(UUID patientId);
+
+    @EntityGraph(attributePaths = {"patient", "insuranceProvider"})
+    List<PatientInsurance> findByPatientIdIn(Collection<UUID> patientIds);
 
     @EntityGraph(attributePaths = {"patient", "insuranceProvider"})
     List<PatientInsurance> findByInsuranceProviderId(UUID insuranceProviderId);

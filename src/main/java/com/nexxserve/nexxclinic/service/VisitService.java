@@ -151,7 +151,7 @@ public class VisitService {
 
         List<PatientInsurance> linkedInsurances = resolveLinkedInsurances(input.patientId(), input.linkedPatientInsuranceIds());
         if (linkedInsurances == null) {
-            return ApiResponse.error("Each linked insurance must exist and belong to the selected patient.");
+            return ApiResponse.error("Each linked insurance must exist, belong to the selected patient and be active.");
         }
 
         Worker actingUser = resolveWorker(authUser);
@@ -581,7 +581,7 @@ public class VisitService {
 
         List<PatientInsurance> patientInsurances = resolveLinkedInsurances(visit.getPatient().getId(), uniqueIds);
         if (patientInsurances == null) {
-            return ApiResponse.error("Each insurance must exist and belong to the selected patient.");
+            return ApiResponse.error("Each insurance must exist, belong to the selected patient and be active.");
         }
 
         for (PatientInsurance patientInsurance : patientInsurances) {
@@ -976,6 +976,10 @@ public class VisitService {
 
             PatientInsurance insurance = insuranceOptional.get();
             if (!insurance.getPatient().getId().equals(patientId)) {
+                return null;
+            }
+            // A deactivated (soft-deleted) policy can no longer be linked to a visit.
+            if (insurance.isDeactivated()) {
                 return null;
             }
 

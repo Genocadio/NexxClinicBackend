@@ -320,6 +320,9 @@ public class MeilisearchIndexService {
     private Set<UUID> insuranceProviderIdsFor(UUID patientId) {
         return patientInsuranceRepository.findByPatientId(patientId)
                 .stream()
+                // Deactivated policies are no longer applicable, so they must not
+                // match a provider filter in patient search.
+                .filter(pi -> !pi.isDeactivated())
                 .map(pi -> pi.getInsuranceProvider().getId())
                 .collect(Collectors.toSet());
     }

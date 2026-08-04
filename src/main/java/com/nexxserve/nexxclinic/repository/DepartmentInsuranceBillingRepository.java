@@ -89,5 +89,12 @@ public interface DepartmentInsuranceBillingRepository extends JpaRepository<Depa
             @Param("visitId") UUID visitId,
             @Param("versionId") UUID versionId
     );
+
+    /**
+     * Whether any billing bucket references the insurance and has a generated
+     * invoice — used to decide if a patient insurance must be deactivated instead
+     * of hard-deleted even when no visit link or billing item points at it.
+     */
+    boolean existsByPatientInsuranceIdAndInvoiceUrlIsNotNull(UUID patientInsuranceId);
 }
 
