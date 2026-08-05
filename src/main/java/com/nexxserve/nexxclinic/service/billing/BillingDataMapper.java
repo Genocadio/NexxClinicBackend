@@ -2,6 +2,8 @@ package com.nexxserve.nexxclinic.service.billing;
 
 import com.nexxserve.nexxclinic.entity.Department;
 import com.nexxserve.nexxclinic.entity.DepartmentInsuranceBilling;
+import com.nexxserve.nexxclinic.entity.InsuranceProvider;
+import com.nexxserve.nexxclinic.entity.Patient;
 import com.nexxserve.nexxclinic.entity.PatientInsurance;
 import com.nexxserve.nexxclinic.entity.VisitBilling;
 import com.nexxserve.nexxclinic.entity.VisitBillingItem;
@@ -146,13 +148,76 @@ public class BillingDataMapper {
         Map<String, Object> data = new HashMap<>();
         data.put("id", insurance.getId());
         data.put(
-            "insuranceProviderId",
+            "patient",
+            insurance.getPatient() == null ? null : patientToMap(insurance.getPatient())
+        );
+        data.put(
+            "insuranceProvider",
             insurance.getInsuranceProvider() == null
                 ? null
-                : insurance.getInsuranceProvider().getId()
+                : insuranceProviderToMap(insurance.getInsuranceProvider())
         );
+        data.put("insuranceProviderId", insurance.getInsuranceProvider() == null
+            ? null
+            : insurance.getInsuranceProvider().getId());
         data.put("insuranceCardNumber", insurance.getInsuranceCardNumber());
+        data.put("providingCompanyOrEmployer", insurance.getProvidingCompanyOrEmployer());
+        data.put("principalMember", insurance.isPrincipalMember());
         data.put("principalMemberName", insurance.getPrincipalMemberName());
+        data.put("principalMemberPhoneNumber", insurance.getPrincipalMemberPhoneNumber());
+        data.put("validFrom", insurance.getValidFrom());
+        data.put("validUntil", insurance.getValidUntil());
+        data.put("deactivated", insurance.isDeactivated());
+        data.put("createdAt", insurance.getCreatedAt());
+        data.put("updatedAt", insurance.getUpdatedAt());
+        return data;
+    }
+
+    private Map<String, Object> patientToMap(Patient patient) {
+        if (patient == null) {
+            return null;
+        }
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", patient.getId());
+        data.put("patientIdentifier", patient.getPatientIdentifier());
+        data.put("firstName", patient.getFirstName());
+        data.put("middleName", patient.getMiddleName());
+        data.put("lastName", patient.getLastName());
+        data.put("fullName", patient.getFullName());
+        data.put("dateOfBirth", patient.getDateOfBirth());
+        data.put("gender", patient.getGender());
+        data.put("primaryPhoneNumber", patient.getPrimaryPhoneNumber());
+        data.put("alternativePhone", patient.getAlternativePhone());
+        data.put("village", patient.getVillage());
+        data.put("cell", patient.getCell());
+        data.put("city", patient.getCity());
+        data.put("district", patient.getDistrict());
+        data.put("postalAddress", patient.getPostalAddress());
+        data.put("nationalIdNumber", patient.getNationalIdNumber());
+        data.put("passportNumber", patient.getPassportNumber());
+        data.put("emergencyContactName", patient.getEmergencyContactName());
+        data.put("emergencyContactRelationship", patient.getEmergencyContactRelationship());
+        data.put("emergencyContactPhoneNumber", patient.getEmergencyContactPhoneNumber());
+        data.put("createdAt", patient.getCreatedAt());
+        data.put("updatedAt", patient.getUpdatedAt());
+        return data;
+    }
+
+    private Map<String, Object> insuranceProviderToMap(
+        InsuranceProvider provider
+    ) {
+        if (provider == null) {
+            return null;
+        }
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", provider.getId());
+        data.put("insuranceName", provider.getInsuranceName());
+        data.put("acronym", provider.getAcronym());
+        data.put("defaultCoveragePercentage", provider.getDefaultCoveragePercentage());
+        data.put("supportedByClinic", provider.isSupportedByClinic());
+        data.put("iconUrl", provider.getIconUrl());
+        data.put("createdAt", provider.getCreatedAt());
+        data.put("updatedAt", provider.getUpdatedAt());
         return data;
     }
 
