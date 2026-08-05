@@ -243,4 +243,48 @@ class SupabaseStorageServiceTest {
         // 1 failing upload + 1 bucket creation + 1 successful re-upload
         verify(http, times(3)).send(any(), any());
     }
+
+    // ─────────────────────────────────────────────────────────────
+    // Signed URL keeps the /storage/v1 prefix
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    void signedUrlRestoresStorageV1PrefixWhenSupabaseOmitsIt() throws Exception {
+        SupabaseProperties props = props();
+        HttpClient http = mock(HttpClient.class);
+        when(http.send(any(), any())).thenAnswer(inv ->
+            responseWithBody(
+                200,
+                "{\"signedURL\":\"https://supa.med.rw/object/sign/data/invoices/clinic/invoice-x.pdf?token=abc&expires=123\"}"
+            )
+        );
+        SupabaseStorageService service = new SupabaseStorageService(props, http);
+
+        String url = service.signedUrl("invoices/clinic/invoice-x.pdf", 300);
+
+        assertEquals(
+            "/storage/v1/object/sign/data/invoices/clinic/invoice-x.pdf?token=abc&expires=123",
+            url
+        );
+    }
+
+    @Test
+    void signedUrlDoesNotDuplicatePrefixWhenSupabaseAlreadyIncludesIt() throws Exception {
+        SupabaseProperties props = props();
+        HttpClient http = mock(HttpClient.class);
+        when(http.send(any(), any())).thenAnswer(inv ->
+            responseWithBody(
+                200,
+                "{\"signedURL\":\"https://supa.med.rw/storage/v1/object/sign/data/invoices/clinic/invoice-x.pdf?token=abc\"}"
+            )
+        );
+        SupabaseStorageService service = new SupabaseStorageService(props, http);
+
+        String url = service.signedUrl("data", "invoices/clinic/invoice-x.pdf", 300);
+
+        assertEquals(
+            "/storage/v1/object/sign/data/invoices/clinic/invoice-x.pdf?token=abc",
+            url
+        );
+    }
 }

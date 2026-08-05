@@ -108,7 +108,7 @@ services:
       API_BASE_URL: http://backend:8080
 
       # Supabase (igisubizo instance)
-      SUPABASE_INTERNAL_URL: http://host.docker.internal:p
+      SUPABASE_INTERNAL_URL: http://host.docker.internal:55321
       SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoyMDk4NDcyOTM2LCJpYXQiOjE3ODMxMTI5MzYsImlzcyI6InN1cGFiYXNlIiwicmVmIjoibG9jYWxob3N0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsInN1YiI6IjEyMzQ1Njc4OTAifQ.J4uGzvGYEjU-RUwhHmS0K7fMseDazF1SQe5n_ScFB64
     extra_hosts:
       - "host.docker.internal:host-gateway"

@@ -297,8 +297,13 @@ public class SupabaseStorageService {
         if (signedPath == null || signedPath.toString().isBlank()) {
             throw new IOException("Supabase returned an empty signedURL field");
         }
+        log.debug(
+            "Supabase sign ok  path={} rawSignedURL={}",
+            objectPath,
+            signedPath
+        );
 
-        return stripBase(signedPath.toString());
+        return buildSignedPath(invoiceBucket(), objectPath, signedPath.toString());
     }
 
     public String signedUrl(String bucket, String objectPath, int expiresInSeconds)
@@ -334,8 +339,12 @@ public class SupabaseStorageService {
         if (signedPath == null || signedPath.toString().isBlank()) {
             throw new IOException("Supabase returned an empty signedURL field");
         }
+        log.debug(
+            "Supabase sign ok  bucket={} path={} rawSignedURL={}",
+            bucket, objectPath, signedPath
+        );
 
-        return stripBase(signedPath.toString());
+        return buildSignedPath(bucket, objectPath, signedPath.toString());
     }
 
     // ─── INTERNAL ────────────────────────────────────────────────────────────
@@ -355,12 +364,26 @@ public class SupabaseStorageService {
         return props.getUrl().replaceAll("/+$", "");
     }
 
-    private String stripBase(String url) {
-        String b = base();
-        if (!b.isEmpty() && url.startsWith(b)) {
-            return url.substring(b.length());
+    /**
+     * Builds the relative public path for a signed URL, always keeping the
+     * {@code /storage/v1} prefix. Some self-hosted Supabase storage-API responses
+     * omit it and only return {@code .../object/sign/{bucket}/{path}?token=...};
+     * rebuilding the path from the bucket/object guarantees a URL the frontend can
+     * resolve by prepending its own base host.
+     */
+    private String buildSignedPath(String bucket, String objectPath, String rawSignedUrl) {
+        String query = "";
+        int q = rawSignedUrl.indexOf('?');
+        if (q >= 0) {
+            query = rawSignedUrl.substring(q);
         }
-        return url;
+        String path =
+            "/storage/v1/object/sign/" + bucket + "/" + objectPath + query;
+        log.debug(
+            "buildSignedPath bucket={} path={} raw={} -> {}",
+            bucket, objectPath, rawSignedUrl, path
+        );
+        return path;
     }
 
     /**
