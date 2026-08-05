@@ -240,11 +240,17 @@ mutation Pay($input: RecordVisitBillingPaymentInput!) {
 
 ## 5. Correcting billing — `editBillVisit`
 
-**Editing is error correction.** The backend first syncs the visit's products (add/remove/update), then creates a **new billing version** from the corrected state. The old version remains for audit. Payments from the previous version are **carried forward automatically** unless you supply new ones. Invoices of previous versions are **invalidated**.
+**Editing is error correction.** The backend first syncs the visit's products (add/remove/update), then creates a **new billing version** from the corrected state. The old version remains for audit. Invoices of previous versions are **invalidated**.
 
 > Use `editBillVisit` for EVERYTHING that touches a billed visit. The normal product mutations are frozen once a department is billed (see §7).
 
-### Input shape
+### 5.1 The three rules that drive every edit
+
+1. **`billProducts` is the FULL new bill — required, and it's everything.** An edit is a complete re-projection: list **every** line you want on the new version (changed or not), using catalog `productId` (not `visitDepartmentProductId`). Anything omitted is silently dropped from the new bill.
+2. **Payments carry forward unless you send `payments`.** Omit them → the previous version's payments are carried into the new version. Send them → they **replace** the carried ones. ⚠️ Sending `payments: []` (empty) still means *carry forward* — you cannot zero a payment that way; you must send the actual new amounts.
+3. **There is no refund mechanism (the payment guard).** If the corrected bill's patient payable is **less** than the money already recorded, the edit is **rejected**: *"The corrected bill for … is smaller than the amount already paid. Keep the paid product or adjust the payments…"* The number in the message is the **leftover = money already paid − new patient payable**. The only ways to shrink a bill below what was paid: (a) keep the paid product billed, or (b) submit the smaller (post-refund) `payments` — meaning the money was actually returned to the patient and the new version records the corrected amount.
+
+### 5.2 Input shape
 
 ```json
 {
@@ -252,11 +258,11 @@ mutation Pay($input: RecordVisitBillingPaymentInput!) {
   "departments": [
     {
       "visitDepartmentId": "uuid",       // MUST include EVERY top-level department that has (non-deleted) products
-      "addedProducts": [                  // products to add in this correction
+      "addedProducts": [                  // products to ADD in this correction
         { "productId": "uuid", "quantity": 2.0 }
       ],
-      "removedProductIds": ["uuid"],      // products to remove (soft delete, keeps billing history)
-      "updatedProducts": [                // quantity corrections on existing products
+      "removedProductIds": ["uuid"],      // products to REMOVE (soft delete, keeps billing history)
+      "updatedProducts": [                // QUANTITY corrections on existing products
         { "productId": "uuid", "quantity": 3.0 }
       ],
       "billProducts": [                   // REQUIRED — the full bill set for the NEW version
@@ -277,19 +283,221 @@ mutation Pay($input: RecordVisitBillingPaymentInput!) {
 }
 ```
 
-### How the parts map to editing scenarios
+### 5.3 How the parts map to editing scenarios
 
-| Scenario | What to send |
-|---|---|
-| **Add a new product** | `addedProducts: [{ productId, quantity }]` **and** include it in `billProducts` so it is billed in the new version. |
-| **Remove a product** | `removedProductIds: [productId]` and **exclude** it from `billProducts`. The product is soft-deleted (billing history preserved). ⚠️ Each department entry must still bill **at least one** product — you cannot remove the last product of a department (`billProducts` may not end up empty). |
-| **Change quantity** | `updatedProducts: [{ productId, quantity }]` and the **same quantity** in the matching `billProducts.quantity` (mismatch → error). |
-| **Adjust price** | Not editable at bill level (the `price` field was **removed** from the input). Fix the price in the product catalog (or coverage), then re-run `editBillVisit` — the new version bills at the corrected catalog price. |
-| **Exempt a product** | `billProducts.isExempted: true` (plus the department `note`). |
-| **Change which insurance applies** | `billProducts.coverageType: "INSURANCE"` + `billProducts.patientInsuranceId` (must be linked to the visit, active and cover the product). Set `coverageType: "PRIVATE"` to drop insurance off a line. |
-| **Add a payment / record balance** | `payments: [...]`, or leave it empty to carry the previous payments forward. |
+| Scenario | `addedProducts` | `removedProductIds` | `updatedProducts` | `billProducts` | `payments` | `note` |
+|---|---|---|---|---|---|---|
+| Add a product | include it | — | — | include it too | carried or new | only if balance left |
+| Remove a product | — | include it | — | **exclude** it | see 5.4 (paid?) | only if balance left |
+| Exempt a product | — | — | — | `isExempted: true` | see 5.4 (paid?) | **required** |
+| Change quantity (up) | — | — | new qty | same new qty (must match) | carried or new | required if balance left |
+| Change quantity (down) | — | — | new qty | same new qty (must match) | see 5.4 (paid?) | only if balance left |
+| Change coverage / insurance | — | — | — | new `coverageType` / `patientInsuranceId` | carried | only if balance left |
+| Add a payment / record balance | — | — | — | unchanged | add payment(s) | required if balance remains |
+| Fix a price | — | — | — | unchanged | carried | — |
 
-### Rules & gotchas
+> **The column you must think hardest about is `payments`.** It changes from *"carried"* to *"new (reduced) amounts"* whenever your edit **reduces the patient payable below what was already paid** — the only other change it reacts to is adding/removing payments.
+
+### 5.4 Worked examples
+
+Base bill we'll edit (one department, fully paid):
+
+```
+Ophthalmology (dept-1)
+├─ PRIVATE bucket  — Fluorescein staining test      patientPayable 20,912.00   paid 20,912.00
+└─ RSSB bucket     — Refraction                      patientPayable  3,107.14   \
+                    Indirect ophthalmoscopy            patientPayable  3,771.00   | paid 7,214.74
+                    Consultation paramedical A1        patientPayable    336.60   /
+                          department patientPayable 28,126.74   paid 28,126.74   (PAID)
+```
+
+Every example sends `visitId: "visit-1"` and this department; only the parts that change are shown. Products are referenced by catalog `productId`:
+`fluorescein`, `refraction`, `ophthalmoscopy`, `consultation-a1`; RSSB insurance = `patientInsuranceId: "rssb-1"`.
+
+#### Example 1 — Exempt a product that was PAID (the trap)
+
+The private Fluorescein (20,912) is already paid. Exempting it drops patient payable to **7,214.74**, but the carried payments are still 28,126.74 → 20,912 is unabsorbed → rejected. You must also submit the **post-refund payment** and the required note:
+
+```json
+{
+  "visitId": "visit-1",
+  "departments": [{
+    "visitDepartmentId": "dept-1",
+    "billProducts": [
+      { "productId": "fluorescein",  "coverageType": "PRIVATE",   "isExempted": true },
+      { "productId": "refraction",   "coverageType": "INSURANCE", "patientInsuranceId": "rssb-1", "quantity": 1 },
+      { "productId": "ophthalmoscopy","coverageType": "INSURANCE","patientInsuranceId": "rssb-1", "quantity": 1 },
+      { "productId": "consultation-a1","coverageType": "INSURANCE","patientInsuranceId": "rssb-1", "quantity": 1 }
+    ],
+    "payments": [ { "amount": 7214.74, "paymentMethod": "MOBILE_MONEY" } ],
+    "note": "Fluorescein waived by clinician"
+  }]
+}
+```
+
+Result: new version private bucket 0.00 (PAID), RSSB bucket 7,214.74 (PAID). The 20,912 is recorded as adjusted/refunded.
+
+#### Example 2 — Remove a product that was PAID
+
+Same principle as Example 1 — you soft-delete the product *and* drop the payments to the post-refund amount:
+
+```json
+{
+  "visitId": "visit-1",
+  "departments": [{
+    "visitDepartmentId": "dept-1",
+    "removedProductIds": ["fluorescein"],
+    "billProducts": [
+      { "productId": "refraction",    "coverageType": "INSURANCE", "patientInsuranceId": "rssb-1", "quantity": 1 },
+      { "productId": "ophthalmoscopy", "coverageType": "INSURANCE", "patientInsuranceId": "rssb-1", "quantity": 1 },
+      { "productId": "consultation-a1", "coverageType": "INSURANCE", "patientInsuranceId": "rssb-1", "quantity": 1 }
+    ],
+    "payments": [ { "amount": 7214.74, "paymentMethod": "MOBILE_MONEY" } ]
+    // no note needed: nothing exempted and payments == patient payable
+  }]
+}
+```
+
+#### Example 3 — Remove / exempt a product that was NOT paid
+
+No payment change — the carried payments already cover (or are below) the new payable:
+
+```json
+{
+  "visitId": "visit-1",
+  "departments": [{
+    "visitDepartmentId": "dept-1",
+    "removedProductIds": ["consultation-a1"],
+    "billProducts": [
+      { "productId": "fluorescein",   "coverageType": "PRIVATE" },
+      { "productId": "refraction",    "coverageType": "INSURANCE", "patientInsuranceId": "rssb-1", "quantity": 1 },
+      { "productId": "ophthalmoscopy", "coverageType": "INSURANCE", "patientInsuranceId": "rssb-1", "quantity": 1 }
+    ]
+    // payments omitted → previous payments carried forward
+  }]
+}
+```
+
+#### Example 4 — Add a product
+
+Add it in BOTH places (so it lands on the visit and gets billed). The new payable exceeds the carried payment → the bill becomes `PARTIALLY_PAID`, so a `note` is required (or add a matching payment):
+
+```json
+{
+  "visitId": "visit-1",
+  "departments": [{
+    "visitDepartmentId": "dept-1",
+    "addedProducts": [ { "productId": "tonometry", "quantity": 1 } ],
+    "billProducts": [
+      { "productId": "fluorescein",   "coverageType": "PRIVATE" },
+      { "productId": "tonometry",     "coverageType": "PRIVATE", "quantity": 1 },
+      { "productId": "refraction",    "coverageType": "INSURANCE", "patientInsuranceId": "rssb-1", "quantity": 1 },
+      { "productId": "ophthalmoscopy", "coverageType": "INSURANCE", "patientInsuranceId": "rssb-1", "quantity": 1 },
+      { "productId": "consultation-a1", "coverageType": "INSURANCE", "patientInsuranceId": "rssb-1", "quantity": 1 }
+    ],
+    "note": "Added tonometry, balance to be collected"
+  }]
+}
+```
+
+#### Example 5 — Change quantity UP
+
+`updatedProducts.quantity` and `billProducts.quantity` must be **identical** for that product. Payable grows → note required if a balance remains:
+
+```json
+{
+  "visitId": "visit-1",
+  "departments": [{
+    "visitDepartmentId": "dept-1",
+    "updatedProducts": [ { "productId": "refraction", "quantity": 2 } ],
+    "billProducts": [
+      { "productId": "fluorescein",   "coverageType": "PRIVATE" },
+      { "productId": "refraction",    "coverageType": "INSURANCE", "patientInsuranceId": "rssb-1", "quantity": 2 },
+      { "productId": "ophthalmoscopy", "coverageType": "INSURANCE", "patientInsuranceId": "rssb-1", "quantity": 1 },
+      { "productId": "consultation-a1", "coverageType": "INSURANCE", "patientInsuranceId": "rssb-1", "quantity": 1 }
+    ],
+    "note": "Refraction ×2"
+  }]
+}
+```
+
+#### Example 6 — Change quantity DOWN (below what was paid)
+
+Reducing a paid line below the collected amount hits the payment guard — drop the payments to the corrected total:
+
+```json
+{
+  "visitId": "visit-1",
+  "departments": [{
+    "visitDepartmentId": "dept-1",
+    "updatedProducts": [ { "productId": "refraction", "quantity": 1 } ],
+    "billProducts": [
+      { "productId": "fluorescein",   "coverageType": "PRIVATE" },
+      { "productId": "refraction",    "coverageType": "INSURANCE", "patientInsuranceId": "rssb-1", "quantity": 1 },
+      { "productId": "ophthalmoscopy", "coverageType": "INSURANCE", "patientInsuranceId": "rssb-1", "quantity": 1 },
+      { "productId": "consultation-a1", "coverageType": "INSURANCE", "patientInsuranceId": "rssb-1", "quantity": 1 }
+    ],
+    "payments": [ { "amount": <new total>, "paymentMethod": "MOBILE_MONEY" } ]
+  }]
+}
+```
+
+#### Example 7 — Change coverage / insurance
+
+Total payable unchanged → carried payments still cover it, no note needed. Just edit the line:
+
+```json
+{
+  "visitId": "visit-1",
+  "departments": [{
+    "visitDepartmentId": "dept-1",
+    "billProducts": [
+      { "productId": "fluorescein",   "coverageType": "PRIVATE" },
+      { "productId": "refraction",    "coverageType": "PRIVATE" },                                // was INSURANCE
+      { "productId": "ophthalmoscopy", "coverageType": "INSURANCE", "patientInsuranceId": "rssb-1", "quantity": 1 },
+      { "productId": "consultation-a1", "coverageType": "INSURANCE", "patientInsuranceId": "rssb-1", "quantity": 1 }
+    ]
+    // payments omitted → carried forward
+  }]
+}
+```
+
+> If you move a line from one insurer to another, use that insurer's `patientInsuranceId`. It must be visit-linked, active, and cover the product, else *"Selected patientInsuranceId is invalid…"*.
+
+#### Example 8 — Add a payment / clear a balance
+
+Leave the bill unchanged, add the payment, and note it:
+
+```json
+{
+  "visitId": "visit-1",
+  "departments": [{
+    "visitDepartmentId": "dept-1",
+    "billProducts": [ /* the current bill, unchanged */ ],
+    "payments": [ { "amount": 5000.0, "paymentMethod": "MOBILE_MONEY" } ],
+    "note": "Collected 5000 against balance"
+  }]
+}
+```
+
+#### Example 9 — Fix a price (catalog-only)
+
+Prices are **not** editable at bill level. Fix the product catalog / coverage, then re-run the edit with the same `billProducts` — the new version bills at the corrected price. Payments are carried, so a price **increase** leaves a balance (note required); a price **decrease** below paid trips the guard (see Example 1/2/6).
+
+### 5.5 Editing checklist (decision flow)
+
+For each department, before calling `editBillVisit`:
+
+1. **List the full `billProducts`** — every line that must be on the new bill. Keep unchanged lines identical.
+2. **Add/remove/update the visit's products** via `addedProducts` / `removedProductIds` / `updatedProducts` (adds must also appear in `billProducts`; removals must be excluded from it; `updatedProducts.quantity` must equal the matching `billProducts.quantity`).
+3. **Compare the new patient payable with the current paid amount:**
+   - `new payable ≥ paid` → omit `payments` (carried forward). If `new payable > paid` → balance remains → **`note` required** (or add payments).
+   - `new payable < paid` → **you MUST send reduced `payments`** (post-refund total), otherwise the edit is rejected.
+4. **Set `note`** whenever anything is exempted or a balance remains.
+5. **Include every root department** that still has non-deleted products.
+6. After a successful edit, **regenerate invoices** (old ones were invalidated).
+
+### 5.6 Rules & gotchas
 
 - **Must include every root department that has (non-deleted) products.** Omitting one → error: *"editBillVisit must include every department that has products…"*. The edit is a complete re-projection of the bill.
 - **`coverageType` is required on every `billProducts` entry** — same rules as §3.3: `PRIVATE` forbids `patientInsuranceId`; `INSURANCE` requires a valid one.
@@ -297,8 +505,8 @@ mutation Pay($input: RecordVisitBillingPaymentInput!) {
 - **Products with billing history are never hard-deleted.** `removedProductIds` soft-deletes the row (`deleted = true`); historical billing items keep pointing at it.
 - **Every department entry must bill ≥ 1 product.** An edit that empties a department (`billProducts` resolves to zero billable products, e.g. removing its last product) is rejected: *"Each department must contain at least one product to bill."* If a department truly has nothing billable left, leave it out of the payload (departments with no active products are not required).
 - **Profile products** (`source: PROFILE`) cannot be removed from billing → *"Change the visit department's profile instead."*
-- **Overpayment guard:** if the corrected bill is **smaller than what was already paid**, the edit is rejected (*"The corrected bill … is smaller than the amount already paid. Keep the paid product or adjust the payments…"*). There is **no refund mechanism** — keep the paid product or apply a smaller payment set. Corrections are meant to fix errors, not refund money.
-- **Carry-forward:** if `payments` is omitted/empty for a department, the previous version's payments (and paid amounts) are carried into the new version. If you *do* send payments, those replace the carried ones.
+- **Payment guard / no refund:** if the corrected patient payable is **smaller than what was already paid**, the edit is rejected (*"The corrected bill … is smaller than the amount already paid. Keep the paid product or adjust the payments…"*). The number in the message is the leftover (paid − new payable). To shrink a paid bill you must also submit the reduced post-refund `payments`. Corrections are meant to fix errors, not refund money.
+- **Carry-forward:** if `payments` is omitted or empty for a department, the previous version's payments (and paid amounts) are carried into the new version. If you *do* send payments, those replace the carried ones.
 - **Note rules are the same as `billVisit`**: required when any product is exempted or when payments don't cover the full patient payable.
 - A `COMPLETED` visit is reopened (`IN_PROGRESS`) during the correction and re-completes afterwards if fully billed.
 
@@ -359,7 +567,7 @@ query {
       payments { id amount paymentMethod reference createdAt updatedAt }
       insuranceBillings {
         id
-        patientInsurance { id insuranceProviderId insuranceCardNumber principalMemberName }
+        patientInsurance { id insuranceCardNumber principalMemberName insuranceProvider { id insuranceName acronym } }
         status totalAmount insuranceCoveredAmount patientPayableAmount paidAmount outstandingAmount
         items {
           id visitDepartmentProductId productId productName
@@ -428,11 +636,11 @@ enum PaymentMethod { CASH MOBILE_MONEY CARD BANK_TRANSFER CHEQUE MIXED }
 | *"Selected patientInsuranceId is invalid: it is not linked to this visit, does not cover the product, or the insurance policy is not active."* | Choose a different visit-linked, active insurer that covers the product, or switch the line to `PRIVATE`. |
 | *"… is already billed and its price (as configured in the product catalog), quantity, exemption or insurance differs from the previously billed line. Use editBillVisit to correct the billing."* | An incremental `billVisit` may only re-bill a billed line **identically**. Send the same quantity/coverage type/insurance/exemption (the price always comes from the catalog), or switch to `editBillVisit` for the correction. |
 | *"You have unread notes. Please read them before billing/editing/payments/invoice."* | Mark the visit's notes read for the acting user, then retry. |
-| *"Payment amount would exceed the patient payable amount."* | Payment input is too large — cap at `outstandingAmount`. |
+| *"Payment amount would exceed the patient payable amount."* | A payment input is larger than the patient payable for that department — cap at `outstandingAmount`. |
 | *"A billing note is required when items are exempted or the patient payment is less than the payable amount."* | Add `note` to the department entry. |
 | *"editBillVisit must include every department that has products. Missing: […]"* | Include ALL root departments with products in the edit payload. |
 | *"Quantity mismatch for product '…': updatedProducts.quantity … differs from billProducts.quantity"* | Send the same quantity in both places. |
-| *"The corrected bill for … is smaller than the amount already paid."* | No refund path — keep the paid product or adjust the payments. |
+| *"The corrected bill for … is smaller than the amount already paid."* | **The #1 edit blocker.** You reduced the bill below the money already collected (e.g. exempted/removed/shrunk a paid product). There is no refund mechanism — keep the paid product billed, **or** send the reduced post-refund `payments` for that department (see §5.4 Examples 1/2/6). |
 | *"… is a profile product and cannot be removed from billing."* | Change the visit department's profile instead. |
 | *"Payment must be recorded against the latest billing version."* | Refetch `visitBilling(visitId)` and use the current ids. |
 | *"Cannot cancel a billed visit. Use editBillVisit to correct the billing."* | The visit has a billing container — cancellation is no longer allowed. Correct the bill via `editBillVisit` instead. |
