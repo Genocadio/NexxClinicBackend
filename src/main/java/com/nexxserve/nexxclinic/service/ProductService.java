@@ -111,6 +111,7 @@ public class ProductService {
         }
         product.setPrivateRhicPrice(input.privateRhicPrice());
         product.setClinicPrice(input.clinicPrice());
+        product.setNotPaid(input.notPaid() != null && input.notPaid());
 
         Product saved = productRepository.save(product);
 
@@ -197,6 +198,10 @@ public class ProductService {
                 return ApiResponse.error("clinicPrice must be greater than or equal to 0.");
             }
             product.setClinicPrice(input.clinicPrice());
+        }
+
+        if (input.notPaid() != null) {
+            product.setNotPaid(input.notPaid());
         }
 
         Product saved = productRepository.save(product);
@@ -338,6 +343,7 @@ public class ProductService {
                 product.getMetadata(),
                 product.getPrivateRhicPrice(),
                 product.getClinicPrice(),
+                product.isNotPaid(),
                 coverages,
                 product.getCreatedAt(),
                 product.getUpdatedAt()
@@ -417,6 +423,7 @@ public class ProductService {
         BigDecimal cost = input.cost() == null ? BigDecimal.ZERO : input.cost();
         coverage.setCost(cost);
         coverage.setCovered(cost.compareTo(BigDecimal.ZERO) > 0);
+        coverage.setNotPaid(input.notPaid() != null && input.notPaid());
         coverage.setRequireMedicalAdvisor(input.requireMedicalAdvisor() != null && input.requireMedicalAdvisor());
         coverage.setMustPrescribedBy(input.mustPrescribedBy() == null ? MustPrescribedBy.ALL : input.mustPrescribedBy());
         coverage.setDrugAdministrationFrequency(
@@ -541,6 +548,7 @@ public class ProductService {
 
         coverage.setCost(cost);
         coverage.setCovered(cost.compareTo(BigDecimal.ZERO) > 0);
+        coverage.setNotPaid(input.notPaid() != null && input.notPaid());
         coverage.setRequireMedicalAdvisor(input.requireMedicalAdvisor() != null && input.requireMedicalAdvisor());
         coverage.setMustPrescribedBy(input.mustPrescribedBy() == null ? MustPrescribedBy.ALL : input.mustPrescribedBy());
         coverage.setDrugAdministrationFrequency(
@@ -570,6 +578,7 @@ public class ProductService {
 
         coverage.setCost(cost);
         coverage.setCovered(cost.compareTo(BigDecimal.ZERO) > 0);
+        coverage.setNotPaid(input.notPaid() != null && input.notPaid());
         coverage.setRequireMedicalAdvisor(input.requireMedicalAdvisor() != null && input.requireMedicalAdvisor());
         coverage.setMustPrescribedBy(input.mustPrescribedBy() == null ? MustPrescribedBy.ALL : input.mustPrescribedBy());
         coverage.setDrugAdministrationFrequency(

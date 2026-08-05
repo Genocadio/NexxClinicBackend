@@ -33,6 +33,8 @@ public record UpdateProductInput(
         @DecimalMin(value = "0.0", message = "clinicPrice must be greater than or equal to 0")
         BigDecimal clinicPrice,
 
+        Boolean notPaid,
+
         List<@Valid UpdateProductInsuranceCoverageInput> insuranceCoverages
 ) {
 }

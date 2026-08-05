@@ -13,6 +13,7 @@ public record ProductInsuranceCoverageDto(
         InsuranceProviderDto insuranceProvider,
         BigDecimal cost,
         boolean covered,
+        boolean notPaid,
         boolean requireMedicalAdvisor,
         MustPrescribedBy mustPrescribedBy,
         DrugAdministrationFrequency drugAdministrationFrequency,

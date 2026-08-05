@@ -101,10 +101,19 @@ public class BillingPricingCalculator {
     }
 
     /**
-     * Default unit price for a line when the request does not override it:
-     * insurance coverage cost for covered products (throws if missing), otherwise
-     * the clinic price for PRIVATE lines (internal clinic: the RHIC private price
-     * list is not used for billing), otherwise zero.
+     * Default unit price for a line when the request does not override it.
+     *
+     * <ul>
+     *   <li>{@code INSURANCE} — the coverage cost for the applied insurance
+     *       (throws if the coverage is missing). A coverage flagged
+     *       {@code notPaid} bills at zero without a price lookup.</li>
+     *   <li>{@code PRIVATE} — a product flagged {@code notPaid} bills at zero
+     *       without a price lookup. Otherwise the explicit {@code clinicPrice}
+     *       wins (even when it is 0 — an explicit 0 means "free", not
+     *       "unset"); when {@code clinicPrice} was never set the
+     *       {@code privateRhicPrice} is used as a fallback; when neither was
+     *       set the line bills at zero.</li>
+     * </ul>
      */
     public BigDecimal resolveDefaultUnitPrice(
         VisitDepartmentProduct item,
@@ -118,7 +127,19 @@ public class BillingPricingCalculator {
                 )
                 .orElse(null);
 
-            if (coverage == null || coverage.getCost() == null) {
+            if (coverage == null) {
+                throw new IllegalArgumentException(
+                    "Insurance coverage cost not found for product: " +
+                    item.getProduct().getName() +
+                    " (" + item.getProduct().getCode() + ")"
+                );
+            }
+            // "Add as not paid" short-circuits before any price lookup — the line
+            // bills at zero even when the coverage cost is missing.
+            if (coverage.isNotPaid()) {
+                return MoneyUtils.ZERO;
+            }
+            if (coverage.getCost() == null) {
                 throw new IllegalArgumentException(
                     "Insurance coverage cost not found for product: " +
                     item.getProduct().getName() +
@@ -129,8 +150,14 @@ public class BillingPricingCalculator {
         }
 
         Product product = item.getProduct();
+        if (product.isNotPaid()) {
+            return MoneyUtils.ZERO;
+        }
         if (product.getClinicPrice() != null) {
             return MoneyUtils.toMoney(product.getClinicPrice());
+        }
+        if (product.getPrivateRhicPrice() != null) {
+            return MoneyUtils.toMoney(product.getPrivateRhicPrice());
         }
         return MoneyUtils.ZERO;
     }
@@ -162,6 +189,10 @@ public class BillingPricingCalculator {
         }
 
         ProductInsuranceCoverage coverage = coverageOptional.get();
+        // A coverage marked "add as not paid" is billed at zero: nothing to cover.
+        if (coverage.isNotPaid()) {
+            return MoneyUtils.ZERO;
+        }
         BigDecimal coverageAmount = MoneyUtils.ZERO;
         if (coverage.getCost() != null) {
             Integer pct = appliedInsurance.getInsuranceProvider().getDefaultCoveragePercentage();

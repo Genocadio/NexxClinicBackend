@@ -26,6 +26,7 @@ Product stores core medicine/service metadata and optional private pricing:
 - metadata: JSON object (stored as JSON string, defaults to {})
 - privateRhicPrice: decimal (nullable)
 - clinicPrice: decimal (nullable)
+- notPaid: boolean (defaults to false) — when true, PRIVATE billing lines for this product bill at 0 without a price lookup
 - createdAt, updatedAt: timestamps
 
 Entity reference:
@@ -40,6 +41,7 @@ Each record links one product to one insurance provider and stores coverage poli
 - insuranceProviderId: UUID (required, references InsuranceProvider)
 - cost: decimal (required, defaults to 0)
 - covered: boolean (derived from cost > 0)
+- notPaid: boolean (defaults to false) — when true, INSURANCE billing lines using this coverage bill at 0 without a price lookup
 - requireMedicalAdvisor: boolean
 - mustPrescribedBy: MustPrescribedBy (defaults to ALL)
 - drugAdministrationFrequency: DrugAdministrationFrequency (defaults to CUSTOM_HOURS)

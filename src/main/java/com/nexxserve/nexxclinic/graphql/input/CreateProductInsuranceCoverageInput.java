@@ -18,6 +18,8 @@ public record CreateProductInsuranceCoverageInput(
 
         Boolean covered,
 
+        Boolean notPaid,
+
         Boolean requireMedicalAdvisor,
 
         MustPrescribedBy mustPrescribedBy,

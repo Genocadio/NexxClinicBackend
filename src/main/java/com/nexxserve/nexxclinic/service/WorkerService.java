@@ -1118,6 +1118,7 @@ public class WorkerService {
         data.put("metadata", product.getMetadata());
         data.put("privateRhicPrice", product.getPrivateRhicPrice());
         data.put("clinicPrice", product.getClinicPrice());
+        data.put("notPaid", product.isNotPaid());
         data.put(
                 "insuranceCoverages",
                 productInsuranceCoverageRepository.findByProductId(product.getId())
@@ -1136,6 +1137,7 @@ public class WorkerService {
         data.put("insuranceProvider", insuranceProviderToMap(coverage.getInsuranceProvider()));
         data.put("cost", coverage.getCost());
         data.put("covered", coverage.isCovered());
+        data.put("notPaid", coverage.isNotPaid());
         data.put("requireMedicalAdvisor", coverage.isRequireMedicalAdvisor());
         data.put("mustPrescribedBy", coverage.getMustPrescribedBy());
         data.put("drugAdministrationFrequency", coverage.getDrugAdministrationFrequency());

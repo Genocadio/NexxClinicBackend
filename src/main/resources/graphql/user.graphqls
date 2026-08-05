@@ -401,6 +401,7 @@ type ProductInsuranceCoverage {
   insuranceProvider: InsuranceProvider!
   cost: Float!
   covered: Boolean!
+  notPaid: Boolean!
   requireMedicalAdvisor: Boolean!
   mustPrescribedBy: MustPrescribedBy!
   drugAdministrationFrequency: DrugAdministrationFrequency!
@@ -420,6 +421,7 @@ type Product {
   metadata: JSON
   privateRhicPrice: Float
   clinicPrice: Float
+  notPaid: Boolean!
   insuranceCoverages: [ProductInsuranceCoverage!]
   createdAt: String!
   updatedAt: String!
@@ -1128,6 +1130,7 @@ input CreateProductInsuranceCoverageInput {
   insuranceProviderId: ID!
   cost: Float
   covered: Boolean
+  notPaid: Boolean
   requireMedicalAdvisor: Boolean
   mustPrescribedBy: MustPrescribedBy
   drugAdministrationFrequency: DrugAdministrationFrequency
@@ -1138,6 +1141,7 @@ input UpdateProductInsuranceCoverageInput {
   insuranceProviderId: ID!
   cost: Float
   covered: Boolean
+  notPaid: Boolean
   requireMedicalAdvisor: Boolean
   mustPrescribedBy: MustPrescribedBy
   drugAdministrationFrequency: DrugAdministrationFrequency
@@ -1155,6 +1159,7 @@ input CreateProductInput {
   metadata: JSON
   privateRhicPrice: Float
   clinicPrice: Float
+  notPaid: Boolean
   insuranceCoverages: [CreateProductInsuranceCoverageInput!]
 }
 
@@ -1168,6 +1173,7 @@ input UpdateProductInput {
   metadata: JSON
   privateRhicPrice: Float
   clinicPrice: Float
+  notPaid: Boolean
   insuranceCoverages: [UpdateProductInsuranceCoverageInput!]
 }
 

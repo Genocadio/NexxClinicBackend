@@ -290,6 +290,7 @@ public class MeilisearchIndexService {
         doc.put("code", product.getCode());
         doc.put("description", product.getDescription());
         doc.put("type", product.getType() == null ? null : product.getType().name());
+        doc.put("notPaid", product.isNotPaid());
         upsert(PRODUCTS_INDEX, doc);
     }
 
@@ -437,6 +438,7 @@ public class MeilisearchIndexService {
             doc.put("code", product.getCode());
             doc.put("description", product.getDescription());
             doc.put("type", product.getType() == null ? null : product.getType().name());
+            doc.put("notPaid", product.isNotPaid());
             docs.add(doc);
         }
         replaceAll(index, docs);

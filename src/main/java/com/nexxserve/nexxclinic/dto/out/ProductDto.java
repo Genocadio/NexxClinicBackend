@@ -19,6 +19,7 @@ public record ProductDto(
         Object metadata,
         BigDecimal privateRhicPrice,
         BigDecimal clinicPrice,
+        boolean notPaid,
         List<ProductInsuranceCoverageDto> insuranceCoverages,
         LocalDateTime createdAt,
         LocalDateTime updatedAt

@@ -56,6 +56,9 @@ public class ProductInsuranceCoverage {
     private boolean covered;
 
     @Column(nullable = false)
+    private boolean notPaid;
+
+    @Column(nullable = false)
     private boolean requireMedicalAdvisor;
 
     @Enumerated(EnumType.STRING)
@@ -153,6 +156,14 @@ public class ProductInsuranceCoverage {
 
     public void setCovered(boolean covered) {
         this.covered = covered;
+    }
+
+    public boolean isNotPaid() {
+        return notPaid;
+    }
+
+    public void setNotPaid(boolean notPaid) {
+        this.notPaid = notPaid;
     }
 
     public boolean isRequireMedicalAdvisor() {

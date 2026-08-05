@@ -57,6 +57,9 @@ public class Product {
     @Column(precision = 19, scale = 2)
     private BigDecimal clinicPrice;
 
+    @Column(nullable = false)
+    private boolean notPaid;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -169,6 +172,14 @@ public class Product {
 
     public void setClinicPrice(BigDecimal clinicPrice) {
         this.clinicPrice = clinicPrice;
+    }
+
+    public boolean isNotPaid() {
+        return notPaid;
+    }
+
+    public void setNotPaid(boolean notPaid) {
+        this.notPaid = notPaid;
     }
 
     public LocalDateTime getCreatedAt() {
