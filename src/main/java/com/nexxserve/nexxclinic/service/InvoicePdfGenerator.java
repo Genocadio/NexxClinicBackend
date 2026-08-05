@@ -10,7 +10,9 @@ import com.nexxserve.nexxclinic.entity.Visit;
 import com.nexxserve.nexxclinic.entity.VisitDepartment;
 import com.nexxserve.nexxclinic.model.ClinicContactType;
 import com.nexxserve.nexxclinic.model.VisitBillingStatus;
+import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
@@ -108,7 +110,13 @@ public final class InvoicePdfGenerator {
             drawFooter(ctx);
 
             ctx.cs.close();
-            doc.save(invoiceFile.toFile());
+            // Save via a stream: PDDocument.save(File) logs a "you are overwriting
+            // the existing file" warning when the target already exists (createTempFile
+            // pre-creates it) and can corrupt the PDF if that file is also an input.
+            try (java.io.OutputStream out = new BufferedOutputStream(
+                    new FileOutputStream(invoiceFile.toFile()))) {
+                doc.save(out);
+            }
         }
     }
 

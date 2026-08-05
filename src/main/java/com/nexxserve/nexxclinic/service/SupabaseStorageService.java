@@ -21,7 +21,6 @@ public class SupabaseStorageService {
         SupabaseStorageService.class
     );
 
-    private static final String BUCKET = "data";
     private static final String BASE_PATH = "invoices";
 
     /** HTTP 429 Too Many Requests — transient, retryable. */
@@ -80,8 +79,25 @@ public class SupabaseStorageService {
     // ─── UPLOAD (invoice-specific) ───────────────────────────────────────────
 
     public void upload(byte[] pdfBytes, String objectPath) throws IOException {
+        try {
+            doUploadInvoice(pdfBytes, objectPath);
+        } catch (IOException e) {
+            if (e.getMessage() != null && e.getMessage().contains("Bucket not found")) {
+                log.warn(
+                    "Invoice bucket '{}' not found, attempting to create it",
+                    invoiceBucket()
+                );
+                createBucket(invoiceBucket(), false);
+                doUploadInvoice(pdfBytes, objectPath);
+            } else {
+                throw e;
+            }
+        }
+    }
+
+    private void doUploadInvoice(byte[] pdfBytes, String objectPath) throws IOException {
         String endpoint =
-            base() + "/storage/v1/object/" + BUCKET + "/" + objectPath;
+            base() + "/storage/v1/object/" + invoiceBucket() + "/" + objectPath;
 
         HttpRequest req = HttpRequest.newBuilder()
             .uri(URI.create(endpoint))
@@ -100,9 +116,11 @@ public class SupabaseStorageService {
                 res.statusCode(),
                 res.body()
             );
-            throw new IOException(
-                "Supabase upload failed with HTTP " + res.statusCode()
-            );
+            String msg = "Supabase upload failed with HTTP " + res.statusCode();
+            if (res.body() != null && res.body().contains("Bucket not found")) {
+                msg = "Bucket not found";
+            }
+            throw new IOException(msg);
         }
         log.debug(
             "Supabase upload ok  path={} status={}",
@@ -246,7 +264,7 @@ public class SupabaseStorageService {
     public String signedUrl(String objectPath, int expiresInSeconds)
         throws IOException {
         String endpoint =
-            base() + "/storage/v1/object/sign/" + BUCKET + "/" + objectPath;
+            base() + "/storage/v1/object/sign/" + invoiceBucket() + "/" + objectPath;
         String body = mapper.writeValueAsString(
             Map.of("expiresIn", expiresInSeconds)
         );
@@ -321,6 +339,16 @@ public class SupabaseStorageService {
     }
 
     // ─── INTERNAL ────────────────────────────────────────────────────────────
+
+    /**
+     * Bucket used for generated invoices. Configurable via
+     * {@code supabase.bucket-invoices} (default {@code "data"}); created on first
+     * use if it does not exist yet.
+     */
+    public String invoiceBucket() {
+        String bucket = props.getBucketInvoices();
+        return (bucket == null || bucket.isBlank()) ? "data" : bucket;
+    }
 
     private String base() {
         if (props.getUrl() == null) return "";

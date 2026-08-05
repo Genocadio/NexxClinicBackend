@@ -43,6 +43,7 @@ supabase:
   service-key: ${SUPABASE_SERVICE_KEY:YOUR_SERVICE_ROLE_KEY}
   bucket-public: ${SUPABASE_BUCKET_PUBLIC:uploads-public}
   bucket-private: ${SUPABASE_BUCKET_PRIVATE:uploads-private}
+  bucket-invoices: ${SUPABASE_BUCKET_INVOICES:data}
   connect-timeout-ms: ${SUPABASE_CONNECT_TIMEOUT_MS:5000}
   request-timeout-ms: ${SUPABASE_REQUEST_TIMEOUT_MS:15000}
   retry-max-attempts: ${SUPABASE_RETRY_MAX_ATTEMPTS:2}

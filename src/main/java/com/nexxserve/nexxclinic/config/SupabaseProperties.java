@@ -28,6 +28,9 @@ public class SupabaseProperties {
     /** Bucket name for private uploads. */
     private String bucketPrivate = "uploads-private";
 
+    /** Bucket name for generated invoices. Default "data". */
+    private String bucketInvoices = "data";
+
     /** Connect timeout (ms) for the Storage HTTP client. Default 5000. */
     private int connectTimeoutMs = 5000;
 
@@ -73,6 +76,14 @@ public class SupabaseProperties {
 
     public void setBucketPrivate(String bucketPrivate) {
         this.bucketPrivate = bucketPrivate;
+    }
+
+    public String getBucketInvoices() {
+        return bucketInvoices;
+    }
+
+    public void setBucketInvoices(String bucketInvoices) {
+        this.bucketInvoices = bucketInvoices;
     }
 
     public int getConnectTimeoutMs() {

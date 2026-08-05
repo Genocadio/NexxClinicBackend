@@ -245,6 +245,7 @@ class InvoiceGenerationIntegrationTest {
     private void stubStorage(String objectPath) {
         when(supabaseStorageService.buildObjectPath(any(), anyString()))
             .thenReturn(objectPath);
+        when(supabaseStorageService.invoiceBucket()).thenReturn("data");
     }
 
     // ─────────────────────────────────────────────────────────────

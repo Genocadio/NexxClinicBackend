@@ -39,6 +39,8 @@ supabase:
   service-key: SECRET
   bucket-public: uploads-public
   bucket-private: uploads-private
+  # Bucket for generated invoice PDFs; created automatically on first use.
+  bucket-invoices: ${SUPABASE_BUCKET_INVOICES:data}
   # Storage HTTP client hardening: fail fast instead of hanging on slow/unhealthy
   # Supabase, and survive transient (429/5xx) blips with bounded backoff.
   connect-timeout-ms: ${SUPABASE_CONNECT_TIMEOUT_MS:5000}

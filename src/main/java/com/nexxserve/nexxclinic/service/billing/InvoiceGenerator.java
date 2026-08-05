@@ -348,7 +348,10 @@ public class InvoiceGenerator {
             return;
         }
         try {
-            supabaseStorageService.delete("data", objectPath);
+            supabaseStorageService.delete(
+                supabaseStorageService.invoiceBucket(),
+                objectPath
+            );
             log.info(
                 "Cleaned up orphaned invoice upload {} for billing {}.",
                 objectPath,
