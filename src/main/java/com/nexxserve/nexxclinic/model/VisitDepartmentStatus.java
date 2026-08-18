@@ -6,5 +6,6 @@ public enum VisitDepartmentStatus {
     ON_HOLD,
     BILLING,
     COMPLETED,
+    FINALISED,
     CANCELLED
 }

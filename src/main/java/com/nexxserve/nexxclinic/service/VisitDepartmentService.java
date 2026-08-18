@@ -678,12 +678,6 @@ public class VisitDepartmentService {
             return ApiResponse.error("Cannot add products to a cancelled department.");
         }
 
-        // S5: a department in BILLING status is frozen for finance; new products must
-        // go through editBillVisit so a new billing version captures them.
-        if (visitDepartment.getStatus() == VisitDepartmentStatus.BILLING) {
-            return ApiResponse.error("Cannot add products to a department in BILLING status. Use editBillVisit to correct the billing.");
-        }
-
         Optional<Product> productOptional = productRepository.findById(input.productId());
         if (productOptional.isEmpty()) {
             return ApiResponse.error("Product not found.");

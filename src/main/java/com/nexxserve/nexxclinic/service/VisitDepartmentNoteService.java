@@ -175,9 +175,9 @@ public class VisitDepartmentNoteService {
             return ApiResponse.error("Cannot add notes to a cancelled department.");
         }
 
-        // C1: once a department is handed to finance (BILLING), clinical data is frozen.
-        if (visitDepartment.getStatus() == VisitDepartmentStatus.BILLING || visitDepartment.getStatus() == VisitDepartmentStatus.COMPLETED) {
-            return ApiResponse.error("Cannot add notes to a department in " + visitDepartment.getStatus() + " status.");
+        // Notes are only blocked when the department is FINALISED.
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.FINALISED) {
+            return ApiResponse.error("Cannot add notes to a finalised department.");
         }
 
         // Resolve target users if any are supplied
