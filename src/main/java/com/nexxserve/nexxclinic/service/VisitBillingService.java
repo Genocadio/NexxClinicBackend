@@ -6,6 +6,7 @@ import com.nexxserve.nexxclinic.entity.Department;
 import com.nexxserve.nexxclinic.entity.DepartmentInsuranceBilling;
 import com.nexxserve.nexxclinic.entity.PatientInsurance;
 import com.nexxserve.nexxclinic.entity.Product;
+import com.nexxserve.nexxclinic.entity.ProductInsuranceCoverage;
 import com.nexxserve.nexxclinic.entity.Visit;
 import com.nexxserve.nexxclinic.entity.VisitBilling;
 import com.nexxserve.nexxclinic.entity.VisitBillingItem;
@@ -475,8 +476,8 @@ public class VisitBillingService {
         //
 
         // DIAG: submitted payments and the running remaining-paid per department.
-        if (log.isInfoEnabled()) {
-            log.info(
+        if (log.isDebugEnabled()) {
+            log.debug(
                 "[BILL-DIAG] visit={} isEdit={} effectiveIsEdit={} departmentsInRequest={}",
                 visit.getId(), isEdit, effectiveIsEdit,
                 input.departments() == null ? 0 : input.departments().size()
@@ -494,7 +495,7 @@ public class VisitBillingService {
                         .map(p -> p == null ? "null"
                             : p.paymentMethod() + "=" + p.amount())
                         .collect(Collectors.joining(", ", "[", "]"));
-                log.info(
+                log.debug(
                     "[BILL-DIAG] visit={} dept={} ({}): submittedPayments={} totalPaid={} remainingPaid={}",
                     visit.getId(), deptId, deptName, paymentsSummary,
                     paymentDistributor.totalPayments(payments),
@@ -917,6 +918,24 @@ public class VisitBillingService {
             return PreparedBill.error("No products eligible for billing.");
         }
 
+        // Pre-fetch all ProductInsuranceCoverage rows for insurance-billed products
+        // in a single query, eliminating the N+1 pattern where each billing line
+        // triggered its own coverage lookup (resolveDefaultUnitPrice + calculateCoveredAmount).
+        Set<UUID> insuranceProductIds = new HashSet<>();
+        Set<UUID> insuranceProviderIds = new HashSet<>();
+        for (Map.Entry<UUID, PatientInsurance> e : appliedInsuranceByItem.entrySet()) {
+            PatientInsurance pi = e.getValue();
+            if (pi != null && pi.getInsuranceProvider() != null) {
+                VisitDepartmentProduct vdp = allProductsById.get(e.getKey());
+                if (vdp != null && vdp.getProduct() != null) {
+                    insuranceProductIds.add(vdp.getProduct().getId());
+                    insuranceProviderIds.add(pi.getInsuranceProvider().getId());
+                }
+            }
+        }
+        Map<UUID, Map<UUID, ProductInsuranceCoverage>> prefetchedCoverages =
+            pricingCalculator.prefetchCoverages(insuranceProductIds, insuranceProviderIds);
+
         Set<UUID> exemptedRootDepartmentIds = new LinkedHashSet<>();
         Map<UUID, VisitDepartmentBilling> departmentBillingByRoot =
             new HashMap<>();
@@ -986,12 +1005,6 @@ public class VisitBillingService {
             BigDecimal insuranceCovered = ZERO;
             BigDecimal patientPayable = ZERO;
 
-            // When editing, we may need to clear any previous invoice for the affected insurance billing
-            // so a fresh invoice can be generated for the updated items.
-            if (isEdit && hasText(insuranceBilling.getInvoiceUrl())) {
-                insuranceBilling.setInvoiceUrl(null);
-            }
-
             for (VisitDepartmentProduct item : entry.getValue()) {
                 PatientInsurance appliedInsurance = appliedInsuranceByItem.get(
                     item.getId()
@@ -1006,7 +1019,8 @@ public class VisitBillingService {
                 }
                 BigDecimal unitPrice = pricingCalculator.resolveDefaultUnitPrice(
                     item,
-                    appliedInsurance
+                    appliedInsurance,
+                    prefetchedCoverages
                 );
                 BigDecimal quantity = requestedQuantityByItem.containsKey(
                     item.getId()
@@ -1030,23 +1044,23 @@ public class VisitBillingService {
                         item,
                         appliedInsurance,
                         quantity,
-                        lineTotal
+                        lineTotal,
+                        prefetchedCoverages
                     );
                     patientAmount = toMoney(lineTotal.subtract(coveredAmount));
                 }
 
                 // DIAG: per-line money evaluation.
-                if (log.isInfoEnabled()) {
+                if (log.isDebugEnabled()) {
                     String insuranceInfo = appliedInsurance == null
                         ? "null"
                         : appliedInsurance.getId()
                             + "("
                             + appliedInsurance.getInsuranceProvider().getInsuranceName()
-                            + ", card=" + appliedInsurance.getInsuranceCardNumber()
                             + ", providerPct="
                             + appliedInsurance.getInsuranceProvider().getDefaultCoveragePercentage()
                             + ")";
-                    log.info(
+                    log.debug(
                         "[BILL-DIAG] visit={} rootDept={} product='{}' (id={}, qty={}, exempted={}, coverage={}, insurance={}): unitPrice={} lineTotal={} covered={} patientAmount={}",
                         visit.getId(),
                         group.rootVisitDepartmentId(),
@@ -1179,11 +1193,11 @@ public class VisitBillingService {
 
             // DIAG: bucket + department summary after money evaluation and payment
             // allocation for this billing group.
-            if (log.isInfoEnabled()) {
+            if (log.isDebugEnabled()) {
                 String insuranceLabel = group.patientInsuranceId() == null
                     ? "PRIVATE"
                     : group.patientInsuranceId().toString();
-                log.info(
+                log.debug(
                     "[BILL-DIAG] visit={} rootDept={} BUCKET insurance={}: total={} insuranceCovered={} patientPayable={} paidAmount={} outstanding={} status={} | remainingBefore={} allocatedNow={} remainingAfter={}",
                     visit.getId(),
                     group.rootVisitDepartmentId(),
@@ -1200,7 +1214,7 @@ public class VisitBillingService {
                         group.rootVisitDepartmentId(), ZERO
                     )
                 );
-                log.info(
+                log.debug(
                     "[BILL-DIAG] visit={} rootDept={} DEPT total={} insuranceCovered={} patientPayable={} paidAmount={} outstanding={} status={}",
                     visit.getId(),
                     group.rootVisitDepartmentId(),
@@ -1223,9 +1237,9 @@ public class VisitBillingService {
                     ? dept.getDepartment().getName()
                     : "department";
                 // DIAG: dump the overpayment context before rejecting.
-                if (log.isInfoEnabled()) {
+                if (log.isDebugEnabled()) {
                     VisitDepartmentBilling deptBilling = departmentBillingByRoot.get(entry.getKey());
-                    log.info(
+                    log.debug(
                         "[BILL-DIAG] visit={} REJECT overpayment dept={} ({}): unallocatedRemaining={} effectiveIsEdit={} carriedPaid={} submittedTotal={} deptTotal={} deptInsuranceCovered={} deptPatientPayable={} deptPaid={} deptOutstanding={} deptStatus={}",
                         visit.getId(),
                         entry.getKey(),
@@ -1666,25 +1680,6 @@ public class VisitBillingService {
             "Visit billing fetched.",
             billingDataMapper.visitBillingToMap(billings.get(0))
         );
-    }
-
-    @Transactional(readOnly = true)
-    public ApiResponse visitBillings(UUID visitId) {
-        if (visitId == null) {
-            return ApiResponse.error("visitId is required.");
-        }
-
-        if (!visitRepository.existsById(visitId)) {
-            return ApiResponse.error("Visit not found.");
-        }
-
-        List<Map<String, Object>> billings = billingVersionBuilder.orderByVersionDesc(
-            visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId)
-        ).stream()
-            .map(billingDataMapper::visitBillingToMap)
-            .toList();
-
-        return ApiResponse.success("Visit billings fetched.", billings);
     }
 
     private boolean hasText(String value) {

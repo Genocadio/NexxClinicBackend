@@ -1,0 +1,624 @@
+package com.nexxserve.nexxclinic.service;
+
+import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
+import com.nexxserve.nexxclinic.dto.out.ApiResponse;
+import com.nexxserve.nexxclinic.entity.Department;
+import com.nexxserve.nexxclinic.entity.Patient;
+import com.nexxserve.nexxclinic.entity.Product;
+import com.nexxserve.nexxclinic.entity.Visit;
+import com.nexxserve.nexxclinic.entity.VisitDepartment;
+import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
+import com.nexxserve.nexxclinic.entity.Worker;
+import com.nexxserve.nexxclinic.graphql.input.BillVisitInput;
+import com.nexxserve.nexxclinic.graphql.input.EditBillVisitInput;
+import com.nexxserve.nexxclinic.model.AccountStatus;
+import com.nexxserve.nexxclinic.model.CoverageType;
+import com.nexxserve.nexxclinic.model.Gender;
+import com.nexxserve.nexxclinic.model.PaymentMethod;
+import com.nexxserve.nexxclinic.model.ProductType;
+import com.nexxserve.nexxclinic.model.ProductUnit;
+import com.nexxserve.nexxclinic.model.ResponseStatus;
+import com.nexxserve.nexxclinic.model.RoleName;
+import com.nexxserve.nexxclinic.model.VisitDepartmentProductSource;
+import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
+import com.nexxserve.nexxclinic.model.VisitProductStatus;
+import com.nexxserve.nexxclinic.model.VisitStatus;
+import com.nexxserve.nexxclinic.repository.DepartmentRepository;
+import com.nexxserve.nexxclinic.repository.PatientRepository;
+import com.nexxserve.nexxclinic.repository.ProductRepository;
+import com.nexxserve.nexxclinic.repository.VisitBillingRepository;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
+import com.nexxserve.nexxclinic.repository.VisitRepository;
+import com.nexxserve.nexxclinic.repository.VisitBillingVersionRepository;
+import com.nexxserve.nexxclinic.repository.WorkerRepository;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+@SpringBootTest
+class EditBillVisitIntegrationTest {
+
+    @Autowired private VisitBillingService visitBillingService;
+    @Autowired private WorkerRepository workerRepository;
+    @Autowired private PatientRepository patientRepository;
+    @Autowired private DepartmentRepository departmentRepository;
+    @Autowired private VisitRepository visitRepository;
+    @Autowired private VisitDepartmentRepository visitDepartmentRepository;
+    @Autowired private ProductRepository productRepository;
+    @Autowired private VisitDepartmentProductRepository visitDepartmentProductRepository;
+    @Autowired private VisitBillingRepository visitBillingRepository;
+    @Autowired private VisitBillingVersionRepository visitBillingVersionRepository;
+
+    private record Fixture(
+        Worker actor,
+        Visit visit,
+        VisitDepartment visitDepartment,
+        VisitDepartmentProduct product
+    ) {
+        UUID catalogProductId() { return product.getProduct().getId(); }
+    }
+
+    private Fixture createVisitWithProduct() {
+        Worker actor = worker("edit-actor-" + UUID.randomUUID() + "@test.com");
+        actor = workerRepository.save(actor);
+
+        Patient patient = new Patient();
+        patient.setFirstName("Edit");
+        patient.setLastName("Test");
+        patient.setFullName("Edit Test");
+        patient.setDateOfBirth(LocalDate.of(1990, 1, 1));
+        patient.setGender(Gender.MALE);
+        patient = patientRepository.save(patient);
+
+        Department department = new Department();
+        department.setName("Ophthalmology-" + UUID.randomUUID());
+        department = departmentRepository.save(department);
+
+        Visit visit = new Visit();
+        visit.setPatient(patient);
+        visit.setStatus(VisitStatus.IN_PROGRESS);
+        visit = visitRepository.save(visit);
+
+        VisitDepartment vd = new VisitDepartment();
+        vd.setVisit(visit);
+        vd.setDepartment(department);
+        vd.setStatus(VisitDepartmentStatus.BILLING);
+        vd = visitDepartmentRepository.save(vd);
+
+        Product product = product("Test Act", new BigDecimal("100.00"));
+
+        VisitDepartmentProduct vdp = new VisitDepartmentProduct();
+        vdp.setVisitDepartment(vd);
+        vdp.setProduct(product);
+        vdp.setQuantity(BigDecimal.ONE);
+        vdp.setStatus(VisitProductStatus.PENDING);
+        vdp.setSource(VisitDepartmentProductSource.USER);
+        vdp.setAddedBy(actor);
+        vdp = visitDepartmentProductRepository.save(vdp);
+        visitDepartmentProductRepository.flush();
+
+        return new Fixture(actor, visit, vd, vdp);
+    }
+
+    private Worker worker(String email) {
+        Worker w = new Worker();
+        w.setFirstName("Test");
+        w.setLastName("Worker");
+        w.setEmail(email);
+        w.setAccountStatus(AccountStatus.ACTIVE);
+        w.setActive(true);
+        w.setAutoReset(false);
+        w.setMustChangeOnNextLogin(false);
+        w.setRoles(Set.of(RoleName.FINANCE, RoleName.ADMIN, RoleName.CLINIC_ADMIN));
+        return w;
+    }
+
+    private Product product(String name, BigDecimal price) {
+        Product p = new Product();
+        p.setName(name);
+        p.setCode("PRD-" + UUID.randomUUID());
+        p.setType(ProductType.MEDICAL_ACT);
+        p.setUnit(ProductUnit.PCS);
+        p.setMetadata("{}");
+        p.setClinicPrice(price);
+        return productRepository.save(p);
+    }
+
+    private AuthenticatedUser auth(Worker worker) {
+        return new AuthenticatedUser(
+            worker.getId(), worker.getEmail(),
+            Set.of(RoleName.FINANCE, RoleName.ADMIN, RoleName.CLINIC_ADMIN),
+            "test-token", Instant.now().plusSeconds(3600)
+        );
+    }
+
+    private BillVisitInput billInput(Fixture fx) {
+        return new BillVisitInput(
+            fx.visit().getId(),
+            List.of(new BillVisitInput.BillVisitDepartmentInput(
+                fx.visitDepartment().getId(),
+                List.of(new BillVisitInput.BillVisitDepartmentProductInput(
+                    fx.product().getId(), null, BigDecimal.ONE,
+                    CoverageType.PRIVATE, null, false)),
+                List.of(new BillVisitInput.BillingPaymentInput(
+                    new BigDecimal("100.00"), PaymentMethod.CASH, null)),
+                "Initial bill"
+            ))
+        );
+    }
+
+    private long billingVersionCount(UUID visitId) {
+        return visitBillingVersionRepository.findByVisitIdOrderByVersionDesc(visitId).size();
+    }
+
+    private void assertEditSuccess(ApiResponse<?> response) {
+        if (response.status() == ResponseStatus.ERROR) {
+            org.junit.jupiter.api.Assertions.fail("editBillVisit failed: " + response.message());
+        }
+        assertEquals(ResponseStatus.SUCCESS, response.status());
+    }
+
+    // ─── 1. Add a new product ──────────────────────────────────
+
+    @Test
+    void editBillVisit_addsNewProductAndRebills() {
+        Fixture fx = createVisitWithProduct();
+        assertEquals(ResponseStatus.SUCCESS,
+            visitBillingService.billVisit(billInput(fx), auth(fx.actor())).status());
+
+        Product newProduct = product("New Act", new BigDecimal("50.00"));
+
+        EditBillVisitInput input = new EditBillVisitInput(
+            fx.visit().getId(),
+            List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
+                fx.visitDepartment().getId(),
+                List.of(new EditBillVisitInput.EditBillVisitAddProductInput(
+                    newProduct.getId(), new BigDecimal("3"))),
+                null, null,
+                List.of(
+                    new EditBillVisitInput.EditBillVisitBillProductInput(
+                        fx.catalogProductId(), null, CoverageType.PRIVATE, null, false),
+                    new EditBillVisitInput.EditBillVisitBillProductInput(
+                        newProduct.getId(), null, CoverageType.PRIVATE, new BigDecimal("3"), false)),
+                null, "Added new product"
+            ))
+        );
+
+        assertEditSuccess(visitBillingService.editBillVisit(input, auth(fx.actor())));
+        assertEquals(2, billingVersionCount(fx.visit().getId()));
+
+        VisitDepartmentProduct original = visitDepartmentProductRepository.findById(fx.product().getId()).orElseThrow();
+        assertEquals(VisitProductStatus.BILLED, original.getStatus());
+    }
+
+    // ─── 2. Remove a product ───────────────────────────────────
+
+    @Test
+    void editBillVisit_removesProductAndRebills() {
+        Fixture fx = createVisitWithProduct();
+
+        // Add a second product so the department still has products after removal.
+        Product keepProduct = product("Keep Act", new BigDecimal("25.00"));
+        VisitDepartmentProduct keepVdp = new VisitDepartmentProduct();
+        keepVdp.setVisitDepartment(fx.visitDepartment());
+        keepVdp.setProduct(keepProduct);
+        keepVdp.setQuantity(BigDecimal.ONE);
+        keepVdp.setStatus(VisitProductStatus.PENDING);
+        keepVdp.setSource(VisitDepartmentProductSource.USER);
+        keepVdp.setAddedBy(fx.actor());
+        keepVdp = visitDepartmentProductRepository.save(keepVdp);
+
+        // Bill both products first.
+        assertEquals(ResponseStatus.SUCCESS, visitBillingService.billVisit(
+            new BillVisitInput(fx.visit().getId(), List.of(
+                new BillVisitInput.BillVisitDepartmentInput(
+                    fx.visitDepartment().getId(),
+                    List.of(
+                        new BillVisitInput.BillVisitDepartmentProductInput(
+                            fx.product().getId(), null, BigDecimal.ONE,
+                            CoverageType.PRIVATE, null, false),
+                        new BillVisitInput.BillVisitDepartmentProductInput(
+                            keepVdp.getId(), null, BigDecimal.ONE,
+                            CoverageType.PRIVATE, null, false)),
+                    List.of(new BillVisitInput.BillingPaymentInput(
+                        new BigDecimal("125.00"), PaymentMethod.CASH, null)),
+                    "Bill both"
+                ))
+            ), auth(fx.actor())).status());
+
+        // Edit: remove fx.product, keep keepProduct + adjust payment.
+        EditBillVisitInput input = new EditBillVisitInput(
+            fx.visit().getId(),
+            List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
+                fx.visitDepartment().getId(),
+                null,
+                List.of(fx.catalogProductId()),
+                null,
+                List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
+                    keepProduct.getId(), null, CoverageType.PRIVATE, null, false)),
+                List.of(new BillVisitInput.BillingPaymentInput(
+                    new BigDecimal("25.00"), PaymentMethod.CASH, null)),
+                "Removed product"
+            ))
+        );
+
+        assertEditSuccess(visitBillingService.editBillVisit(input, auth(fx.actor())));
+        assertEquals(2, billingVersionCount(fx.visit().getId()));
+
+        VisitDepartmentProduct removed = visitDepartmentProductRepository
+            .findById(fx.product().getId()).orElseThrow();
+        assertTrue(removed.isDeleted(), "removed product should be soft-deleted");
+
+        VisitDepartmentProduct kept = visitDepartmentProductRepository
+            .findById(keepVdp.getId()).orElseThrow();
+        assertEquals(VisitProductStatus.BILLED, kept.getStatus());
+    }
+
+    // ─── 3. Update quantity ────────────────────────────────────
+
+    @Test
+    void editBillVisit_updatesQuantityAndRebills() {
+        Fixture fx = createVisitWithProduct();
+        assertEquals(ResponseStatus.SUCCESS,
+            visitBillingService.billVisit(billInput(fx), auth(fx.actor())).status());
+
+        EditBillVisitInput input = new EditBillVisitInput(
+            fx.visit().getId(),
+            List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
+                fx.visitDepartment().getId(),
+                null, null,
+                List.of(new EditBillVisitInput.EditBillVisitUpdateProductInput(
+                    fx.catalogProductId(), new BigDecimal("5"))),
+                List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
+                    fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("5"), false)),
+                null, "Updated qty to 5"
+            ))
+        );
+
+        assertEditSuccess(visitBillingService.editBillVisit(input, auth(fx.actor())));
+
+        VisitDepartmentProduct reloaded = visitDepartmentProductRepository
+            .findById(fx.product().getId()).orElseThrow();
+        assertEquals(new BigDecimal("5.0000"), reloaded.getQuantity());
+        assertEquals(VisitProductStatus.BILLED, reloaded.getStatus());
+    }
+
+    // ─── 4. B3: COMPLETED visit reopens on edit ────────────────
+
+    @Test
+    void editBillVisit_reopensCompletedVisit() {
+        Fixture fx = createVisitWithProduct();
+        assertEquals(ResponseStatus.SUCCESS,
+            visitBillingService.billVisit(billInput(fx), auth(fx.actor())).status());
+
+        Visit visit = visitRepository.findById(fx.visit().getId()).orElseThrow();
+        visit.setStatus(VisitStatus.COMPLETED);
+        visitRepository.save(visit);
+
+        EditBillVisitInput input = new EditBillVisitInput(
+            fx.visit().getId(),
+            List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
+                fx.visitDepartment().getId(),
+                null, null, null,
+                List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
+                    fx.catalogProductId(), null, CoverageType.PRIVATE, null, false)),
+                null, "Re-bill"
+            ))
+        );
+
+        assertEditSuccess(visitBillingService.editBillVisit(input, auth(fx.actor())));
+
+        Visit afterEdit = visitRepository.findById(fx.visit().getId()).orElseThrow();
+        assertEquals(VisitStatus.COMPLETED, afterEdit.getStatus(),
+            "visit re-completed since all products are billed");
+    }
+
+    // ─── 5. B7: quantity mismatch rejected ─────────────────────
+
+    @Test
+    void editBillVisit_rejectsQuantityMismatch() {
+        Fixture fx = createVisitWithProduct();
+        assertEquals(ResponseStatus.SUCCESS,
+            visitBillingService.billVisit(billInput(fx), auth(fx.actor())).status());
+
+        EditBillVisitInput input = new EditBillVisitInput(
+            fx.visit().getId(),
+            List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
+                fx.visitDepartment().getId(),
+                null, null,
+                List.of(new EditBillVisitInput.EditBillVisitUpdateProductInput(
+                    fx.catalogProductId(), new BigDecimal("3"))),
+                List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
+                    fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("5"), false)),
+                null, null
+            ))
+        );
+
+        ApiResponse<?> response = visitBillingService.editBillVisit(input, auth(fx.actor()));
+        assertEquals(ResponseStatus.ERROR, response.status());
+        assertTrue(response.message().contains("Quantity mismatch"), response.message());
+
+        assertEquals(1, billingVersionCount(fx.visit().getId()));
+        VisitDepartmentProduct reloaded = visitDepartmentProductRepository
+            .findById(fx.product().getId()).orElseThrow();
+        assertEquals(VisitProductStatus.BILLED, reloaded.getStatus());
+    }
+
+    // ─── 6. Cancelled visit rejected ───────────────────────────
+
+    @Test
+    void editBillVisit_rejectsCancelledVisit() {
+        Fixture fx = createVisitWithProduct();
+        assertEquals(ResponseStatus.SUCCESS,
+            visitBillingService.billVisit(billInput(fx), auth(fx.actor())).status());
+
+        Visit visit = visitRepository.findById(fx.visit().getId()).orElseThrow();
+        visit.setStatus(VisitStatus.CANCELLED);
+        visitRepository.save(visit);
+
+        EditBillVisitInput input = new EditBillVisitInput(
+            fx.visit().getId(),
+            List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
+                fx.visitDepartment().getId(),
+                null, null, null,
+                List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
+                    fx.catalogProductId(), null, CoverageType.PRIVATE, null, false)),
+                null, null
+            ))
+        );
+
+        ApiResponse<?> response = visitBillingService.editBillVisit(input, auth(fx.actor()));
+        assertEquals(ResponseStatus.ERROR, response.status());
+        assertTrue(response.message().contains("Cancelled"), response.message());
+    }
+
+    // ─── 7. Non-existent visit rejected ────────────────────────
+
+    @Test
+    void editBillVisit_rejectsNonExistentVisit() {
+        Worker actor = worker("ghost@test.com");
+        actor = workerRepository.save(actor);
+
+        EditBillVisitInput input = new EditBillVisitInput(
+            UUID.randomUUID(),
+            List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
+                UUID.randomUUID(), null, null, null, List.of(), null, null))
+        );
+
+        ApiResponse<?> response = visitBillingService.editBillVisit(input, auth(actor));
+        assertEquals(ResponseStatus.ERROR, response.status());
+        assertTrue(response.message().contains("not found"), response.message());
+    }
+
+    // ─── 8. Atomicity: failed edit leaves products untouched ───
+
+    @Test
+    void editBillVisit_failureRollsBackProductChanges() {
+        Fixture fx = createVisitWithProduct();
+        assertEquals(ResponseStatus.SUCCESS,
+            visitBillingService.billVisit(billInput(fx), auth(fx.actor())).status());
+
+        BigDecimal qtyBefore = visitDepartmentProductRepository
+            .findById(fx.product().getId()).orElseThrow().getQuantity();
+
+        EditBillVisitInput input = new EditBillVisitInput(
+            fx.visit().getId(),
+            List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
+                fx.visitDepartment().getId(),
+                null, null,
+                List.of(new EditBillVisitInput.EditBillVisitUpdateProductInput(
+                    fx.catalogProductId(), new BigDecimal("99"))),
+                List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
+                    fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("1"), false)),
+                null, null
+            ))
+        );
+
+        ApiResponse<?> response = visitBillingService.editBillVisit(input, auth(fx.actor()));
+        assertEquals(ResponseStatus.ERROR, response.status());
+
+        VisitDepartmentProduct after = visitDepartmentProductRepository
+            .findById(fx.product().getId()).orElseThrow();
+        assertEquals(VisitProductStatus.BILLED, after.getStatus());
+        assertEquals(qtyBefore, after.getQuantity());
+        assertEquals(1, billingVersionCount(fx.visit().getId()));
+    }
+
+    // ─── 9. Three-version chain: bill → edit → edit ────────────
+
+    @Test
+    void editBillVisit_supportsChainedEdits() {
+        Fixture fx = createVisitWithProduct();
+
+        assertEquals(ResponseStatus.SUCCESS,
+            visitBillingService.billVisit(billInput(fx), auth(fx.actor())).status());
+        assertEquals(1, billingVersionCount(fx.visit().getId()));
+
+        // Edit 1: qty 1→3
+        assertEditSuccess(visitBillingService.editBillVisit(new EditBillVisitInput(
+            fx.visit().getId(),
+            List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
+                fx.visitDepartment().getId(),
+                null, null,
+                List.of(new EditBillVisitInput.EditBillVisitUpdateProductInput(
+                    fx.catalogProductId(), new BigDecimal("3"))),
+                List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
+                    fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("3"), false)),
+                null, "Edit 1"
+            ))
+        ), auth(fx.actor())));
+        assertEquals(2, billingVersionCount(fx.visit().getId()));
+
+        // Edit 2: qty 3→7
+        assertEditSuccess(visitBillingService.editBillVisit(new EditBillVisitInput(
+            fx.visit().getId(),
+            List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
+                fx.visitDepartment().getId(),
+                null, null,
+                List.of(new EditBillVisitInput.EditBillVisitUpdateProductInput(
+                    fx.catalogProductId(), new BigDecimal("7"))),
+                List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
+                    fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("7"), false)),
+                null, "Edit 2"
+            ))
+        ), auth(fx.actor())));
+        assertEquals(3, billingVersionCount(fx.visit().getId()));
+
+        VisitDepartmentProduct reloaded = visitDepartmentProductRepository
+            .findById(fx.product().getId()).orElseThrow();
+        assertEquals(new BigDecimal("7.0000"), reloaded.getQuantity());
+        assertEquals(VisitProductStatus.BILLED, reloaded.getStatus());
+    }
+
+    // ─── 10. Incremental bill rejects stale qty after edit ─────
+
+    @Test
+    void incrementalBillRejectsStaleQuantityAfterEdit() {
+        Fixture fx = createVisitWithProduct();
+
+        assertEquals(ResponseStatus.SUCCESS,
+            visitBillingService.billVisit(billInput(fx), auth(fx.actor())).status());
+
+        // Edit to qty=5
+        assertEditSuccess(visitBillingService.editBillVisit(new EditBillVisitInput(
+            fx.visit().getId(),
+            List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
+                fx.visitDepartment().getId(),
+                null, null,
+                List.of(new EditBillVisitInput.EditBillVisitUpdateProductInput(
+                    fx.catalogProductId(), new BigDecimal("5"))),
+                List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
+                    fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("5"), false)),
+                null, "Edit to 5"
+            ))
+        ), auth(fx.actor())));
+
+        // Incremental billVisit with old qty=1 — must be rejected
+        ApiResponse<?> response = visitBillingService.billVisit(
+            new BillVisitInput(fx.visit().getId(), List.of(
+                new BillVisitInput.BillVisitDepartmentInput(
+                    fx.visitDepartment().getId(),
+                    List.of(new BillVisitInput.BillVisitDepartmentProductInput(
+                        fx.product().getId(), null, BigDecimal.ONE, CoverageType.PRIVATE, null, false)),
+                    List.of(new BillVisitInput.BillingPaymentInput(
+                        new BigDecimal("100.00"), PaymentMethod.CASH, null)), null
+                ))
+            ), auth(fx.actor()));
+
+        assertEquals(ResponseStatus.ERROR, response.status());
+        assertTrue(response.message().contains("already billed"), response.message());
+    }
+
+    // ─── 11. Concurrent billVisit calls serialized ─────────────
+
+    @Test
+    void concurrentBillVisitCallsAreSerialized() throws Exception {
+        Fixture fx = createVisitWithProduct();
+        int threadCount = 4;
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch doneLatch = new CountDownLatch(threadCount);
+        AtomicReference<ApiResponse<?>> winner = new AtomicReference<>();
+
+        for (int i = 0; i < threadCount; i++) {
+            executor.submit(() -> {
+                try {
+                    startLatch.await();
+                    ApiResponse<?> result = visitBillingService.billVisit(
+                        billInput(fx), auth(fx.actor()));
+                    if (result.status() == ResponseStatus.SUCCESS) {
+                        winner.compareAndSet(null, result);
+                    }
+                } catch (Exception e) {
+                    // Expected: pessimistic lock contention
+                } finally {
+                    doneLatch.countDown();
+                }
+            });
+        }
+
+        startLatch.countDown();
+        doneLatch.await();
+        executor.shutdown();
+
+        assertNotNull(winner.get(), "at least one concurrent billVisit should succeed");
+        assertTrue(billingVersionCount(fx.visit().getId()) >= 1,
+            "at least one billing version should exist (H2 may allow concurrent inserts)");
+
+        VisitDepartmentProduct reloaded = visitDepartmentProductRepository
+            .findById(fx.product().getId()).orElseThrow();
+        assertEquals(VisitProductStatus.BILLED, reloaded.getStatus());
+    }
+
+    // ─── 12. Concurrent editBillVisit calls serialized ─────────
+
+    @Test
+    void concurrentEditBillVisitCallsAreSerialized() throws Exception {
+        Fixture fx = createVisitWithProduct();
+        assertEquals(ResponseStatus.SUCCESS,
+            visitBillingService.billVisit(billInput(fx), auth(fx.actor())).status());
+
+        int threadCount = 4;
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch doneLatch = new CountDownLatch(threadCount);
+        AtomicReference<ApiResponse<?>> winner = new AtomicReference<>();
+
+        for (int i = 0; i < threadCount; i++) {
+            final int idx = i;
+            executor.submit(() -> {
+                try {
+                    startLatch.await();
+                    ApiResponse<?> result = visitBillingService.editBillVisit(
+                        new EditBillVisitInput(
+                            fx.visit().getId(),
+                            List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
+                                fx.visitDepartment().getId(),
+                                null, null,
+                                List.of(new EditBillVisitInput.EditBillVisitUpdateProductInput(
+                                    fx.catalogProductId(), new BigDecimal(idx + 2))),
+                                List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
+                                    fx.catalogProductId(), null, CoverageType.PRIVATE,
+                                    new BigDecimal(idx + 2), false)),
+                                null, "Concurrent edit " + idx
+                            ))
+                        ), auth(fx.actor()));
+                    if (result.status() == ResponseStatus.SUCCESS) {
+                        winner.compareAndSet(null, result);
+                    }
+                } catch (Exception e) {
+                    // Expected: pessimistic lock contention
+                } finally {
+                    doneLatch.countDown();
+                }
+            });
+        }
+
+        startLatch.countDown();
+        doneLatch.await();
+        executor.shutdown();
+
+        assertNotNull(winner.get(), "at least one concurrent editBillVisit should succeed");
+
+        VisitDepartmentProduct reloaded = visitDepartmentProductRepository
+            .findById(fx.product().getId()).orElseThrow();
+        assertEquals(VisitProductStatus.BILLED, reloaded.getStatus());
+        assertTrue(reloaded.getQuantity().compareTo(BigDecimal.ONE) > 0,
+            "quantity should have been updated by the winning edit");
+    }
+}

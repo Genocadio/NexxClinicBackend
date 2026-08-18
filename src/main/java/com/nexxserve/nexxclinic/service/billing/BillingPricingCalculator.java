@@ -12,9 +12,11 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 
 /**
@@ -37,6 +39,35 @@ public class BillingPricingCalculator {
     }
 
     /**
+     * Pre-fetches all {@link ProductInsuranceCoverage} rows for the given
+     * product/provider pairs in a single query, returning a map keyed by
+     * {@code (productId, insuranceProviderId)} for O(1) lookups during
+     * pricing. Eliminates the N+1 query pattern where each billing line
+     * triggered its own coverage lookup.
+     */
+    public Map<UUID, Map<UUID, ProductInsuranceCoverage>> prefetchCoverages(
+        Set<UUID> productIds,
+        Set<UUID> insuranceProviderIds
+    ) {
+        if (productIds == null || productIds.isEmpty() ||
+            insuranceProviderIds == null || insuranceProviderIds.isEmpty()) {
+            return Map.of();
+        }
+        List<ProductInsuranceCoverage> coverages = productInsuranceCoverageRepository
+            .findByProductIdInAndInsuranceProviderIdIn(productIds, insuranceProviderIds);
+        return coverages.stream().collect(
+            Collectors.groupingBy(
+                c -> c.getProduct().getId(),
+                Collectors.toMap(
+                    c -> c.getInsuranceProvider().getId(),
+                    c -> c,
+                    (a, b) -> a
+                )
+            )
+        );
+    }
+
+    /**
      * Resolves the insurance that applies to this product line.
      *
      * <p>There is no automatic assignment: every line must be explicitly marked
@@ -56,6 +87,21 @@ public class BillingPricingCalculator {
         UUID requestedPatientInsuranceId,
         Set<UUID> visitInsurancePatientInsuranceIds,
         List<VisitInsurance> visitInsurances
+    ) {
+        return resolveAppliedInsurance(item, coverageType, requestedPatientInsuranceId, visitInsurancePatientInsuranceIds, visitInsurances, null);
+    }
+
+    /**
+     * Resolves the insurance that applies to this product line, using pre-fetched
+     * coverage data when available to avoid per-line DB round-trips.
+     */
+    public PatientInsurance resolveAppliedInsurance(
+        VisitDepartmentProduct item,
+        CoverageType coverageType,
+        UUID requestedPatientInsuranceId,
+        Set<UUID> visitInsurancePatientInsuranceIds,
+        List<VisitInsurance> visitInsurances,
+        Map<UUID, Map<UUID, ProductInsuranceCoverage>> prefetchedCoverages
     ) {
         if (coverageType == CoverageType.PRIVATE) {
             return null;
@@ -88,12 +134,11 @@ public class BillingPricingCalculator {
         if (insurance.getValidUntil() != null && insurance.getValidUntil().isBefore(today)) {
             return null;
         }
-        ProductInsuranceCoverage coverage = productInsuranceCoverageRepository
-            .findByProductIdAndInsuranceProviderId(
-                item.getProduct().getId(),
-                insurance.getInsuranceProvider().getId()
-            )
-            .orElse(null);
+        ProductInsuranceCoverage coverage = lookupCoverage(
+            item.getProduct().getId(),
+            insurance.getInsuranceProvider().getId(),
+            prefetchedCoverages
+        );
         if (coverage == null || !coverage.isCovered()) {
             return null;
         }
@@ -119,13 +164,23 @@ public class BillingPricingCalculator {
         VisitDepartmentProduct item,
         PatientInsurance appliedInsurance
     ) {
+        return resolveDefaultUnitPrice(item, appliedInsurance, null);
+    }
+
+    /**
+     * Default unit price for a line, using pre-fetched coverage data.
+     */
+    public BigDecimal resolveDefaultUnitPrice(
+        VisitDepartmentProduct item,
+        PatientInsurance appliedInsurance,
+        Map<UUID, Map<UUID, ProductInsuranceCoverage>> prefetchedCoverages
+    ) {
         if (appliedInsurance != null) {
-            ProductInsuranceCoverage coverage = productInsuranceCoverageRepository
-                .findByProductIdAndInsuranceProviderId(
-                    item.getProduct().getId(),
-                    appliedInsurance.getInsuranceProvider().getId()
-                )
-                .orElse(null);
+            ProductInsuranceCoverage coverage = lookupCoverage(
+                item.getProduct().getId(),
+                appliedInsurance.getInsuranceProvider().getId(),
+                prefetchedCoverages
+            );
 
             if (coverage == null) {
                 throw new IllegalArgumentException(
@@ -175,20 +230,32 @@ public class BillingPricingCalculator {
         BigDecimal quantity,
         BigDecimal lineTotal
     ) {
+        return calculateCoveredAmount(item, appliedInsurance, quantity, lineTotal, null);
+    }
+
+    /**
+     * Calculates the insurance-covered amount, using pre-fetched coverage data.
+     */
+    public BigDecimal calculateCoveredAmount(
+        VisitDepartmentProduct item,
+        PatientInsurance appliedInsurance,
+        BigDecimal quantity,
+        BigDecimal lineTotal,
+        Map<UUID, Map<UUID, ProductInsuranceCoverage>> prefetchedCoverages
+    ) {
         if (appliedInsurance == null) {
             return MoneyUtils.ZERO;
         }
 
-        Optional<ProductInsuranceCoverage> coverageOptional =
-            productInsuranceCoverageRepository.findByProductIdAndInsuranceProviderId(
-                item.getProduct().getId(),
-                appliedInsurance.getInsuranceProvider().getId()
-            );
-        if (coverageOptional.isEmpty() || !coverageOptional.get().isCovered()) {
+        ProductInsuranceCoverage coverage = lookupCoverage(
+            item.getProduct().getId(),
+            appliedInsurance.getInsuranceProvider().getId(),
+            prefetchedCoverages
+        );
+        if (coverage == null || !coverage.isCovered()) {
             return MoneyUtils.ZERO;
         }
 
-        ProductInsuranceCoverage coverage = coverageOptional.get();
         // A coverage marked "add as not paid" is billed at zero: nothing to cover.
         if (coverage.isNotPaid()) {
             return MoneyUtils.ZERO;
@@ -233,5 +300,29 @@ public class BillingPricingCalculator {
         }
 
         return MoneyUtils.toMoney(coverageAmount);
+    }
+
+    /**
+     * Looks up a {@link ProductInsuranceCoverage} from the pre-fetched cache,
+     * falling back to a DB query only when the cache is null or missing the entry.
+     */
+    private ProductInsuranceCoverage lookupCoverage(
+        UUID productId,
+        UUID insuranceProviderId,
+        Map<UUID, Map<UUID, ProductInsuranceCoverage>> prefetchedCoverages
+    ) {
+        if (prefetchedCoverages != null) {
+            Map<UUID, ProductInsuranceCoverage> byProvider = prefetchedCoverages.get(productId);
+            if (byProvider != null) {
+                ProductInsuranceCoverage cached = byProvider.get(insuranceProviderId);
+                if (cached != null) {
+                    return cached;
+                }
+            }
+        }
+        // Fallback: single-row DB query (only when cache miss or cache not provided)
+        return productInsuranceCoverageRepository
+            .findByProductIdAndInsuranceProviderId(productId, insuranceProviderId)
+            .orElse(null);
     }
 }

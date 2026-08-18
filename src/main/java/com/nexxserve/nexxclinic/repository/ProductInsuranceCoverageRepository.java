@@ -1,6 +1,7 @@
 package com.nexxserve.nexxclinic.repository;
 
 import com.nexxserve.nexxclinic.entity.ProductInsuranceCoverage;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -11,6 +12,8 @@ public interface ProductInsuranceCoverageRepository extends JpaRepository<Produc
     List<ProductInsuranceCoverage> findByProductId(UUID productId);
 
     Optional<ProductInsuranceCoverage> findByProductIdAndInsuranceProviderId(UUID productId, UUID insuranceProviderId);
+
+    List<ProductInsuranceCoverage> findByProductIdInAndInsuranceProviderIdIn(Collection<UUID> productIds, Collection<UUID> insuranceProviderIds);
 
     void deleteByProductId(UUID productId);
 

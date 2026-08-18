@@ -15,6 +15,10 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        # Prevent indefinite blocking when concurrent bill/edit/payment requests
+        # contend for the same visit's pessimistic lock. 10s is generous enough
+        # for normal billing operations but fails fast under real contention.
+        default_lock_timeout: 10000
   flyway:
     enabled: true
     # Existing databases (previously managed by ddl-auto=update) have no
