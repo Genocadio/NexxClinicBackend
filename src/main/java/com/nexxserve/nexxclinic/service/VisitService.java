@@ -813,6 +813,7 @@ public class VisitService {
                     : productInput.status();
             if (requestedStatus == VisitProductStatus.BILLED
                     || requestedStatus == VisitProductStatus.EXEMPTED
+                    || requestedStatus == VisitProductStatus.PATIENT_SHARE_EXEMPTED
                     || requestedStatus == VisitProductStatus.CORRECTION_PENDING) {
                 return ApiResponse.error("Status " + requestedStatus + " cannot be set manually. Only PENDING or UNPAID can be set when adding a product.");
             }

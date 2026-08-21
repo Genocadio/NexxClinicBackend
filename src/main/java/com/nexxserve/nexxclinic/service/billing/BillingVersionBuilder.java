@@ -103,7 +103,7 @@ public class BillingVersionBuilder {
     }
 
     /**
-     * Whether every non-deleted product of the visit is BILLED/EXEMPTED. All rows
+     * Whether every non-deleted product of the visit is BILLED/EXEMPTED/PATIENT_SHARE_EXEMPTED. All rows
      * (including soft-deleted ones) are evaluated explicitly: a soft-deleted product
      * was removed from the current bill, so it never blocks completion.
      */
@@ -117,7 +117,8 @@ public class BillingVersionBuilder {
             item ->
                 item.isDeleted() ||
                 item.getStatus() == VisitProductStatus.BILLED ||
-                item.getStatus() == VisitProductStatus.EXEMPTED
+                item.getStatus() == VisitProductStatus.EXEMPTED ||
+                item.getStatus() == VisitProductStatus.PATIENT_SHARE_EXEMPTED
         );
     }
 }

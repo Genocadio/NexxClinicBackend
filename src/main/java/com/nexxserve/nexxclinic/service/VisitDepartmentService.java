@@ -690,13 +690,15 @@ public class VisitDepartmentService {
             return ApiResponse.error("Product already exists for this visit department.");
         }
 
-        // S4: BILLED/EXEMPTED/CORRECTION_PENDING are managed exclusively by the billing
-        // service; clients may only create products as PENDING (default) or UNPAID.
+        // S4: BILLED/EXEMPTED/PATIENT_SHARE_EXEMPTED/CORRECTION_PENDING are managed
+        // exclusively by the billing service; clients may only create products as
+        // PENDING (default) or UNPAID.
         VisitProductStatus requestedStatus = input.status() == null
                 ? VisitProductStatus.PENDING
                 : input.status();
         if (requestedStatus == VisitProductStatus.BILLED
                 || requestedStatus == VisitProductStatus.EXEMPTED
+                || requestedStatus == VisitProductStatus.PATIENT_SHARE_EXEMPTED
                 || requestedStatus == VisitProductStatus.CORRECTION_PENDING) {
             return ApiResponse.error("Status " + requestedStatus + " cannot be set manually. Only PENDING or UNPAID can be set when adding a product.");
         }
@@ -774,12 +776,13 @@ public class VisitDepartmentService {
                 && visitDepartmentBillingRepository.existsByVisitDepartmentId(item.getVisitDepartment().getId())) {
             return ApiResponse.error("Cannot change the status of a product in a billed department. Use editBillVisit to correct the billing.");
         }
-        // S4: BILLED/EXEMPTED/CORRECTION_PENDING are managed exclusively by the billing
-        // service. Externally, product status is effectively read-only for those values
-        // (only PENDING and UNPAID are externally settable).
+        // S4: BILLED/EXEMPTED/PATIENT_SHARE_EXEMPTED/CORRECTION_PENDING are managed
+        // exclusively by the billing service. Externally, product status is effectively
+        // read-only for those values (only PENDING and UNPAID are externally settable).
         VisitProductStatus requestedStatus = input.status();
         if (requestedStatus == VisitProductStatus.BILLED
                 || requestedStatus == VisitProductStatus.EXEMPTED
+                || requestedStatus == VisitProductStatus.PATIENT_SHARE_EXEMPTED
                 || requestedStatus == VisitProductStatus.CORRECTION_PENDING) {
             return ApiResponse.error("Status " + requestedStatus + " can only be set by the billing service. Allowed external statuses: PENDING, UNPAID.");
         }
@@ -814,10 +817,11 @@ public class VisitDepartmentService {
             return ApiResponse.error("Cannot change the quantity of a product in a billed department. Use editBillVisit to correct the billing.");
         }
 
-        // E4: a BILLED/EXEMPTED product's live quantity must not diverge from its
-        // billing snapshot. Quantity corrections go through editBillVisit.
+        // E4: a BILLED/EXEMPTED/PATIENT_SHARE_EXEMPTED product's live quantity must not
+        // diverge from its billing snapshot. Quantity corrections go through editBillVisit.
         if (item.getStatus() == VisitProductStatus.BILLED
-                || item.getStatus() == VisitProductStatus.EXEMPTED) {
+                || item.getStatus() == VisitProductStatus.EXEMPTED
+                || item.getStatus() == VisitProductStatus.PATIENT_SHARE_EXEMPTED) {
             return ApiResponse.error("Cannot change the quantity of a billed or exempted product. Use editBillVisit to correct the billing.");
         }
 

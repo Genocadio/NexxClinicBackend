@@ -178,7 +178,7 @@ public class InvoiceGenerator {
         }
 
         try {
-            String signed = supabaseStorageService.signedUrl(objectPath, 300);
+            String signed = supabaseStorageService.signedUrl(objectPath, signedUrlExpirySeconds);
             return ApiResponse.success(
                 "Invoice generated successfully.",
                 Map.of("signedUrl", signed)

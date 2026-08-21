@@ -13,6 +13,7 @@ import com.nexxserve.nexxclinic.graphql.input.BillVisitInput;
 import com.nexxserve.nexxclinic.graphql.input.EditBillVisitInput;
 import com.nexxserve.nexxclinic.model.AccountStatus;
 import com.nexxserve.nexxclinic.model.CoverageType;
+import com.nexxserve.nexxclinic.model.ExemptionType;
 import com.nexxserve.nexxclinic.model.Gender;
 import com.nexxserve.nexxclinic.model.PaymentMethod;
 import com.nexxserve.nexxclinic.model.ProductType;
@@ -154,7 +155,7 @@ class EditBillVisitIntegrationTest {
                 fx.visitDepartment().getId(),
                 List.of(new BillVisitInput.BillVisitDepartmentProductInput(
                     fx.product().getId(), null, BigDecimal.ONE,
-                    CoverageType.PRIVATE, null, false)),
+                    CoverageType.PRIVATE, null, ExemptionType.NONE)),
                 List.of(new BillVisitInput.BillingPaymentInput(
                     new BigDecimal("100.00"), PaymentMethod.CASH, null)),
                 "Initial bill"
@@ -192,9 +193,9 @@ class EditBillVisitIntegrationTest {
                 null, null,
                 List.of(
                     new EditBillVisitInput.EditBillVisitBillProductInput(
-                        fx.catalogProductId(), null, CoverageType.PRIVATE, null, false),
+                        fx.catalogProductId(), null, CoverageType.PRIVATE, null, ExemptionType.NONE),
                     new EditBillVisitInput.EditBillVisitBillProductInput(
-                        newProduct.getId(), null, CoverageType.PRIVATE, new BigDecimal("3"), false)),
+                        newProduct.getId(), null, CoverageType.PRIVATE, new BigDecimal("3"), ExemptionType.NONE)),
                 null, "Added new product"
             ))
         );
@@ -231,10 +232,10 @@ class EditBillVisitIntegrationTest {
                     List.of(
                         new BillVisitInput.BillVisitDepartmentProductInput(
                             fx.product().getId(), null, BigDecimal.ONE,
-                            CoverageType.PRIVATE, null, false),
+                            CoverageType.PRIVATE, null, ExemptionType.NONE),
                         new BillVisitInput.BillVisitDepartmentProductInput(
                             keepVdp.getId(), null, BigDecimal.ONE,
-                            CoverageType.PRIVATE, null, false)),
+                            CoverageType.PRIVATE, null, ExemptionType.NONE)),
                     List.of(new BillVisitInput.BillingPaymentInput(
                         new BigDecimal("125.00"), PaymentMethod.CASH, null)),
                     "Bill both"
@@ -250,7 +251,7 @@ class EditBillVisitIntegrationTest {
                 List.of(fx.catalogProductId()),
                 null,
                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
-                    keepProduct.getId(), null, CoverageType.PRIVATE, null, false)),
+                    keepProduct.getId(), null, CoverageType.PRIVATE, null, ExemptionType.NONE)),
                 List.of(new BillVisitInput.BillingPaymentInput(
                     new BigDecimal("25.00"), PaymentMethod.CASH, null)),
                 "Removed product"
@@ -285,7 +286,7 @@ class EditBillVisitIntegrationTest {
                 List.of(new EditBillVisitInput.EditBillVisitUpdateProductInput(
                     fx.catalogProductId(), new BigDecimal("5"))),
                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
-                    fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("5"), false)),
+                    fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("5"), ExemptionType.NONE)),
                 null, "Updated qty to 5"
             ))
         );
@@ -316,7 +317,7 @@ class EditBillVisitIntegrationTest {
                 fx.visitDepartment().getId(),
                 null, null, null,
                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
-                    fx.catalogProductId(), null, CoverageType.PRIVATE, null, false)),
+                    fx.catalogProductId(), null, CoverageType.PRIVATE, null, ExemptionType.NONE)),
                 null, "Re-bill"
             ))
         );
@@ -344,7 +345,7 @@ class EditBillVisitIntegrationTest {
                 List.of(new EditBillVisitInput.EditBillVisitUpdateProductInput(
                     fx.catalogProductId(), new BigDecimal("3"))),
                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
-                    fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("5"), false)),
+                    fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("5"), ExemptionType.NONE)),
                 null, null
             ))
         );
@@ -377,7 +378,7 @@ class EditBillVisitIntegrationTest {
                 fx.visitDepartment().getId(),
                 null, null, null,
                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
-                    fx.catalogProductId(), null, CoverageType.PRIVATE, null, false)),
+                    fx.catalogProductId(), null, CoverageType.PRIVATE, null, ExemptionType.NONE)),
                 null, null
             ))
         );
@@ -424,7 +425,7 @@ class EditBillVisitIntegrationTest {
                 List.of(new EditBillVisitInput.EditBillVisitUpdateProductInput(
                     fx.catalogProductId(), new BigDecimal("99"))),
                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
-                    fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("1"), false)),
+                    fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("1"), ExemptionType.NONE)),
                 null, null
             ))
         );
@@ -458,7 +459,7 @@ class EditBillVisitIntegrationTest {
                 List.of(new EditBillVisitInput.EditBillVisitUpdateProductInput(
                     fx.catalogProductId(), new BigDecimal("3"))),
                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
-                    fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("3"), false)),
+                    fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("3"), ExemptionType.NONE)),
                 null, "Edit 1"
             ))
         ), auth(fx.actor())));
@@ -473,7 +474,7 @@ class EditBillVisitIntegrationTest {
                 List.of(new EditBillVisitInput.EditBillVisitUpdateProductInput(
                     fx.catalogProductId(), new BigDecimal("7"))),
                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
-                    fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("7"), false)),
+                    fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("7"), ExemptionType.NONE)),
                 null, "Edit 2"
             ))
         ), auth(fx.actor())));
@@ -503,7 +504,7 @@ class EditBillVisitIntegrationTest {
                 List.of(new EditBillVisitInput.EditBillVisitUpdateProductInput(
                     fx.catalogProductId(), new BigDecimal("5"))),
                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
-                    fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("5"), false)),
+                    fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("5"), ExemptionType.NONE)),
                 null, "Edit to 5"
             ))
         ), auth(fx.actor())));
@@ -514,7 +515,7 @@ class EditBillVisitIntegrationTest {
                 new BillVisitInput.BillVisitDepartmentInput(
                     fx.visitDepartment().getId(),
                     List.of(new BillVisitInput.BillVisitDepartmentProductInput(
-                        fx.product().getId(), null, BigDecimal.ONE, CoverageType.PRIVATE, null, false)),
+                        fx.product().getId(), null, BigDecimal.ONE, CoverageType.PRIVATE, null, ExemptionType.NONE)),
                     List.of(new BillVisitInput.BillingPaymentInput(
                         new BigDecimal("100.00"), PaymentMethod.CASH, null)), null
                 ))
@@ -594,7 +595,7 @@ class EditBillVisitIntegrationTest {
                                     fx.catalogProductId(), new BigDecimal(idx + 2))),
                                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
                                     fx.catalogProductId(), null, CoverageType.PRIVATE,
-                                    new BigDecimal(idx + 2), false)),
+                                    new BigDecimal(idx + 2), ExemptionType.NONE)),
                                 null, "Concurrent edit " + idx
                             ))
                         ), auth(fx.actor()));
@@ -620,5 +621,95 @@ class EditBillVisitIntegrationTest {
         assertEquals(VisitProductStatus.BILLED, reloaded.getStatus());
         assertTrue(reloaded.getQuantity().compareTo(BigDecimal.ONE) > 0,
             "quantity should have been updated by the winning edit");
+    }
+
+    // ─── 13. PATIENT_SHARE_EXEMPTED edit flow: status transition ────────
+
+    @Test
+    void editBillVisit_transitionsFromPatientShareExemptedToFull() {
+        Fixture fx = createVisitWithProduct();
+
+        // Bill with PATIENT_SHARE exemption
+        BillVisitInput billInput = new BillVisitInput(
+            fx.visit().getId(),
+            List.of(new BillVisitInput.BillVisitDepartmentInput(
+                fx.visitDepartment().getId(),
+                List.of(new BillVisitInput.BillVisitDepartmentProductInput(
+                    fx.product().getId(), null, BigDecimal.ONE,
+                    CoverageType.PRIVATE, null, ExemptionType.PATIENT_SHARE)),
+                List.of(), // no payment needed — patient share is waived
+                "Initial bill with PATIENT_SHARE exemption"
+            ))
+        );
+        assertEquals(ResponseStatus.SUCCESS,
+            visitBillingService.billVisit(billInput, auth(fx.actor())).status());
+
+        VisitDepartmentProduct afterBill = visitDepartmentProductRepository
+            .findById(fx.product().getId()).orElseThrow();
+        assertEquals(VisitProductStatus.PATIENT_SHARE_EXEMPTED, afterBill.getStatus());
+
+        // Edit: change from PATIENT_SHARE to FULL exemption
+        EditBillVisitInput editInput = new EditBillVisitInput(
+            fx.visit().getId(),
+            List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
+                fx.visitDepartment().getId(),
+                null, null, null,
+                List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
+                    fx.catalogProductId(), null, CoverageType.PRIVATE, null, ExemptionType.FULL)),
+                null, "Changed to FULL exemption"
+            ))
+        );
+
+        assertEditSuccess(visitBillingService.editBillVisit(editInput, auth(fx.actor())));
+        assertEquals(2, billingVersionCount(fx.visit().getId()));
+
+        VisitDepartmentProduct afterEdit = visitDepartmentProductRepository
+            .findById(fx.product().getId()).orElseThrow();
+        assertEquals(VisitProductStatus.EXEMPTED, afterEdit.getStatus());
+    }
+
+    @Test
+    void editBillVisit_transitionsFromPatientShareExemptedToNone() {
+        Fixture fx = createVisitWithProduct();
+
+        // Bill with PATIENT_SHARE exemption
+        BillVisitInput billInput = new BillVisitInput(
+            fx.visit().getId(),
+            List.of(new BillVisitInput.BillVisitDepartmentInput(
+                fx.visitDepartment().getId(),
+                List.of(new BillVisitInput.BillVisitDepartmentProductInput(
+                    fx.product().getId(), null, BigDecimal.ONE,
+                    CoverageType.PRIVATE, null, ExemptionType.PATIENT_SHARE)),
+                List.of(),
+                "Initial bill with PATIENT_SHARE exemption"
+            ))
+        );
+        assertEquals(ResponseStatus.SUCCESS,
+            visitBillingService.billVisit(billInput, auth(fx.actor())).status());
+
+        VisitDepartmentProduct afterBill = visitDepartmentProductRepository
+            .findById(fx.product().getId()).orElseThrow();
+        assertEquals(VisitProductStatus.PATIENT_SHARE_EXEMPTED, afterBill.getStatus());
+
+        // Edit: remove exemption (PATIENT_SHARE -> NONE) — patient now pays
+        EditBillVisitInput editInput = new EditBillVisitInput(
+            fx.visit().getId(),
+            List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
+                fx.visitDepartment().getId(),
+                null, null, null,
+                List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
+                    fx.catalogProductId(), null, CoverageType.PRIVATE, null, ExemptionType.NONE)),
+                List.of(new BillVisitInput.BillingPaymentInput(
+                    new BigDecimal("100.00"), PaymentMethod.CASH, null)),
+                "Removed exemption, patient pays full"
+            ))
+        );
+
+        assertEditSuccess(visitBillingService.editBillVisit(editInput, auth(fx.actor())));
+        assertEquals(2, billingVersionCount(fx.visit().getId()));
+
+        VisitDepartmentProduct afterEdit = visitDepartmentProductRepository
+            .findById(fx.product().getId()).orElseThrow();
+        assertEquals(VisitProductStatus.BILLED, afterEdit.getStatus());
     }
 }

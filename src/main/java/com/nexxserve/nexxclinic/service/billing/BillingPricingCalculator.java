@@ -94,6 +94,10 @@ public class BillingPricingCalculator {
     /**
      * Resolves the insurance that applies to this product line, using pre-fetched
      * coverage data when available to avoid per-line DB round-trips.
+     *
+     * <p>PatientInsurance objects are resolved from the already-loaded
+     * {@code visitInsurances} list via an in-memory lookup map, eliminating the
+     * per-line {@code patientInsuranceRepository.findById()} DB roundtrip.
      */
     public PatientInsurance resolveAppliedInsurance(
         VisitDepartmentProduct item,
@@ -115,13 +119,12 @@ public class BillingPricingCalculator {
         if (!visitInsurancePatientInsuranceIds.contains(requestedPatientInsuranceId)) {
             return null;
         }
-        Optional<PatientInsurance> insuranceOptional = patientInsuranceRepository.findById(
-            requestedPatientInsuranceId
+        PatientInsurance insurance = resolvePatientInsuranceFromVisitInsurances(
+            requestedPatientInsuranceId, visitInsurances
         );
-        if (insuranceOptional.isEmpty()) {
+        if (insurance == null) {
             return null;
         }
-        PatientInsurance insurance = insuranceOptional.get();
         // Deactivated policies (soft-deleted because they were already used) can
         // never be applied to a new bill.
         if (insurance.isDeactivated()) {
@@ -143,6 +146,29 @@ public class BillingPricingCalculator {
             return null;
         }
         return insurance;
+    }
+
+    /**
+     * Resolves a {@link PatientInsurance} from the already-loaded
+     * {@code visitInsurances} list by ID, avoiding a DB roundtrip.
+     * Falls back to a repository lookup only when the in-memory map is not
+     * provided or does not contain the requested ID (legacy data edge case).
+     */
+    private PatientInsurance resolvePatientInsuranceFromVisitInsurances(
+        UUID patientInsuranceId,
+        List<VisitInsurance> visitInsurances
+    ) {
+        if (visitInsurances != null) {
+            for (VisitInsurance vi : visitInsurances) {
+                if (vi.getPatientInsurance() != null &&
+                    vi.getPatientInsurance().getId().equals(patientInsuranceId)) {
+                    return vi.getPatientInsurance();
+                }
+            }
+        }
+        // Fallback: single-row DB lookup for edge cases (e.g. insurance linked
+        // to visit after the visitInsurances list was loaded).
+        return patientInsuranceRepository.findById(patientInsuranceId).orElse(null);
     }
 
     /**

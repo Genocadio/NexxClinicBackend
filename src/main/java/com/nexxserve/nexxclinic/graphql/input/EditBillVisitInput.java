@@ -1,6 +1,7 @@
 package com.nexxserve.nexxclinic.graphql.input;
 
 import com.nexxserve.nexxclinic.model.CoverageType;
+import com.nexxserve.nexxclinic.model.ExemptionType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -50,11 +51,12 @@ public record EditBillVisitInput(
 
         UUID patientInsuranceId,
 
+        @NotNull(message = "coverageType is required")
         CoverageType coverageType,
 
         BigDecimal quantity,
 
-        Boolean isExempted
+        ExemptionType exemptionType
     ) {}
 
     public record EditBillVisitAddProductInput(

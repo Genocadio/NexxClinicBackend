@@ -110,7 +110,12 @@ enum VisitProductStatus {
   BILLED
   EXEMPTED
   """
-  Was BILLED/EXEMPTED and reset by the edit-billing correction flow.
+  The patient's share was waived but insurance still covers its normal amount.
+  Distinct from EXEMPTED where the entire line is zeroed.
+  """
+  PATIENT_SHARE_EXEMPTED
+  """
+  Was BILLED/EXEMPTED/PATIENT_SHARE_EXEMPTED and reset by the edit-billing correction flow.
   Transient within the correction transaction; not settable by clients.
   """
   CORRECTION_PENDING
@@ -170,6 +175,18 @@ per product — each line must be explicit:
 enum CoverageType {
   PRIVATE
   INSURANCE
+}
+
+"""
+Defines how a billing product line is exempted from patient payment.
+- NONE: no exemption; the patient pays their share
+- PATIENT_SHARE: the patient's share is waived; insurance still covers its normal amount
+- FULL: the entire line is zeroed (unit price, insurance, patient amount all zero)
+"""
+enum ExemptionType {
+  NONE
+  PATIENT_SHARE
+  FULL
 }
 
 enum ClinicContactType {
@@ -1302,7 +1319,8 @@ input BillVisitDepartmentProductInput {
   quantity: Float
   coverageType: CoverageType!
   patientInsuranceId: ID
-  isExempted: Boolean
+  """NONE, PATIENT_SHARE (patient waive, insurance still pays), or FULL (entire line zeroed)."""
+  exemptionType: ExemptionType
 }
 
 input EditBillVisitBillProductInput {
@@ -1310,7 +1328,8 @@ input EditBillVisitBillProductInput {
   patientInsuranceId: ID
   coverageType: CoverageType!
   quantity: Float
-  isExempted: Boolean
+  """NONE, PATIENT_SHARE (patient waive, insurance still pays), or FULL (entire line zeroed)."""
+  exemptionType: ExemptionType
 }
 
 input BillingPaymentInput {
@@ -1324,8 +1343,8 @@ input BillVisitDepartmentInput {
   products: [BillVisitDepartmentProductInput!]!
   payments: [BillingPaymentInput!]
   """
-  Required when any product is exempted or the patient payment does not cover the full payable amount.
-  Optional otherwise.
+  Required when any product has exemptionType != NONE or the patient payment
+  does not cover the full payable amount. Optional otherwise.
   """
   note: String
 }
