@@ -60,7 +60,7 @@ public class InsuranceProviderService {
             return ApiResponse.error("Acronym already exists.");
         }
 
-        Integer coverage = input.defaultCoveragePercentage();
+        Integer coverage = input.defaultPatientSharePercentage();
         if (coverage == null || coverage < 0 || coverage > 100) {
             return ApiResponse.error("Coverage must be 0-100.");
         }
@@ -68,7 +68,7 @@ public class InsuranceProviderService {
         InsuranceProvider provider = new InsuranceProvider();
         provider.setInsuranceName(insuranceName);
         provider.setAcronym(acronym);
-        provider.setDefaultCoveragePercentage(coverage);
+        provider.setDefaultPatientSharePercentage(coverage);
         provider.setSupportedByClinic(input.supportedByClinic() == null || input.supportedByClinic());
         provider.setIconUrl(blankToNull(input.iconUrl()));
 
@@ -106,8 +106,8 @@ public class InsuranceProviderService {
             provider.setAcronym(blankToNull(input.acronym()));
         }
 
-        if (input.defaultCoveragePercentage() != null) {
-            provider.setDefaultCoveragePercentage(input.defaultCoveragePercentage());
+        if (input.defaultPatientSharePercentage() != null) {
+            provider.setDefaultPatientSharePercentage(input.defaultPatientSharePercentage());
         }
 
         if (input.supportedByClinic() != null) {

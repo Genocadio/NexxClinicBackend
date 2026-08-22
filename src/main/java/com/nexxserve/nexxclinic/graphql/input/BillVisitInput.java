@@ -44,7 +44,8 @@ public record BillVisitInput(
             @NotNull(message = "coverageType is required")
             CoverageType coverageType,
             UUID patientInsuranceId,
-            ExemptionType exemptionType
+            ExemptionType exemptionType,
+            Integer patientSharePercentageOverride
     ) {
     }
 

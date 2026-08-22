@@ -50,6 +50,9 @@ public class PatientInsurance {
     @Column(nullable = false)
     private boolean deactivated;
 
+    @Column(name = "patient_share_percentage")
+    private Integer patientSharePercentage;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -154,6 +157,14 @@ public class PatientInsurance {
 
     public void setDeactivated(boolean deactivated) {
         this.deactivated = deactivated;
+    }
+
+    public Integer getPatientSharePercentage() {
+        return patientSharePercentage;
+    }
+
+    public void setPatientSharePercentage(Integer patientSharePercentage) {
+        this.patientSharePercentage = patientSharePercentage;
     }
 
     public LocalDateTime getCreatedAt() {

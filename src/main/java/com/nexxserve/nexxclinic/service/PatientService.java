@@ -566,6 +566,15 @@ public class PatientService {
             return ApiResponse.error(validationError.message());
         }
 
+        // Set patient-specific share percentage override (optional)
+        if (input.patientSharePercentage() != null) {
+            int pct = input.patientSharePercentage();
+            if (pct < 0 || pct > 100) {
+                return ApiResponse.error("patientSharePercentage must be between 0 and 100.");
+            }
+            patientInsurance.setPatientSharePercentage(pct);
+        }
+
         // Validate business rules
         ApiResponse<Void> businessRuleError = validateInsuranceBusinessRules(patient, patientInsurance);
         if (businessRuleError != null) {
@@ -649,6 +658,21 @@ public class PatientService {
                 .currentTransactionStatus()
                 .setRollbackOnly();
             return ApiResponse.error(validationError.message());
+        }
+
+        // Update patient-specific share percentage (null = clear it, use rules/provider default)
+        if (input.patientSharePercentage() != null) {
+            int pct = input.patientSharePercentage();
+            if (pct < 0 || pct > 100) {
+                org.springframework.transaction.interceptor.TransactionAspectSupport
+                    .currentTransactionStatus()
+                    .setRollbackOnly();
+                return ApiResponse.error("patientSharePercentage must be between 0 and 100.");
+            }
+            patientInsurance.setPatientSharePercentage(pct);
+        } else if (input.patientSharePercentage() == null && input.insuranceProviderId() == null && input.insuranceCardNumber() == null) {
+            // Only clear if explicitly sent as part of an update (not a partial update)
+            // We leave it as-is for partial updates; null field = don't change
         }
 
         // Validate business rules

@@ -31,9 +31,8 @@ public record CreatePatientInsuranceInput(
         String principalMemberPhoneNumber,
 
         @NotNull(message = "validFrom is required")
-        LocalDate validFrom,
+        LocalDate validFrom,        @NotNull(message = "validUntil is required")
+        LocalDate validUntil,
 
-        @NotNull(message = "validUntil is required")
-        LocalDate validUntil
-) {
-}
+        Integer patientSharePercentage
+) {}

@@ -23,7 +23,7 @@ public record UpdatePatientInsuranceInput(
         @Size(max = 30, message = "principalMemberPhoneNumber must not exceed 30 characters")
         @ValidPhoneNumber
         String principalMemberPhoneNumber,
-        LocalDate validFrom,
-        LocalDate validUntil
-) {
-}
+        LocalDate validFrom,        LocalDate validUntil,
+
+        Integer patientSharePercentage
+) {}

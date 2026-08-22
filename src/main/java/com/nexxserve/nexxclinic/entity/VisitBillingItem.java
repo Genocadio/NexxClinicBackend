@@ -1,7 +1,10 @@
 package com.nexxserve.nexxclinic.entity;
 
+import com.nexxserve.nexxclinic.model.PatientShareSource;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
@@ -55,6 +58,13 @@ public class VisitBillingItem {
 
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal patientPayableAmount;
+
+    @Column(name = "applied_patient_share_pct")
+    private Integer appliedPatientSharePct;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "patient_share_source", length = 20)
+    private PatientShareSource patientShareSource;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -186,10 +196,24 @@ public class VisitBillingItem {
 
     public BigDecimal getPatientPayableAmount() {
         return patientPayableAmount;
+    }    public void setPatientPayableAmount(BigDecimal patientPayableAmount) {
+        this.patientPayableAmount = patientPayableAmount;
     }
 
-    public void setPatientPayableAmount(BigDecimal patientPayableAmount) {
-        this.patientPayableAmount = patientPayableAmount;
+    public Integer getAppliedPatientSharePct() {
+        return appliedPatientSharePct;
+    }
+
+    public void setAppliedPatientSharePct(Integer appliedPatientSharePct) {
+        this.appliedPatientSharePct = appliedPatientSharePct;
+    }
+
+    public PatientShareSource getPatientShareSource() {
+        return patientShareSource;
+    }
+
+    public void setPatientShareSource(PatientShareSource patientShareSource) {
+        this.patientShareSource = patientShareSource;
     }
 
     public LocalDateTime getCreatedAt() {

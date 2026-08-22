@@ -148,7 +148,7 @@ class RecordVisitBillingPaymentIntegrationTest {
                 fx.visitDepartment().getId(),
                 List.of(new BillVisitInput.BillVisitDepartmentProductInput(
                     fx.product().getId(), null, BigDecimal.ONE,
-                    CoverageType.PRIVATE, null, ExemptionType.NONE)),
+                    CoverageType.PRIVATE, null, ExemptionType.NONE, null)),
                 List.of(),
                 "Bill with no payment"
             ))

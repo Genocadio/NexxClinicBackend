@@ -226,7 +226,7 @@ class VisitBillingOrphanedStatusRegressionTest {
                         CoverageType.PRIVATE,
                         null,
                         ExemptionType.NONE
-                );
+                , null);
         BillVisitInput.BillVisitDepartmentInput departmentInput =
                 new BillVisitInput.BillVisitDepartmentInput(
                         fx.visitDepartment().getId(),
@@ -263,7 +263,7 @@ class VisitBillingOrphanedStatusRegressionTest {
         com.nexxserve.nexxclinic.entity.InsuranceProvider provider = new com.nexxserve.nexxclinic.entity.InsuranceProvider();
         provider.setInsuranceName("Test Insurance");
         provider.setSupportedByClinic(true);
-        provider.setDefaultCoveragePercentage(15); // Patient pays 15%
+        provider.setDefaultPatientSharePercentage(15); // Patient pays 15%
         provider = insuranceProviderRepository.save(provider);
 
         com.nexxserve.nexxclinic.entity.PatientInsurance insurance = new com.nexxserve.nexxclinic.entity.PatientInsurance();
@@ -292,7 +292,7 @@ class VisitBillingOrphanedStatusRegressionTest {
 
         BillVisitInput.BillVisitDepartmentProductInput productInput =
             new BillVisitInput.BillVisitDepartmentProductInput(
-                fx.product().getId(), null, BigDecimal.ONE, CoverageType.INSURANCE, insurance.getId(), ExemptionType.NONE);
+                fx.product().getId(), null, BigDecimal.ONE, CoverageType.INSURANCE, insurance.getId(), ExemptionType.NONE, null);
         BillVisitInput.BillVisitDepartmentInput departmentInput =
             new BillVisitInput.BillVisitDepartmentInput(
                 fx.visitDepartment().getId(),
@@ -598,7 +598,7 @@ class VisitBillingOrphanedStatusRegressionTest {
         // must return a clean error, and must NOT create a second billing version.
         BillVisitInput.BillVisitDepartmentProductInput changedQty =
                 new BillVisitInput.BillVisitDepartmentProductInput(
-                        fx.product().getId(), null, new BigDecimal("2"), CoverageType.PRIVATE, null, ExemptionType.NONE);
+                        fx.product().getId(), null, new BigDecimal("2"), CoverageType.PRIVATE, null, ExemptionType.NONE, null);
         BillVisitInput.BillVisitDepartmentInput deptInput =
                 new BillVisitInput.BillVisitDepartmentInput(
                         fx.visitDepartment().getId(), List.of(changedQty),
@@ -646,7 +646,7 @@ class VisitBillingOrphanedStatusRegressionTest {
         com.nexxserve.nexxclinic.entity.InsuranceProvider provider = new com.nexxserve.nexxclinic.entity.InsuranceProvider();
         provider.setInsuranceName("Bucket Insurance");
         provider.setSupportedByClinic(true);
-        provider.setDefaultCoveragePercentage(15);
+        provider.setDefaultPatientSharePercentage(15);
         provider = insuranceProviderRepository.save(provider);
 
         com.nexxserve.nexxclinic.entity.PatientInsurance insurance = new com.nexxserve.nexxclinic.entity.PatientInsurance();
@@ -675,7 +675,7 @@ class VisitBillingOrphanedStatusRegressionTest {
         BillVisitInput.BillVisitDepartmentProductInput productInput =
                 new BillVisitInput.BillVisitDepartmentProductInput(
                         fx.product().getId(), null, BigDecimal.ONE,
-                        CoverageType.INSURANCE, insurance.getId(), ExemptionType.NONE);
+                        CoverageType.INSURANCE, insurance.getId(), ExemptionType.NONE, null);
         BillVisitInput.BillVisitDepartmentInput deptInput =
                 new BillVisitInput.BillVisitDepartmentInput(
                         fx.visitDepartment().getId(), List.of(productInput),
@@ -713,7 +713,7 @@ class VisitBillingOrphanedStatusRegressionTest {
         com.nexxserve.nexxclinic.entity.InsuranceProvider provider = new com.nexxserve.nexxclinic.entity.InsuranceProvider();
         provider.setInsuranceName("Split Insurance");
         provider.setSupportedByClinic(true);
-        provider.setDefaultCoveragePercentage(15);
+        provider.setDefaultPatientSharePercentage(15);
         provider = insuranceProviderRepository.save(provider);
 
         com.nexxserve.nexxclinic.entity.PatientInsurance unsavedInsurance = new com.nexxserve.nexxclinic.entity.PatientInsurance();
@@ -764,11 +764,11 @@ class VisitBillingOrphanedStatusRegressionTest {
         BillVisitInput.BillVisitDepartmentProductInput insuredInput =
                 new BillVisitInput.BillVisitDepartmentProductInput(
                         fx.product().getId(), null, BigDecimal.ONE,
-                        CoverageType.INSURANCE, insurance.getId(), ExemptionType.NONE);
+                        CoverageType.INSURANCE, insurance.getId(), ExemptionType.NONE, null);
         BillVisitInput.BillVisitDepartmentProductInput uninsuredInput =
                 new BillVisitInput.BillVisitDepartmentProductInput(
                         uninsuredVdp.getId(), null, BigDecimal.ONE,
-                        CoverageType.PRIVATE, null, ExemptionType.NONE);
+                        CoverageType.PRIVATE, null, ExemptionType.NONE, null);
         BillVisitInput.BillVisitDepartmentInput deptInput =
                 new BillVisitInput.BillVisitDepartmentInput(
                         fx.visitDepartment().getId(),
@@ -825,7 +825,7 @@ class VisitBillingOrphanedStatusRegressionTest {
 
         BillVisitInput.BillVisitDepartmentProductInput productInput =
                 new BillVisitInput.BillVisitDepartmentProductInput(
-                        fx.product().getId(), null, BigDecimal.ONE, CoverageType.PRIVATE, null, ExemptionType.NONE);
+                        fx.product().getId(), null, BigDecimal.ONE, CoverageType.PRIVATE, null, ExemptionType.NONE, null);
         BillVisitInput.BillVisitDepartmentInput firstDept =
                 new BillVisitInput.BillVisitDepartmentInput(
                         fx.visitDepartment().getId(), List.of(productInput),
@@ -903,7 +903,7 @@ class VisitBillingOrphanedStatusRegressionTest {
         // forward into the new version instead of being dropped.
         BillVisitInput.BillVisitDepartmentProductInput productBInput =
                 new BillVisitInput.BillVisitDepartmentProductInput(
-                        vdpB.getId(), null, BigDecimal.ONE, CoverageType.PRIVATE, null, ExemptionType.NONE);
+                        vdpB.getId(), null, BigDecimal.ONE, CoverageType.PRIVATE, null, ExemptionType.NONE, null);
         BillVisitInput.BillVisitDepartmentInput deptBInput =
                 new BillVisitInput.BillVisitDepartmentInput(
                         vdB.getId(), List.of(productBInput),
@@ -940,7 +940,7 @@ class VisitBillingOrphanedStatusRegressionTest {
             new com.nexxserve.nexxclinic.entity.InsuranceProvider();
         provider.setInsuranceName("Coverage Insurance-" + UUID.randomUUID());
         provider.setSupportedByClinic(true);
-        provider.setDefaultCoveragePercentage(15);
+        provider.setDefaultPatientSharePercentage(15);
         provider = insuranceProviderRepository.save(provider);
 
         com.nexxserve.nexxclinic.entity.PatientInsurance insurance =
@@ -982,7 +982,7 @@ class VisitBillingOrphanedStatusRegressionTest {
 
         BillVisitInput.BillVisitDepartmentProductInput productInput =
             new BillVisitInput.BillVisitDepartmentProductInput(
-                fx.product().getId(), null, BigDecimal.ONE, null, null, ExemptionType.NONE);
+                fx.product().getId(), null, BigDecimal.ONE, null, null, ExemptionType.NONE, null);
         BillVisitInput.BillVisitDepartmentInput deptInput =
             new BillVisitInput.BillVisitDepartmentInput(
                 fx.visitDepartment().getId(), List.of(productInput),
@@ -1004,7 +1004,7 @@ class VisitBillingOrphanedStatusRegressionTest {
 
         BillVisitInput.BillVisitDepartmentProductInput productInput =
             new BillVisitInput.BillVisitDepartmentProductInput(
-                fx.product().getId(), null, BigDecimal.ONE, CoverageType.PRIVATE, null, ExemptionType.NONE);
+                fx.product().getId(), null, BigDecimal.ONE, CoverageType.PRIVATE, null, ExemptionType.NONE, null);
         BillVisitInput.BillVisitDepartmentInput deptInput =
             new BillVisitInput.BillVisitDepartmentInput(
                 fx.visitDepartment().getId(), List.of(productInput),
@@ -1032,7 +1032,7 @@ class VisitBillingOrphanedStatusRegressionTest {
 
         BillVisitInput.BillVisitDepartmentProductInput productInput =
             new BillVisitInput.BillVisitDepartmentProductInput(
-                fx.product().getId(), null, BigDecimal.ONE, CoverageType.PRIVATE, insuranceId, ExemptionType.NONE);
+                fx.product().getId(), null, BigDecimal.ONE, CoverageType.PRIVATE, insuranceId, ExemptionType.NONE, null);
         BillVisitInput.BillVisitDepartmentInput deptInput =
             new BillVisitInput.BillVisitDepartmentInput(
                 fx.visitDepartment().getId(), List.of(productInput),
@@ -1053,7 +1053,7 @@ class VisitBillingOrphanedStatusRegressionTest {
 
         BillVisitInput.BillVisitDepartmentProductInput productInput =
             new BillVisitInput.BillVisitDepartmentProductInput(
-                fx.product().getId(), null, BigDecimal.ONE, CoverageType.INSURANCE, null, ExemptionType.NONE);
+                fx.product().getId(), null, BigDecimal.ONE, CoverageType.INSURANCE, null, ExemptionType.NONE, null);
         BillVisitInput.BillVisitDepartmentInput deptInput =
             new BillVisitInput.BillVisitDepartmentInput(
                 fx.visitDepartment().getId(), List.of(productInput),
@@ -1074,7 +1074,7 @@ class VisitBillingOrphanedStatusRegressionTest {
 
         BillVisitInput.BillVisitDepartmentProductInput productInput =
             new BillVisitInput.BillVisitDepartmentProductInput(
-                fx.product().getId(), null, BigDecimal.ONE, CoverageType.INSURANCE, UUID.randomUUID(), ExemptionType.NONE);
+                fx.product().getId(), null, BigDecimal.ONE, CoverageType.INSURANCE, UUID.randomUUID(), ExemptionType.NONE, null);
         BillVisitInput.BillVisitDepartmentInput deptInput =
             new BillVisitInput.BillVisitDepartmentInput(
                 fx.visitDepartment().getId(), List.of(productInput),
@@ -1096,7 +1096,7 @@ class VisitBillingOrphanedStatusRegressionTest {
 
         BillVisitInput.BillVisitDepartmentProductInput productInput =
             new BillVisitInput.BillVisitDepartmentProductInput(
-                fx.product().getId(), null, BigDecimal.ONE, CoverageType.INSURANCE, insuranceId, ExemptionType.NONE);
+                fx.product().getId(), null, BigDecimal.ONE, CoverageType.INSURANCE, insuranceId, ExemptionType.NONE, null);
         BillVisitInput.BillVisitDepartmentInput deptInput =
             new BillVisitInput.BillVisitDepartmentInput(
                 fx.visitDepartment().getId(), List.of(productInput),

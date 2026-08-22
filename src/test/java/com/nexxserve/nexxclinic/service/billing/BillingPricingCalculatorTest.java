@@ -5,6 +5,8 @@ import com.nexxserve.nexxclinic.entity.PatientInsurance;
 import com.nexxserve.nexxclinic.entity.Product;
 import com.nexxserve.nexxclinic.entity.ProductInsuranceCoverage;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
+import com.nexxserve.nexxclinic.repository.InsuranceCoverageRuleRepository;
+import com.nexxserve.nexxclinic.repository.InsuranceCoverageRuleRepository;
 import com.nexxserve.nexxclinic.repository.PatientInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.ProductInsuranceCoverageRepository;
 import com.nexxserve.nexxclinic.model.CoverageType;
@@ -38,8 +40,10 @@ class BillingPricingCalculatorTest {
         mock(PatientInsuranceRepository.class);
     private final ProductInsuranceCoverageRepository coverageRepository =
         mock(ProductInsuranceCoverageRepository.class);
+    private final InsuranceCoverageRuleRepository coverageRuleRepository =
+        mock(InsuranceCoverageRuleRepository.class);
     private final BillingPricingCalculator calculator =
-        new BillingPricingCalculator(patientInsuranceRepository, coverageRepository);
+        new BillingPricingCalculator(patientInsuranceRepository, coverageRepository, coverageRuleRepository);
 
     private Product product(BigDecimal clinicPrice, BigDecimal privateRhicPrice, boolean notPaid) {
         Product product = new Product();
@@ -61,7 +65,7 @@ class BillingPricingCalculatorTest {
     private InsuranceProvider provider() {
         InsuranceProvider provider = new InsuranceProvider();
         provider.setId(UUID.randomUUID());
-        provider.setDefaultCoveragePercentage(15);
+        provider.setDefaultPatientSharePercentage(15);
         return provider;
     }
 
@@ -185,7 +189,7 @@ class BillingPricingCalculatorTest {
     @Test
     void calculateCoveredAmountUsesProviderPercentage() {
         InsuranceProvider provider = provider();
-        provider.setDefaultCoveragePercentage(15); // patient pays 15% -> insurer covers 85%
+        provider.setDefaultPatientSharePercentage(15); // patient pays 15% -> insurer covers 85%
         Product product = product(null, null, false);
         ProductInsuranceCoverage coverage = coverage(provider, new BigDecimal("100.00"), false);
         stubCoverage(product, coverage);
@@ -207,7 +211,7 @@ class BillingPricingCalculatorTest {
     @Test
     void calculateCoveredAmountFallbackToProviderPercentageWhenCoverageCostIsNull() {
         InsuranceProvider provider = provider();
-        provider.setDefaultCoveragePercentage(20); // patient pays 20% -> insurer covers 80%
+        provider.setDefaultPatientSharePercentage(20); // patient pays 20% -> insurer covers 80%
         Product product = product(null, null, false);
         ProductInsuranceCoverage cov = coverage(provider, null, false);
         cov.setCovered(true);
@@ -228,7 +232,7 @@ class BillingPricingCalculatorTest {
     @Test
     void calculateCoveredAmountCappedAtLineTotal() {
         InsuranceProvider provider = provider();
-        provider.setDefaultCoveragePercentage(0); // insurer covers 100%
+        provider.setDefaultPatientSharePercentage(0); // insurer covers 100%
         Product product = product(null, null, false);
         ProductInsuranceCoverage cov = coverage(provider, new BigDecimal("999.00"), false);
         stubCoverage(product, cov);
@@ -385,9 +389,9 @@ class BillingPricingCalculatorTest {
 
     @Test
     void calculateCoveredAmountZeroPatientShareCoversAll() {
-        // Provider defaultCoveragePercentage = 0 means patient pays 0% -> insurance covers 100%
+        // Provider defaultPatientSharePercentage = 0 means patient pays 0% -> insurance covers 100%
         InsuranceProvider provider = provider();
-        provider.setDefaultCoveragePercentage(0);
+        provider.setDefaultPatientSharePercentage(0);
         Product product = product(null, null, false);
         ProductInsuranceCoverage cov = coverage(provider, new BigDecimal("200.00"), false);
         stubCoverage(product, cov);
@@ -406,9 +410,9 @@ class BillingPricingCalculatorTest {
 
     @Test
     void calculateCoveredAmountFiftyPatientShareCoversHalf() {
-        // Provider defaultCoveragePercentage = 50 -> patient pays 50%, insurance covers 50%
+        // Provider defaultPatientSharePercentage = 50 -> patient pays 50%, insurance covers 50%
         InsuranceProvider provider = provider();
-        provider.setDefaultCoveragePercentage(50);
+        provider.setDefaultPatientSharePercentage(50);
         Product product = product(null, null, false);
         ProductInsuranceCoverage cov = coverage(provider, new BigDecimal("100.00"), false);
         stubCoverage(product, cov);
@@ -427,9 +431,9 @@ class BillingPricingCalculatorTest {
 
     @Test
     void calculateCoveredAmountHundredPatientShareCoversNothing() {
-        // Provider defaultCoveragePercentage = 100 -> patient pays 100%, insurance covers 0%
+        // Provider defaultPatientSharePercentage = 100 -> patient pays 100%, insurance covers 0%
         InsuranceProvider provider = provider();
-        provider.setDefaultCoveragePercentage(100);
+        provider.setDefaultPatientSharePercentage(100);
         Product product = product(null, null, false);
         ProductInsuranceCoverage cov = coverage(provider, new BigDecimal("50.00"), false);
         stubCoverage(product, cov);
@@ -450,7 +454,7 @@ class BillingPricingCalculatorTest {
     void calculateCoveredAmountCostMultipliedByQuantity() {
         // Coverage cost is per-unit; insurance covers (100 - pct)% of (cost x qty)
         InsuranceProvider provider = provider();
-        provider.setDefaultCoveragePercentage(20); // patient pays 20% -> insurance covers 80%
+        provider.setDefaultPatientSharePercentage(20); // patient pays 20% -> insurance covers 80%
         Product product = product(null, null, false);
         ProductInsuranceCoverage cov = coverage(provider, new BigDecimal("150.00"), false);
         stubCoverage(product, cov);
@@ -471,7 +475,7 @@ class BillingPricingCalculatorTest {
     void calculateCoveredAmountPrefetchedCoveragesPath() {
         // Same as basic test but using the pre-fetched coverages map instead of DB fallback
         InsuranceProvider provider = provider();
-        provider.setDefaultCoveragePercentage(15);
+        provider.setDefaultPatientSharePercentage(15);
         Product product = product(null, null, false);
         ProductInsuranceCoverage cov = coverage(provider, new BigDecimal("100.00"), false);
 
@@ -496,7 +500,7 @@ class BillingPricingCalculatorTest {
     void calculateCoveredAmountCappedAtLineTotalForCostBased() {
         // Coverage cost x quantity > lineTotal -> must be capped at lineTotal
         InsuranceProvider provider = provider();
-        provider.setDefaultCoveragePercentage(0); // insurer covers 100%
+        provider.setDefaultPatientSharePercentage(0); // insurer covers 100%
         Product product = product(null, null, false);
         ProductInsuranceCoverage cov = coverage(provider, new BigDecimal("500.00"), false);
         stubCoverage(product, cov);
@@ -518,7 +522,7 @@ class BillingPricingCalculatorTest {
         // Test rounding: 100.00 cost x 1 qty, 33% patient share -> 67% covered
         // 100.00 * 67 / 100 = 67.00 (HALF_UP)
         InsuranceProvider provider = provider();
-        provider.setDefaultCoveragePercentage(33);
+        provider.setDefaultPatientSharePercentage(33);
         Product product = product(null, null, false);
         ProductInsuranceCoverage cov = coverage(provider, new BigDecimal("100.00"), false);
         stubCoverage(product, cov);
@@ -538,7 +542,7 @@ class BillingPricingCalculatorTest {
     void calculateCoveredAmountNotInPrefetchedFallsBackToDb() {
         // Prefetched map is empty -> falls back to DB lookup via stubCoverage
         InsuranceProvider provider = provider();
-        provider.setDefaultCoveragePercentage(10); // patient pays 10% -> insurance covers 90%
+        provider.setDefaultPatientSharePercentage(10); // patient pays 10% -> insurance covers 90%
         Product product = product(null, null, false);
         ProductInsuranceCoverage cov = coverage(provider, new BigDecimal("200.00"), false);
         stubCoverage(product, cov);

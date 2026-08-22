@@ -168,6 +168,7 @@ public class BillingDataMapper {
         data.put("validFrom", insurance.getValidFrom());
         data.put("validUntil", insurance.getValidUntil());
         data.put("deactivated", insurance.isDeactivated());
+        data.put("patientSharePercentage", insurance.getPatientSharePercentage());
         data.put("createdAt", insurance.getCreatedAt());
         data.put("updatedAt", insurance.getUpdatedAt());
         return data;
@@ -213,7 +214,7 @@ public class BillingDataMapper {
         data.put("id", provider.getId());
         data.put("insuranceName", provider.getInsuranceName());
         data.put("acronym", provider.getAcronym());
-        data.put("defaultCoveragePercentage", provider.getDefaultCoveragePercentage());
+        data.put("defaultPatientSharePercentage", provider.getDefaultPatientSharePercentage());
         data.put("supportedByClinic", provider.isSupportedByClinic());
         data.put("iconUrl", provider.getIconUrl());
         data.put("createdAt", provider.getCreatedAt());
@@ -245,6 +246,8 @@ public class BillingDataMapper {
         data.put("lineTotal", item.getLineTotal());
         data.put("insuranceCoveredAmount", item.getInsuranceCoveredAmount());
         data.put("patientPayableAmount", item.getPatientPayableAmount());
+        data.put("appliedPatientSharePct", item.getAppliedPatientSharePct());
+        data.put("patientShareSource", item.getPatientShareSource());
         data.put("createdAt", item.getCreatedAt());
         data.put("updatedAt", item.getUpdatedAt());
         return data;

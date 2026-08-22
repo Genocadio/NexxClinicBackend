@@ -189,6 +189,16 @@ enum ExemptionType {
   FULL
 }
 
+"""
+Indicates the source of the patient share percentage applied to a billing line.
+"""
+enum PatientShareSource {
+  OVERRIDE
+  RULE
+  PROVIDER_DEFAULT
+  EXEMPTED
+}
+
 enum ClinicContactType {
   PHONE
   EMAIL
@@ -326,7 +336,7 @@ type InsuranceProvider {
   id: ID!
   insuranceName: String!
   acronym: String
-  defaultCoveragePercentage: Int!
+  defaultPatientSharePercentage: Int!
   supportedByClinic: Boolean!
   iconUrl: String
   createdAt: String!
@@ -398,6 +408,8 @@ type PatientInsurance {
   validFrom: String!
   validUntil: String!
   deactivated: Boolean!
+  """Optional patient-specific default patient share percentage (0-100). When set, this overrides the provider default for this patient. Null = use rules then provider default."""
+  patientSharePercentage: Int
   createdAt: String!
   updatedAt: String!
 }
@@ -696,6 +708,8 @@ type VisitBillingItem {
   quantitySnapshot: Float!
   insuranceCoveredAmount: Float!
   patientPayableAmount: Float!
+  appliedPatientSharePct: Int
+  patientShareSource: PatientShareSource
   createdAt: String!
   updatedAt: String!
 }
@@ -1049,7 +1063,7 @@ input DeactivateUserInput {
 input CreateInsuranceProviderInput {
   insuranceName: String!
   acronym: String
-  defaultCoveragePercentage: Int!
+  defaultPatientSharePercentage: Int!
   supportedByClinic: Boolean
   iconUrl: String
 }
@@ -1057,7 +1071,7 @@ input CreateInsuranceProviderInput {
 input UpdateInsuranceProviderInput {
   insuranceName: String
   acronym: String
-  defaultCoveragePercentage: Int
+  defaultPatientSharePercentage: Int
   supportedByClinic: Boolean
   iconUrl: String
 }
@@ -1113,6 +1127,8 @@ input CreatePatientInsuranceInput {
   principalMemberPhoneNumber: String
   validFrom: String!
   validUntil: String!
+  """Optional patient-specific default (0-100). Null = use rules then provider default."""
+  patientSharePercentage: Int
 }
 
 input UpdatePatientInsuranceInput {
@@ -1125,6 +1141,7 @@ input UpdatePatientInsuranceInput {
   principalMemberPhoneNumber: String
   validFrom: String
   validUntil: String
+  patientSharePercentage: Int
 }
 
 input SearchPatientsInput {
@@ -1321,6 +1338,8 @@ input BillVisitDepartmentProductInput {
   patientInsuranceId: ID
   """NONE, PATIENT_SHARE (patient waive, insurance still pays), or FULL (entire line zeroed)."""
   exemptionType: ExemptionType
+  """Override the resolved patient share % for this line. Null = use rule/provider default."""
+  patientSharePercentageOverride: Int
 }
 
 input EditBillVisitBillProductInput {
@@ -1330,6 +1349,8 @@ input EditBillVisitBillProductInput {
   quantity: Float
   """NONE, PATIENT_SHARE (patient waive, insurance still pays), or FULL (entire line zeroed)."""
   exemptionType: ExemptionType
+  """Override the resolved patient share % for this line. Null = use rule/provider default."""
+  patientSharePercentageOverride: Int
 }
 
 input BillingPaymentInput {
@@ -1550,6 +1571,50 @@ input ClinicContactInput {
   description: String
 }
 
+type InsuranceCoverageRule {
+  id: ID!
+  insuranceProviderId: ID!
+  insuranceProviderName: String!
+  departmentId: ID
+  departmentName: String
+  encounterType: EncounterType
+  patientSharePercentage: Int!
+  createdAt: String!
+  updatedAt: String!
+}
+
+type InsuranceCoverageRuleResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: InsuranceCoverageRule
+}
+
+type InsuranceCoverageRuleListResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: [InsuranceCoverageRule!]
+}
+
+input CreateInsuranceCoverageRuleInput {
+  insuranceProviderId: ID!
+  departmentId: ID
+  encounterType: EncounterType
+  """Patient share percentage (0-100). Insurance covers (100 - X)%."""
+  patientSharePercentage: Int!
+}
+
+input UpdateInsuranceCoverageRuleInput {
+  insuranceProviderId: ID
+  departmentId: ID
+  encounterType: EncounterType
+  patientSharePercentage: Int
+}
+
+input SearchInsuranceCoverageRulesInput {
+  insuranceProviderId: ID
+  departmentId: ID
+}
+
 type Query {
   me: WorkerResponse!
   listUsers: WorkerListResponse!
@@ -1573,6 +1638,8 @@ type Query {
   visitBilling(visitId: ID!): VisitBillingResponse!
   clinicProfile: ClinicProfileResponse!
   lastPatientDepartmentVisit(visitId: ID!, departmentId: ID!): LastPatientDepartmentVisitResponse!
+  insuranceCoverageRule(ruleId: ID!): InsuranceCoverageRuleResponse!
+  insuranceCoverageRules(input: SearchInsuranceCoverageRulesInput): InsuranceCoverageRuleListResponse!
 }
 
 type Mutation {
@@ -1665,4 +1732,7 @@ type Mutation {
   updateClinicProfile(input: UpdateClinicProfileInput!): ClinicProfileResponse!
   deleteClinicProfile: BooleanResponse!
   reindexSearchIndexes(indexes: [SearchIndexType!]!): BooleanResponse!
+  createInsuranceCoverageRule(input: CreateInsuranceCoverageRuleInput!): InsuranceCoverageRuleResponse!
+  updateInsuranceCoverageRule(ruleId: ID!, input: UpdateInsuranceCoverageRuleInput!): InsuranceCoverageRuleResponse!
+  deleteInsuranceCoverageRule(ruleId: ID!): BooleanResponse!
 }

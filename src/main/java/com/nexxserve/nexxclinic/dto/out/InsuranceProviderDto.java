@@ -7,7 +7,7 @@ public record InsuranceProviderDto(
         UUID id,
         String insuranceName,
         String acronym,
-        Integer defaultCoveragePercentage,
+        Integer defaultPatientSharePercentage,
         boolean supportedByClinic,
         String iconUrl,
         LocalDateTime createdAt,

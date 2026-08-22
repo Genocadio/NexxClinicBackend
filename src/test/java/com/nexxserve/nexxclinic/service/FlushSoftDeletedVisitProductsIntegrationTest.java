@@ -165,7 +165,7 @@ class FlushSoftDeletedVisitProductsIntegrationTest {
                 null,
                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
                     fx.keepCatalogProductId(), null, CoverageType.PRIVATE,
-                    null, ExemptionType.NONE)),
+                    null, ExemptionType.NONE, null)),
                 List.of(new BillVisitInput.BillingPaymentInput(
                     new BigDecimal("50.00"), PaymentMethod.CASH, null)),
                 "Soft delete product"
@@ -214,10 +214,10 @@ class FlushSoftDeletedVisitProductsIntegrationTest {
                 List.of(
                     new BillVisitInput.BillVisitDepartmentProductInput(
                         fx.product().getId(), null, BigDecimal.ONE,
-                        CoverageType.PRIVATE, null, ExemptionType.NONE),
+                        CoverageType.PRIVATE, null, ExemptionType.NONE, null),
                     new BillVisitInput.BillVisitDepartmentProductInput(
                         fx.keepProduct().getId(), null, BigDecimal.ONE,
-                        CoverageType.PRIVATE, null, ExemptionType.NONE)),
+                        CoverageType.PRIVATE, null, ExemptionType.NONE, null)),
                 List.of(new BillVisitInput.BillingPaymentInput(
                     new BigDecimal("150.00"), PaymentMethod.CASH, null)),
                 "Bill before soft-delete"

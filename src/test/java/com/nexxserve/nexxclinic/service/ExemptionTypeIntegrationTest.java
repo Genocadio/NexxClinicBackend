@@ -167,7 +167,7 @@ class ExemptionTypeIntegrationTest {
                 fx.visitDepartment().getId(),
                 List.of(new BillVisitInput.BillVisitDepartmentProductInput(
                     fx.product().getId(), null, BigDecimal.ONE,
-                    CoverageType.PRIVATE, null, exemptionType)),
+                    CoverageType.PRIVATE, null, exemptionType, null)),
                 payments,
                 "Test billing"
             ))
@@ -181,7 +181,7 @@ class ExemptionTypeIntegrationTest {
                 fx.visitDepartment().getId(),
                 List.of(new BillVisitInput.BillVisitDepartmentProductInput(
                     fx.product().getId(), null, BigDecimal.ONE,
-                    CoverageType.PRIVATE, null, exemptionType)),
+                    CoverageType.PRIVATE, null, exemptionType, null)),
                 List.of(),
                 "Test billing"
             ))
@@ -195,7 +195,7 @@ class ExemptionTypeIntegrationTest {
                 fx.visitDepartment().getId(),
                 List.of(new BillVisitInput.BillVisitDepartmentProductInput(
                     fx.product().getId(), null, BigDecimal.ONE,
-                    CoverageType.PRIVATE, null, exemptionType)),
+                    CoverageType.PRIVATE, null, exemptionType, null)),
                 List.of(),
                 null
             ))
@@ -287,7 +287,7 @@ class ExemptionTypeIntegrationTest {
                 null, null, null,
                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
                     fx.catalogProductId(), null, CoverageType.PRIVATE,
-                    null, ExemptionType.FULL)),
+                    null, ExemptionType.FULL, null)),
                 List.of(),
                 "Changed to full exemption"
             ))
@@ -328,7 +328,7 @@ class ExemptionTypeIntegrationTest {
                 null, null, null,
                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
                     fx.catalogProductId(), null, CoverageType.PRIVATE,
-                    null, ExemptionType.PATIENT_SHARE)),
+                    null, ExemptionType.PATIENT_SHARE, null)),
                 List.of(),
                 "Changed to patient share exemption"
             ))
@@ -366,7 +366,7 @@ class ExemptionTypeIntegrationTest {
                 null, null, null,
                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
                     fx.catalogProductId(), null, CoverageType.PRIVATE,
-                    null, ExemptionType.PATIENT_SHARE)),
+                    null, ExemptionType.PATIENT_SHARE, null)),
                 List.of(),
                 "Changed from full to patient share"
             ))

@@ -19,6 +19,8 @@ import com.nexxserve.nexxclinic.graphql.input.BillVisitInput;
 import com.nexxserve.nexxclinic.graphql.input.EditBillVisitInput;
 import com.nexxserve.nexxclinic.graphql.input.RecordVisitBillingPaymentInput;
 import com.nexxserve.nexxclinic.model.CoverageType;
+import com.nexxserve.nexxclinic.model.EncounterType;
+import com.nexxserve.nexxclinic.model.PatientShareSource;
 import com.nexxserve.nexxclinic.model.ExemptionType;
 import com.nexxserve.nexxclinic.model.NoteType;
 import com.nexxserve.nexxclinic.model.VisitBillingStatus;
@@ -588,6 +590,7 @@ public class VisitBillingService {
         Map<UUID, java.math.BigDecimal> requestedQuantityByItem =
             new LinkedHashMap<>();
         Map<UUID, ExemptionType> requestedExemptionTypeByItem = new LinkedHashMap<>();
+        Map<UUID, Integer> requestedPatientShareOverrideByItem = new LinkedHashMap<>();
         Set<UUID> requestedProductIds = new LinkedHashSet<>();
 
         List<VisitInsurance> visitInsurances =
@@ -745,6 +748,12 @@ public class VisitBillingService {
                         resolvedExemption
                     );
                 }
+                if (productInput.patientSharePercentageOverride() != null) {
+                    requestedPatientShareOverrideByItem.put(
+                        item.getId(),
+                        productInput.patientSharePercentageOverride()
+                    );
+                }
 
                 UUID requestedPatientInsuranceId = requestedInsuranceByItem.get(
                     item.getId()
@@ -867,6 +876,8 @@ public class VisitBillingService {
         }
         Map<UUID, Map<UUID, ProductInsuranceCoverage>> prefetchedCoverages =
             pricingCalculator.prefetchCoverages(insuranceProductIds, insuranceProviderIds);
+        Map<UUID, Map<UUID, List<com.nexxserve.nexxclinic.entity.InsuranceCoverageRule>>> prefetchedRules =
+            pricingCalculator.prefetchCoverageRules(insuranceProviderIds);
 
         Set<UUID> exemptedRootDepartmentIds = new LinkedHashSet<>();
         Map<UUID, VisitDepartmentBilling> departmentBillingByRoot =
@@ -968,6 +979,18 @@ public class VisitBillingService {
                     item.getId(), ExemptionType.NONE
                 );
 
+                // Resolve patient share percentage via the 3-layer chain
+                UUID departmentId = item.getVisitDepartment() != null
+                    ? item.getVisitDepartment().getDepartment().getId() : null;
+                EncounterType encounterType = item.getVisitDepartment() != null
+                    ? item.getVisitDepartment().getEncounterType() : null;
+                Integer override = requestedPatientShareOverrideByItem != null
+                    ? requestedPatientShareOverrideByItem.get(item.getId()) : null;
+                com.nexxserve.nexxclinic.service.billing.BillingPricingCalculator.ResolvedPatientShare resolved =
+                    pricingCalculator.resolvePatientSharePercentage(
+                        appliedInsurance, departmentId, encounterType, override, prefetchedRules
+                    );
+
                 if (lineExemptionType == ExemptionType.FULL) {
                     // FULL waiver: entire line zeroed (insurance covers nothing)
                     unitPrice = ZERO;
@@ -977,11 +1000,13 @@ public class VisitBillingService {
                     patientAmount = ZERO;
                 } else {
                     lineTotal = toMoney(unitPrice.multiply(quantity));
+
                     coveredAmount = pricingCalculator.calculateCoveredAmount(
                         item,
                         appliedInsurance,
                         quantity,
                         lineTotal,
+                        resolved.percentage(),
                         prefetchedCoverages
                     );
                     patientAmount = toMoney(lineTotal.subtract(coveredAmount));
@@ -1000,12 +1025,10 @@ public class VisitBillingService {
                             + "("
                             + appliedInsurance.getInsuranceProvider().getInsuranceName()
                             + ", providerPct="
-                            + appliedInsurance.getInsuranceProvider().getDefaultCoveragePercentage()
-                            + ")";
-                    log.debug(
-                        "[BILL-DIAG] visit={} rootDept={} product='{}' (id={}, qty={}, exemption={}, coverage={}, insurance={}): unitPrice={} lineTotal={} covered={} patientAmount={}",
-                        visit.getId(),
-                        group.rootVisitDepartmentId(),
+                            + appliedInsurance.getInsuranceProvider().getDefaultPatientSharePercentage()
+                            + ")";                    log.debug(
+                        "[BILL-DIAG] visit={} rootDept={} product='{}' (id={}, qty={}, exemption={}, coverage={}, insurance={}): unitPrice={} lineTotal={} covered={} patientAmount={} patientSharePct={} source={}",
+                        visit.getId(), group.rootVisitDepartmentId(),
                         productName(item),
                         item.getId(),
                         quantity,
@@ -1016,7 +1039,9 @@ public class VisitBillingService {
                         unitPrice,
                         lineTotal,
                         coveredAmount,
-                        patientAmount
+                        patientAmount,
+                        resolved != null ? resolved.percentage() : "n/a",
+                        resolved != null ? resolved.source() : "n/a"
                     );
                 }
 
@@ -1048,6 +1073,17 @@ public class VisitBillingService {
                 billingItem.setLineTotal(lineTotal);
                 billingItem.setInsuranceCoveredAmount(coveredAmount);
                 billingItem.setPatientPayableAmount(patientAmount);
+                // Snapshot patient share audit fields
+                if (lineExemptionType == ExemptionType.FULL) {
+                    billingItem.setAppliedPatientSharePct(0);
+                    billingItem.setPatientShareSource(PatientShareSource.EXEMPTED);
+                } else if (lineExemptionType == ExemptionType.PATIENT_SHARE) {
+                    billingItem.setAppliedPatientSharePct(resolved != null ? resolved.percentage() : 0);
+                    billingItem.setPatientShareSource(PatientShareSource.EXEMPTED);
+                } else if (appliedInsurance != null) {
+                    billingItem.setAppliedPatientSharePct(resolved != null ? resolved.percentage() : 0);
+                    billingItem.setPatientShareSource(resolved != null ? resolved.source() : PatientShareSource.PROVIDER_DEFAULT);
+                }
                 insuranceBilling.getItems().add(billingItem);
                 pendingSnapshots.add(new PendingSnapshot(snap, billingItem));
 

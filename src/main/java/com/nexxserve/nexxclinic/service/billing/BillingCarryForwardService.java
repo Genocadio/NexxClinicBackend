@@ -140,7 +140,8 @@ public class BillingCarryForwardService {
                             carriedInsuranceId,
                             resolveExemptionTypeFromStatus(
                                 item.getVisitDepartmentProduct().getStatus()
-                            )
+                            ),
+                            null
                         );
                     })
                     .toList();

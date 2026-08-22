@@ -98,7 +98,7 @@ class PatientInsuranceServiceTest {
     private InsuranceProvider persistProvider() {
         InsuranceProvider provider = new InsuranceProvider();
         provider.setInsuranceName("TestProvider-" + UUID.randomUUID());
-        provider.setDefaultCoveragePercentage(15);
+        provider.setDefaultPatientSharePercentage(15);
         provider.setSupportedByClinic(true);
         return insuranceProviderRepository.save(provider);
     }
@@ -115,7 +115,7 @@ class PatientInsuranceServiceTest {
                 null,
                 from,
                 until
-        );
+        , null);
     }
 
     private PatientInsuranceDto createInsurance(
@@ -253,7 +253,7 @@ class PatientInsuranceServiceTest {
                 second.id(),
                 new UpdatePatientInsuranceInput(
                         null, null, "CARD-ONE", null, null, null, null, null, null
-                )
+                , null)
         );
         assertEquals(ResponseStatus.ERROR, response.status());
         assertEquals(
@@ -287,7 +287,7 @@ class PatientInsuranceServiceTest {
                 created.id(),
                 new UpdatePatientInsuranceInput(
                         patientB.getId(), null, null, null, null, null, null, null, null
-                )
+                , null)
         );
         assertEquals(ResponseStatus.ERROR, response.status());
         assertEquals(

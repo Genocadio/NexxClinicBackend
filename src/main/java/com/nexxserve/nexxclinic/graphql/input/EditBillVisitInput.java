@@ -56,7 +56,9 @@ public record EditBillVisitInput(
 
         BigDecimal quantity,
 
-        ExemptionType exemptionType
+        ExemptionType exemptionType,
+
+        Integer patientSharePercentageOverride
     ) {}
 
     public record EditBillVisitAddProductInput(

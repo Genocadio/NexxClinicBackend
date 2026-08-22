@@ -25,7 +25,7 @@ public class InsuranceProvider {
     private String acronym;
 
     @Column(nullable = false)
-    private Integer defaultCoveragePercentage;
+    private Integer defaultPatientSharePercentage;
 
     @Column(nullable = false)
     private boolean supportedByClinic;
@@ -74,12 +74,12 @@ public class InsuranceProvider {
         this.acronym = acronym;
     }
 
-    public Integer getDefaultCoveragePercentage() {
-        return defaultCoveragePercentage;
+    public Integer getDefaultPatientSharePercentage() {
+        return defaultPatientSharePercentage;
     }
 
-    public void setDefaultCoveragePercentage(Integer defaultCoveragePercentage) {
-        this.defaultCoveragePercentage = defaultCoveragePercentage;
+    public void setDefaultPatientSharePercentage(Integer defaultPatientSharePercentage) {
+        this.defaultPatientSharePercentage = defaultPatientSharePercentage;
     }
 
     public boolean isSupportedByClinic() {

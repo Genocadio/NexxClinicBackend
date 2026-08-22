@@ -11,9 +11,9 @@ public record UpdateInsuranceProviderInput(
         @Size(max = 30, message = "acronym must not exceed 30 characters")
         String acronym,
 
-        @Min(value = 0, message = "defaultCoveragePercentage must be between 0 and 100")
-        @Max(value = 100, message = "defaultCoveragePercentage must be between 0 and 100")
-        Integer defaultCoveragePercentage,
+        @Min(value = 0, message = "defaultPatientSharePercentage must be between 0 and 100")
+        @Max(value = 100, message = "defaultPatientSharePercentage must be between 0 and 100")
+        Integer defaultPatientSharePercentage,
 
         Boolean supportedByClinic,
 

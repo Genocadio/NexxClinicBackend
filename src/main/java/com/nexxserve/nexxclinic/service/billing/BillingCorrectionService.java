@@ -345,7 +345,8 @@ public class BillingCorrectionService {
                                     bp.quantity(),
                                     bp.coverageType(),
                                     bp.patientInsuranceId(),
-                                    bp.exemptionType()
+                                    bp.exemptionType(),
+                                    bp.patientSharePercentageOverride()
                                 );
                             }).toList();
 
