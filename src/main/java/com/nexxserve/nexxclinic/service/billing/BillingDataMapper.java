@@ -214,7 +214,7 @@ public class BillingDataMapper {
         data.put("id", provider.getId());
         data.put("insuranceName", provider.getInsuranceName());
         data.put("acronym", provider.getAcronym());
-        data.put("defaultPatientSharePercentage", provider.getDefaultPatientSharePercentage());
+        data.put("basePatientSharePercentage", provider.getBasePatientSharePercentage());
         data.put("supportedByClinic", provider.isSupportedByClinic());
         data.put("iconUrl", provider.getIconUrl());
         data.put("createdAt", provider.getCreatedAt());

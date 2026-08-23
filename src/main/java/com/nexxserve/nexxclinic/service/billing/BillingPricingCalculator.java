@@ -1,6 +1,6 @@
 package com.nexxserve.nexxclinic.service.billing;
 
-import com.nexxserve.nexxclinic.entity.InsuranceCoverageRule;
+import com.nexxserve.nexxclinic.entity.InsuranceCoverage;
 import com.nexxserve.nexxclinic.entity.PatientInsurance;
 import com.nexxserve.nexxclinic.entity.Product;
 import com.nexxserve.nexxclinic.entity.ProductInsuranceCoverage;
@@ -9,9 +9,11 @@ import com.nexxserve.nexxclinic.entity.VisitInsurance;
 import com.nexxserve.nexxclinic.model.CoverageType;
 import com.nexxserve.nexxclinic.model.EncounterType;
 import com.nexxserve.nexxclinic.model.PatientShareSource;
-import com.nexxserve.nexxclinic.repository.InsuranceCoverageRuleRepository;
+import com.nexxserve.nexxclinic.repository.InsuranceCoverageRepository;
 import com.nexxserve.nexxclinic.repository.PatientInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.ProductInsuranceCoverageRepository;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -28,12 +30,12 @@ import org.springframework.stereotype.Component;
  * price and the insurance-covered amount for a billing line. Kept separate from
  * the billing orchestration so pricing rules live in one testable place.
  *
- * <p>Patient share resolution uses a 3-layer chain (most specific wins):
+ * <p>Patient share resolution uses a multi-layer chain (most specific wins):
  * <ol>
  *   <li>Per-line override (from billing input)</li>
- *   <li>{@link InsuranceCoverageRule} matching (provider + department + encounter type)</li>
- *   <li>{@code InsuranceProvider.defaultPatientSharePercentage}</li>
- *   <li>0 (insurance covers 100%)</li>
+ *   <li>{@link InsuranceCoverage} matching (provider + department + encounter type)</li>
+ *   <li>Patient-specific default ({@code PatientInsurance.patientSharePercentage})</li>
+ *   <li>Base coverage (provider-wide, no conditions)</li>
  * </ol>
  */
 @Component
@@ -41,23 +43,23 @@ public class BillingPricingCalculator {
 
     private final PatientInsuranceRepository patientInsuranceRepository;
     private final ProductInsuranceCoverageRepository productInsuranceCoverageRepository;
-    private final InsuranceCoverageRuleRepository coverageRuleRepository;
+    private final InsuranceCoverageRepository coverageRepository;
 
     public BillingPricingCalculator(
         PatientInsuranceRepository patientInsuranceRepository,
         ProductInsuranceCoverageRepository productInsuranceCoverageRepository,
-        InsuranceCoverageRuleRepository coverageRuleRepository
+        InsuranceCoverageRepository coverageRepository
     ) {
         this.patientInsuranceRepository = patientInsuranceRepository;
         this.productInsuranceCoverageRepository = productInsuranceCoverageRepository;
-        this.coverageRuleRepository = coverageRuleRepository;
+        this.coverageRepository = coverageRepository;
     }
 
     /**
      * Pre-fetches all {@link ProductInsuranceCoverage} rows for the given
      * product/provider pairs in a single query.
      */
-    public Map<UUID, Map<UUID, ProductInsuranceCoverage>> prefetchCoverages(
+    public Map<UUID, Map<UUID, ProductInsuranceCoverage>> prefetchProductCoverages(
         Set<UUID> productIds,
         Set<UUID> insuranceProviderIds
     ) {
@@ -80,27 +82,27 @@ public class BillingPricingCalculator {
     }
 
     /**
-     * Pre-fetches all {@link InsuranceCoverageRule} rows for the given
+     * Pre-fetches all {@link InsuranceCoverage} rows for the given
      * insurance providers, keyed by {@code (insuranceProviderId, departmentId)}.
-     * Rules with null department are stored under key {@code null}.
+     * Coverages with null department are stored under key {@code null}.
      */
-    public Map<UUID, Map<UUID, List<InsuranceCoverageRule>>> prefetchCoverageRules(
+    public Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetchPatientShareCoverages(
         Set<UUID> insuranceProviderIds
     ) {
         if (insuranceProviderIds == null || insuranceProviderIds.isEmpty()) {
             return Map.of();
         }
-        List<InsuranceCoverageRule> rules = coverageRuleRepository
+        List<InsuranceCoverage> coverages = coverageRepository
             .findByInsuranceProviderIdIn(insuranceProviderIds);
-        return rules.stream().collect(
-            Collectors.groupingBy(
-                r -> r.getInsuranceProvider().getId(),
-                Collectors.groupingBy(
-                    r -> r.getDepartment() != null ? r.getDepartment().getId() : null,
-                    Collectors.toList()
-                )
-            )
-        );
+        Map<UUID, Map<UUID, List<InsuranceCoverage>>> result = new HashMap<>();
+        for (InsuranceCoverage c : coverages) {
+            UUID providerId = c.getInsuranceProvider().getId();
+            UUID deptId = c.getDepartment() != null ? c.getDepartment().getId() : null;
+            result.computeIfAbsent(providerId, k -> new HashMap<>())
+                  .computeIfAbsent(deptId, k -> new ArrayList<>())
+                  .add(c);
+        }
+        return result;
     }
 
     /**
@@ -108,26 +110,21 @@ public class BillingPricingCalculator {
      *
      * <p>Resolution chain (most specific wins):
      * <ol>
-     *   <li><b>Per-line override</b> — only accepted when no rule blocks it, i.e.
-     *       there is no rule at all, OR a rule matches the department or encounter type
-     *       (the override aligns with an existing rule's scope).</li>
-     *   <li><b>Rule: dept + encounterType</b> — exact match.</li>
-     *   <li><b>Rule: dept only</b> — department-level fallback.</li>
-     *   <li><b>Rule: encounterType only</b> — encounter-type-level fallback.</li>
-     *   <li><b>Rule: provider-wide</b> — global rule for the provider.</li>
+     *   <li><b>Per-line override</b> — only accepted when no coverage blocks it.</li>
+     *   <li><b>Coverage: dept + encounterType</b> — exact match.</li>
+     *   <li><b>Coverage: dept only</b> — department-level.</li>
+     *   <li><b>Coverage: encounterType only</b> — encounter-type-level.</li>
+     *   <li><b>Base coverage</b> — provider-wide (no conditions).</li>
      *   <li><b>Patient default</b> — {@code PatientInsurance.patientSharePercentage}.</li>
-     *   <li><b>Provider default</b> — {@code InsuranceProvider.defaultPatientSharePercentage}.</li>
+     *   <li><b>0</b> — insurance covers everything.</li>
      * </ol>
-     *
-     * <p>Preference: rules matching specific context (dept or encounter type) are
-     * always preferred over global (provider-wide) rules.
      */
     public ResolvedPatientShare resolvePatientSharePercentage(
         PatientInsurance appliedInsurance,
         UUID departmentId,
         EncounterType encounterType,
         Integer perLineOverride,
-        Map<UUID, Map<UUID, List<InsuranceCoverageRule>>> prefetchedRules
+        Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetchedCoverages
     ) {
         if (appliedInsurance == null) {
             return new ResolvedPatientShare(0, PatientShareSource.PROVIDER_DEFAULT);
@@ -135,19 +132,19 @@ public class BillingPricingCalculator {
 
         UUID providerId = appliedInsurance.getInsuranceProvider().getId();
 
-        // Layer 1: per-line override — only accepted when no rule blocks it
+        // Layer 1: per-line override — only accepted when no coverage blocks it
         if (perLineOverride != null) {
-            if (isOverrideAllowed(providerId, departmentId, encounterType, prefetchedRules)) {
+            if (isOverrideAllowed(providerId, departmentId, encounterType, prefetchedCoverages)) {
                 int clamped = Math.max(0, Math.min(100, perLineOverride));
                 return new ResolvedPatientShare(clamped, PatientShareSource.OVERRIDE);
             }
-            // Override blocked by a rule — fall through to rule resolution
+            // Override blocked — fall through to coverage resolution
         }
 
-        // Layer 2: rule-based resolution (most specific wins)
-        Integer rulePct = lookupRulePercentage(providerId, departmentId, encounterType, prefetchedRules);
-        if (rulePct != null) {
-            return new ResolvedPatientShare(rulePct, PatientShareSource.RULE);
+        // Layer 2: coverage-based resolution (most specific wins)
+        Integer coveragePct = lookupCoveragePercentage(providerId, departmentId, encounterType, prefetchedCoverages);
+        if (coveragePct != null) {
+            return new ResolvedPatientShare(coveragePct, PatientShareSource.RULE);
         }
 
         // Layer 3: patient-specific default
@@ -156,8 +153,8 @@ public class BillingPricingCalculator {
             return new ResolvedPatientShare(patientDefault, PatientShareSource.PATIENT_DEFAULT);
         }
 
-        // Layer 4: provider global default
-        Integer providerDefault = appliedInsurance.getInsuranceProvider().getDefaultPatientSharePercentage();
+        // Layer 4: provider base coverage (from InsuranceProvider.getCoverages())
+        Integer providerDefault = appliedInsurance.getInsuranceProvider().getBasePatientSharePercentage();
         if (providerDefault != null) {
             return new ResolvedPatientShare(providerDefault, PatientShareSource.PROVIDER_DEFAULT);
         }
@@ -167,94 +164,65 @@ public class BillingPricingCalculator {
     }
 
     /**
-     * Determines whether a per-line override is allowed. The override is accepted when:
-     * <ul>
-     *   <li>No rules exist at all for this provider, OR</li>
-     *   <li>A rule exists that matches either the department OR the encounter type
-     *       (the override aligns with an existing rule's scope).</li>
-     * </ul>
-     * The override is rejected when there is a rule for a different dept AND a
-     * different encounter type — meaning the override would bypass a specific rule.
+     * Determines whether a per-line override is allowed.
      */
     private boolean isOverrideAllowed(
         UUID providerId,
         UUID departmentId,
         EncounterType encounterType,
-        Map<UUID, Map<UUID, List<InsuranceCoverageRule>>> prefetchedRules
+        Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetchedCoverages
     ) {
-        Map<UUID, List<InsuranceCoverageRule>> byDept = prefetchedRules != null
-            ? prefetchedRules.get(providerId)
+        Map<UUID, List<InsuranceCoverage>> byDept = prefetchedCoverages != null
+            ? prefetchedCoverages.get(providerId)
             : null;
 
         if (byDept == null || byDept.isEmpty()) {
-            return true; // no rules at all — override allowed
+            return true;
         }
 
         boolean hasDeptMatch = false;
         boolean hasEncounterMatch = false;
         boolean hasExactMatch = false;
 
-        for (Map.Entry<UUID, List<InsuranceCoverageRule>> entry : byDept.entrySet()) {
-            UUID ruleDeptId = entry.getKey();
-            for (InsuranceCoverageRule rule : entry.getValue()) {
-                EncounterType ruleEnc = rule.getEncounterType();
+        for (Map.Entry<UUID, List<InsuranceCoverage>> entry : byDept.entrySet()) {
+            UUID covDeptId = entry.getKey();
+            for (InsuranceCoverage cov : entry.getValue()) {
+                EncounterType covEnc = cov.getEncounterType();
 
-                // Check exact match (dept + encounter type)
-                if (deptMatches(departmentId, ruleDeptId) && encounterType != null && encounterType.equals(ruleEnc)) {
+                if (deptMatches(departmentId, covDeptId) && encounterType != null && encounterType.equals(covEnc)) {
                     hasExactMatch = true;
                 }
-                // Check dept match (rule covers this dept, any encounter type)
-                if (deptMatches(departmentId, ruleDeptId)) {
+                if (deptMatches(departmentId, covDeptId)) {
                     hasDeptMatch = true;
                 }
-                // Check encounter type match (rule covers this encounter type, any dept)
-                if (ruleEnc != null && encounterType != null && encounterType.equals(ruleEnc)) {
+                if (covEnc != null && encounterType != null && encounterType.equals(covEnc)) {
                     hasEncounterMatch = true;
                 }
             }
         }
 
-        // If there's an exact match, the override is blocked (rule wins)
-        if (hasExactMatch) {
-            return false;
-        }
-
-        // If there's a partial match (dept OR encounter type), override is allowed
-        // (the override aligns with an existing rule's scope)
-        if (hasDeptMatch || hasEncounterMatch) {
-            return true;
-        }
-
-        // No matching rule at all — override is blocked
-        // (there are rules, but none for this dept or encounter type)
+        if (hasExactMatch) return false;
+        if (hasDeptMatch || hasEncounterMatch) return true;
         return false;
     }
 
-    /** Checks if a rule's department matches the given department. */
-    private boolean deptMatches(UUID departmentId, UUID ruleDeptId) {
-        if (departmentId == null && ruleDeptId == null) return true;
-        if (departmentId == null || ruleDeptId == null) return false;
-        return departmentId.equals(ruleDeptId);
+    private boolean deptMatches(UUID departmentId, UUID covDeptId) {
+        if (departmentId == null && covDeptId == null) return true;
+        if (departmentId == null || covDeptId == null) return false;
+        return departmentId.equals(covDeptId);
     }
 
     /**
-     * Looks up the most specific rule for the given provider/department/encounter type.
-     * Resolution order (most specific wins):
-     * <ol>
-     *   <li>Exact: provider + dept + encounterType</li>
-     *   <li>Department: provider + dept, encounterType = null</li>
-     *   <li>Encounter type: provider + encounterType, dept = null</li>
-     *   <li>Global: provider, dept = null, encounterType = null</li>
-     * </ol>
+     * Looks up the most specific coverage percentage for the given provider/department/encounter type.
      */
-    private Integer lookupRulePercentage(
+    private Integer lookupCoveragePercentage(
         UUID providerId,
         UUID departmentId,
         EncounterType encounterType,
-        Map<UUID, Map<UUID, List<InsuranceCoverageRule>>> prefetchedRules
+        Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetchedCoverages
     ) {
-        Map<UUID, List<InsuranceCoverageRule>> byDept = prefetchedRules != null
-            ? prefetchedRules.get(providerId)
+        Map<UUID, List<InsuranceCoverage>> byDept = prefetchedCoverages != null
+            ? prefetchedCoverages.get(providerId)
             : null;
 
         if (byDept == null) {
@@ -263,11 +231,11 @@ public class BillingPricingCalculator {
 
         // 1. Exact match: provider + dept + encounterType
         if (departmentId != null && encounterType != null) {
-            List<InsuranceCoverageRule> deptRules = byDept.get(departmentId);
-            if (deptRules != null) {
-                for (InsuranceCoverageRule rule : deptRules) {
-                    if (encounterType.equals(rule.getEncounterType())) {
-                        return rule.getPatientSharePercentage();
+            List<InsuranceCoverage> deptCoverages = byDept.get(departmentId);
+            if (deptCoverages != null) {
+                for (InsuranceCoverage cov : deptCoverages) {
+                    if (encounterType.equals(cov.getEncounterType())) {
+                        return cov.getPatientSharePercentage();
                     }
                 }
             }
@@ -275,11 +243,11 @@ public class BillingPricingCalculator {
 
         // 2. Department-level: provider + dept, encounterType = null
         if (departmentId != null) {
-            List<InsuranceCoverageRule> deptRules = byDept.get(departmentId);
-            if (deptRules != null) {
-                for (InsuranceCoverageRule rule : deptRules) {
-                    if (rule.getEncounterType() == null) {
-                        return rule.getPatientSharePercentage();
+            List<InsuranceCoverage> deptCoverages = byDept.get(departmentId);
+            if (deptCoverages != null) {
+                for (InsuranceCoverage cov : deptCoverages) {
+                    if (cov.getEncounterType() == null) {
+                        return cov.getPatientSharePercentage();
                     }
                 }
             }
@@ -287,22 +255,22 @@ public class BillingPricingCalculator {
 
         // 3. Encounter-type-level: provider + encounterType, dept = null
         if (encounterType != null) {
-            List<InsuranceCoverageRule> nullDeptRules = byDept.get(null);
-            if (nullDeptRules != null) {
-                for (InsuranceCoverageRule rule : nullDeptRules) {
-                    if (encounterType.equals(rule.getEncounterType())) {
-                        return rule.getPatientSharePercentage();
+            List<InsuranceCoverage> nullDeptCoverages = byDept.get(null);
+            if (nullDeptCoverages != null) {
+                for (InsuranceCoverage cov : nullDeptCoverages) {
+                    if (encounterType.equals(cov.getEncounterType())) {
+                        return cov.getPatientSharePercentage();
                     }
                 }
             }
         }
 
-        // 4. Global: provider, dept = null, encounterType = null
-        List<InsuranceCoverageRule> providerRules = byDept.get(null);
-        if (providerRules != null) {
-            for (InsuranceCoverageRule rule : providerRules) {
-                if (rule.getEncounterType() == null) {
-                    return rule.getPatientSharePercentage();
+        // 4. Base: provider, dept = null, encounterType = null
+        List<InsuranceCoverage> providerCoverages = byDept.get(null);
+        if (providerCoverages != null) {
+            for (InsuranceCoverage cov : providerCoverages) {
+                if (cov.getEncounterType() == null) {
+                    return cov.getPatientSharePercentage();
                 }
             }
         }
@@ -359,7 +327,7 @@ public class BillingPricingCalculator {
         if (insurance.getValidUntil() != null && insurance.getValidUntil().isBefore(today)) {
             return null;
         }
-        ProductInsuranceCoverage coverage = lookupCoverage(
+        ProductInsuranceCoverage coverage = lookupProductCoverage(
             item.getProduct().getId(),
             insurance.getInsuranceProvider().getId(),
             prefetchedCoverages
@@ -398,7 +366,7 @@ public class BillingPricingCalculator {
         Map<UUID, Map<UUID, ProductInsuranceCoverage>> prefetchedCoverages
     ) {
         if (appliedInsurance != null) {
-            ProductInsuranceCoverage coverage = lookupCoverage(
+            ProductInsuranceCoverage coverage = lookupProductCoverage(
                 item.getProduct().getId(),
                 appliedInsurance.getInsuranceProvider().getId(),
                 prefetchedCoverages
@@ -451,7 +419,7 @@ public class BillingPricingCalculator {
             resolvedPatientSharePct, null);
     }
 
-    /** Backward-compatible overload: resolves percentage from provider default. */
+    /** Backward-compatible overload: resolves percentage from base coverage. */
     public BigDecimal calculateCoveredAmount(
         VisitDepartmentProduct item,
         PatientInsurance appliedInsurance,
@@ -461,7 +429,7 @@ public class BillingPricingCalculator {
         if (appliedInsurance == null) {
             return MoneyUtils.ZERO;
         }
-        Integer pct = appliedInsurance.getInsuranceProvider().getDefaultPatientSharePercentage();
+        Integer pct = appliedInsurance.getInsuranceProvider().getBasePatientSharePercentage();
         int resolvedPct = (pct != null) ? pct : 0;
         return calculateCoveredAmount(item, appliedInsurance, quantity, lineTotal,
             resolvedPct, null);
@@ -478,7 +446,7 @@ public class BillingPricingCalculator {
         if (appliedInsurance == null) {
             return MoneyUtils.ZERO;
         }
-        Integer pct = appliedInsurance.getInsuranceProvider().getDefaultPatientSharePercentage();
+        Integer pct = appliedInsurance.getInsuranceProvider().getBasePatientSharePercentage();
         int resolvedPct = (pct != null) ? pct : 0;
         return calculateCoveredAmount(item, appliedInsurance, quantity, lineTotal,
             resolvedPct, prefetchedCoverages);
@@ -501,7 +469,7 @@ public class BillingPricingCalculator {
             return MoneyUtils.ZERO;
         }
 
-        ProductInsuranceCoverage coverage = lookupCoverage(
+        ProductInsuranceCoverage coverage = lookupProductCoverage(
             item.getProduct().getId(),
             appliedInsurance.getInsuranceProvider().getId(),
             prefetchedCoverages
@@ -525,12 +493,9 @@ public class BillingPricingCalculator {
                     )
                 );
             } else if (resolvedPatientSharePct == 0) {
-                // Patient pays nothing: insurance covers 100%
                 coverageAmount = coverageCostTotal;
             }
-            // resolvedPatientSharePct == 100: patient pays everything, insurance covers 0
         } else {
-            // No explicit cost: fall back to resolved percentage of lineTotal
             if (resolvedPatientSharePct > 0 && resolvedPatientSharePct < 100) {
                 BigDecimal insuranceSharePct = BigDecimal.valueOf(100 - resolvedPatientSharePct);
                 coverageAmount = MoneyUtils.toMoney(
@@ -550,7 +515,7 @@ public class BillingPricingCalculator {
         return MoneyUtils.toMoney(coverageAmount);
     }
 
-    private ProductInsuranceCoverage lookupCoverage(
+    private ProductInsuranceCoverage lookupProductCoverage(
         UUID productId,
         UUID insuranceProviderId,
         Map<UUID, Map<UUID, ProductInsuranceCoverage>> prefetchedCoverages

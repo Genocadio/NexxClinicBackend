@@ -195,6 +195,7 @@ Indicates the source of the patient share percentage applied to a billing line.
 enum PatientShareSource {
   OVERRIDE
   RULE
+  PATIENT_DEFAULT
   PROVIDER_DEFAULT
   EXEMPTED
 }
@@ -336,7 +337,7 @@ type InsuranceProvider {
   id: ID!
   insuranceName: String!
   acronym: String
-  defaultPatientSharePercentage: Int!
+  coverages: [InsuranceCoverage!]!
   supportedByClinic: Boolean!
   iconUrl: String
   createdAt: String!
@@ -1060,10 +1061,18 @@ input DeactivateUserInput {
   revokeSessions: Boolean
 }
 
+input InsuranceCoverageInput {
+  departmentId: ID
+  encounterType: EncounterType
+  """Patient share percentage (0-100). Insurance covers (100 - X)%."""
+  patientSharePercentage: Int!
+}
+
 input CreateInsuranceProviderInput {
   insuranceName: String!
   acronym: String
-  defaultPatientSharePercentage: Int!
+  """At least one base coverage (no department/encounterType) is required."""
+  coverages: [InsuranceCoverageInput!]!
   supportedByClinic: Boolean
   iconUrl: String
 }
@@ -1071,7 +1080,8 @@ input CreateInsuranceProviderInput {
 input UpdateInsuranceProviderInput {
   insuranceName: String
   acronym: String
-  defaultPatientSharePercentage: Int
+  """Replaces all coverages when provided. Must contain at least one base coverage."""
+  coverages: [InsuranceCoverageInput!]
   supportedByClinic: Boolean
   iconUrl: String
 }
@@ -1571,7 +1581,7 @@ input ClinicContactInput {
   description: String
 }
 
-type InsuranceCoverageRule {
+type InsuranceCoverage {
   id: ID!
   insuranceProviderId: ID!
   insuranceProviderName: String!
@@ -1583,19 +1593,19 @@ type InsuranceCoverageRule {
   updatedAt: String!
 }
 
-type InsuranceCoverageRuleResponse implements ApiResponse {
+type InsuranceCoverageResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: InsuranceCoverageRule
+  data: InsuranceCoverage
 }
 
-type InsuranceCoverageRuleListResponse implements ApiResponse {
+type InsuranceCoverageListResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
-  data: [InsuranceCoverageRule!]
+  data: [InsuranceCoverage!]
 }
 
-input CreateInsuranceCoverageRuleInput {
+input CreateInsuranceCoverageInput {
   insuranceProviderId: ID!
   departmentId: ID
   encounterType: EncounterType
@@ -1603,14 +1613,14 @@ input CreateInsuranceCoverageRuleInput {
   patientSharePercentage: Int!
 }
 
-input UpdateInsuranceCoverageRuleInput {
+input UpdateInsuranceCoverageInput {
   insuranceProviderId: ID
   departmentId: ID
   encounterType: EncounterType
   patientSharePercentage: Int
 }
 
-input SearchInsuranceCoverageRulesInput {
+input SearchInsuranceCoveragesInput {
   insuranceProviderId: ID
   departmentId: ID
 }
@@ -1638,8 +1648,8 @@ type Query {
   visitBilling(visitId: ID!): VisitBillingResponse!
   clinicProfile: ClinicProfileResponse!
   lastPatientDepartmentVisit(visitId: ID!, departmentId: ID!): LastPatientDepartmentVisitResponse!
-  insuranceCoverageRule(ruleId: ID!): InsuranceCoverageRuleResponse!
-  insuranceCoverageRules(input: SearchInsuranceCoverageRulesInput): InsuranceCoverageRuleListResponse!
+  insuranceCoverage(ruleId: ID!): InsuranceCoverageResponse!
+  insuranceCoverages(input: SearchInsuranceCoveragesInput): InsuranceCoverageListResponse!
 }
 
 type Mutation {
@@ -1732,7 +1742,7 @@ type Mutation {
   updateClinicProfile(input: UpdateClinicProfileInput!): ClinicProfileResponse!
   deleteClinicProfile: BooleanResponse!
   reindexSearchIndexes(indexes: [SearchIndexType!]!): BooleanResponse!
-  createInsuranceCoverageRule(input: CreateInsuranceCoverageRuleInput!): InsuranceCoverageRuleResponse!
-  updateInsuranceCoverageRule(ruleId: ID!, input: UpdateInsuranceCoverageRuleInput!): InsuranceCoverageRuleResponse!
-  deleteInsuranceCoverageRule(ruleId: ID!): BooleanResponse!
+  createInsuranceCoverage(input: CreateInsuranceCoverageInput!): InsuranceCoverageResponse!
+  updateInsuranceCoverage(ruleId: ID!, input: UpdateInsuranceCoverageInput!): InsuranceCoverageResponse!
+  deleteInsuranceCoverage(ruleId: ID!): BooleanResponse!
 }

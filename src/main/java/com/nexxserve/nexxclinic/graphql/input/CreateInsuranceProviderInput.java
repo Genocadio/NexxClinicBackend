@@ -1,10 +1,10 @@
 package com.nexxserve.nexxclinic.graphql.input;
 
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
+import java.util.List;
 
 public record CreateInsuranceProviderInput(
         @NotBlank(message = "insuranceName is required")
@@ -14,14 +14,17 @@ public record CreateInsuranceProviderInput(
         @Size(max = 30, message = "acronym must not exceed 30 characters")
         String acronym,
 
-        @NotNull(message = "defaultPatientSharePercentage is required")
-        @Min(value = 0, message = "defaultPatientSharePercentage must be between 0 and 100")
-        @Max(value = 100, message = "defaultPatientSharePercentage must be between 0 and 100")
-        Integer defaultPatientSharePercentage,
+        /**
+         * Patient share coverages. At least one base coverage (department=null,
+         * encounterType=null) is required. Additional conditional coverages can
+         * target specific departments or encounter types.
+         */
+        @NotEmpty(message = "At least one coverage is required")
+        @Valid
+        List<InsuranceCoverageInput> coverages,
 
         Boolean supportedByClinic,
 
         @Size(max = 500, message = "iconUrl must not exceed 500 characters")
         String iconUrl
-) {
-}
+) {}

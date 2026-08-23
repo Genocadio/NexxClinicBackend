@@ -4,7 +4,7 @@ import com.nexxserve.nexxclinic.model.EncounterType;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-public record InsuranceCoverageRuleDto(
+public record InsuranceCoverageDto(
     UUID id,
     UUID insuranceProviderId,
     String insuranceProviderName,

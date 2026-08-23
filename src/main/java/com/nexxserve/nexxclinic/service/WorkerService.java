@@ -1098,7 +1098,7 @@ public class WorkerService {
         data.put("id", insuranceProvider.getId());
         data.put("insuranceName", insuranceProvider.getInsuranceName());
         data.put("acronym", insuranceProvider.getAcronym());
-        data.put("defaultPatientSharePercentage", insuranceProvider.getDefaultPatientSharePercentage());
+        data.put("basePatientSharePercentage", insuranceProvider.getBasePatientSharePercentage());
         data.put("supportedByClinic", insuranceProvider.isSupportedByClinic());
         data.put("iconUrl", insuranceProvider.getIconUrl());
         data.put("createdAt", insuranceProvider.getCreatedAt());

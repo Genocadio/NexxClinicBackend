@@ -1,15 +1,15 @@
 package com.nexxserve.nexxclinic.service;
 
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
-import com.nexxserve.nexxclinic.dto.out.InsuranceCoverageRuleDto;
+import com.nexxserve.nexxclinic.dto.out.InsuranceCoverageDto;
 import com.nexxserve.nexxclinic.entity.Department;
-import com.nexxserve.nexxclinic.entity.InsuranceCoverageRule;
+import com.nexxserve.nexxclinic.entity.InsuranceCoverage;
 import com.nexxserve.nexxclinic.entity.InsuranceProvider;
-import com.nexxserve.nexxclinic.graphql.input.CreateInsuranceCoverageRuleInput;
-import com.nexxserve.nexxclinic.graphql.input.SearchInsuranceCoverageRulesInput;
-import com.nexxserve.nexxclinic.graphql.input.UpdateInsuranceCoverageRuleInput;
+import com.nexxserve.nexxclinic.graphql.input.CreateInsuranceCoverageInput;
+import com.nexxserve.nexxclinic.graphql.input.SearchInsuranceCoveragesInput;
+import com.nexxserve.nexxclinic.graphql.input.UpdateInsuranceCoverageInput;
 import com.nexxserve.nexxclinic.repository.DepartmentRepository;
-import com.nexxserve.nexxclinic.repository.InsuranceCoverageRuleRepository;
+import com.nexxserve.nexxclinic.repository.InsuranceCoverageRepository;
 import com.nexxserve.nexxclinic.repository.InsuranceProviderRepository;
 import java.util.List;
 import java.util.Optional;
@@ -18,14 +18,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class InsuranceCoverageRuleService {
+public class InsuranceCoverageService {
 
-    private final InsuranceCoverageRuleRepository ruleRepository;
+    private final InsuranceCoverageRepository ruleRepository;
     private final InsuranceProviderRepository insuranceProviderRepository;
     private final DepartmentRepository departmentRepository;
 
-    public InsuranceCoverageRuleService(
-        InsuranceCoverageRuleRepository ruleRepository,
+    public InsuranceCoverageService(
+        InsuranceCoverageRepository ruleRepository,
         InsuranceProviderRepository insuranceProviderRepository,
         DepartmentRepository departmentRepository
     ) {
@@ -35,7 +35,7 @@ public class InsuranceCoverageRuleService {
     }
 
     @Transactional
-    public ApiResponse<InsuranceCoverageRuleDto> createRule(CreateInsuranceCoverageRuleInput input) {
+    public ApiResponse<InsuranceCoverageDto> createRule(CreateInsuranceCoverageInput input) {
         if (input == null) {
             return ApiResponse.error("input is required.");
         }
@@ -62,7 +62,7 @@ public class InsuranceCoverageRuleService {
         }
 
         // Check for duplicate rule
-        Optional<InsuranceCoverageRule> existing = ruleRepository
+        Optional<InsuranceCoverage> existing = ruleRepository
             .findByInsuranceProviderIdAndDepartmentIdAndEncounterType(
                 input.insuranceProviderId(),
                 input.departmentId(),
@@ -74,31 +74,31 @@ public class InsuranceCoverageRuleService {
             );
         }
 
-        InsuranceCoverageRule rule = new InsuranceCoverageRule();
+        InsuranceCoverage rule = new InsuranceCoverage();
         rule.setInsuranceProvider(providerOpt.get());
         rule.setDepartment(department);
         rule.setEncounterType(input.encounterType());
         rule.setPatientSharePercentage(input.patientSharePercentage());
 
-        InsuranceCoverageRule saved = ruleRepository.save(rule);
+        InsuranceCoverage saved = ruleRepository.save(rule);
         return ApiResponse.success("Coverage rule created.", toDto(saved));
     }
 
     @Transactional
-    public ApiResponse<InsuranceCoverageRuleDto> updateRule(
+    public ApiResponse<InsuranceCoverageDto> updateRule(
         UUID ruleId,
-        UpdateInsuranceCoverageRuleInput input
+        UpdateInsuranceCoverageInput input
     ) {
         if (ruleId == null || input == null) {
             return ApiResponse.error("ruleId and input are required.");
         }
 
-        Optional<InsuranceCoverageRule> ruleOpt = ruleRepository.findById(ruleId);
+        Optional<InsuranceCoverage> ruleOpt = ruleRepository.findById(ruleId);
         if (ruleOpt.isEmpty()) {
             return ApiResponse.error("Coverage rule not found.");
         }
 
-        InsuranceCoverageRule rule = ruleOpt.get();
+        InsuranceCoverage rule = ruleOpt.get();
 
         if (input.insuranceProviderId() != null) {
             Optional<InsuranceProvider> providerOpt =
@@ -128,7 +128,7 @@ public class InsuranceCoverageRuleService {
             rule.setPatientSharePercentage(input.patientSharePercentage());
         }
 
-        InsuranceCoverageRule saved = ruleRepository.save(rule);
+        InsuranceCoverage saved = ruleRepository.save(rule);
         return ApiResponse.success("Coverage rule updated.", toDto(saved));
     }
 
@@ -145,7 +145,7 @@ public class InsuranceCoverageRuleService {
     }
 
     @Transactional(readOnly = true)
-    public ApiResponse<InsuranceCoverageRuleDto> getRule(UUID ruleId) {
+    public ApiResponse<InsuranceCoverageDto> getRule(UUID ruleId) {
         if (ruleId == null) {
             return ApiResponse.error("ruleId is required.");
         }
@@ -155,8 +155,8 @@ public class InsuranceCoverageRuleService {
     }
 
     @Transactional(readOnly = true)
-    public ApiResponse<List<InsuranceCoverageRuleDto>> listRules(SearchInsuranceCoverageRulesInput input) {
-        List<InsuranceCoverageRule> rules;
+    public ApiResponse<List<InsuranceCoverageDto>> listRules(SearchInsuranceCoveragesInput input) {
+        List<InsuranceCoverage> rules;
         if (input != null && input.insuranceProviderId() != null) {
             if (input.departmentId() != null) {
                 rules = ruleRepository.findByInsuranceProviderIdAndDepartmentIdOrderByEncounterTypeAsc(
@@ -171,12 +171,12 @@ public class InsuranceCoverageRuleService {
             rules = ruleRepository.findAll();
         }
 
-        List<InsuranceCoverageRuleDto> dtos = rules.stream().map(this::toDto).toList();
+        List<InsuranceCoverageDto> dtos = rules.stream().map(this::toDto).toList();
         return ApiResponse.success("Coverage rules fetched.", dtos);
     }
 
-    private InsuranceCoverageRuleDto toDto(InsuranceCoverageRule rule) {
-        return new InsuranceCoverageRuleDto(
+    private InsuranceCoverageDto toDto(InsuranceCoverage rule) {
+        return new InsuranceCoverageDto(
             rule.getId(),
             rule.getInsuranceProvider().getId(),
             rule.getInsuranceProvider().getInsuranceName(),

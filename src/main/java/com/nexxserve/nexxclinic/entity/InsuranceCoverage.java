@@ -19,38 +19,42 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Stores per-department and per-encounter-type patient share overrides for an
- * insurance provider. Nullable columns mean "applies to all":
+ * A patient share percentage tier for an insurance provider.
+ * Each coverage defines a percentage the patient pays (0-100), optionally
+ * scoped to a department and/or encounter type.
+ *
  * <ul>
- *   <li>{@code department = null, encounterType = null} — provider-wide override
- *       (equivalent to {@code InsuranceProvider.defaultPatientSharePercentage})</li>
- *   <li>{@code department = D, encounterType = null} — department-level override</li>
- *   <li>{@code department = D, encounterType = E} — exact match</li>
+ *   <li>{@code department = null, encounterType = null} — <b>base</b> coverage (required, one per provider)</li>
+ *   <li>{@code department = D, encounterType = null} — department-level conditional</li>
+ *   <li>{@code department = null, encounterType = E} — encounter-type-level conditional</li>
+ *   <li>{@code department = D, encounterType = E} — exact match conditional</li>
  * </ul>
  *
  * Resolution order (most specific wins):
  * <ol>
- *   <li>(provider + department + encounterType)</li>
- *   <li>(provider + department, encounterType = null)</li>
- *   <li>{@code InsuranceProvider.defaultPatientSharePercentage}</li>
- *   <li>0 (insurance covers 100%)</li>
+ *   <li>Per-line override (from billing input)</li>
+ *   <li>Exact: provider + department + encounterType</li>
+ *   <li>Department: provider + department</li>
+ *   <li>Encounter type: provider + encounterType</li>
+ *   <li>Base: provider-wide (no conditions)</li>
+ *   <li>Patient-specific default (PatientInsurance.patientSharePercentage)</li>
  * </ol>
  */
 @Entity
 @Table(
-    name = "insurance_coverage_rules",
+    name = "insurance_coverage",
     uniqueConstraints = {
         @UniqueConstraint(
-            name = "uk_coverage_rule",
+            name = "uk_coverage",
             columnNames = {"insurance_provider_id", "department_id", "encounter_type"}
         )
     },
     indexes = {
-        @Index(name = "idx_coverage_rule_provider", columnList = "insurance_provider_id"),
-        @Index(name = "idx_coverage_rule_dept", columnList = "department_id")
+        @Index(name = "idx_coverage_provider", columnList = "insurance_provider_id"),
+        @Index(name = "idx_coverage_dept", columnList = "department_id")
     }
 )
-public class InsuranceCoverageRule {
+public class InsuranceCoverage {
 
     @Id
     @GeneratedValue

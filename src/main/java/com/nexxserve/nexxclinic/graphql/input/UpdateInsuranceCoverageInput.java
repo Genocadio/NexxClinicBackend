@@ -5,7 +5,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.util.UUID;
 
-public record UpdateInsuranceCoverageRuleInput(
+public record UpdateInsuranceCoverageInput(
     UUID insuranceProviderId,
 
     UUID departmentId,

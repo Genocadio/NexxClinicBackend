@@ -4,6 +4,7 @@ import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.dto.out.PatientInsuranceDto;
 import com.nexxserve.nexxclinic.entity.Department;
 import com.nexxserve.nexxclinic.entity.DepartmentInsuranceBilling;
+import com.nexxserve.nexxclinic.entity.InsuranceCoverage;
 import com.nexxserve.nexxclinic.entity.InsuranceProvider;
 import com.nexxserve.nexxclinic.entity.Patient;
 import com.nexxserve.nexxclinic.entity.PatientInsurance;
@@ -31,6 +32,7 @@ import com.nexxserve.nexxclinic.repository.VisitInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.VisitRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -98,8 +100,12 @@ class PatientInsuranceServiceTest {
     private InsuranceProvider persistProvider() {
         InsuranceProvider provider = new InsuranceProvider();
         provider.setInsuranceName("TestProvider-" + UUID.randomUUID());
-        provider.setDefaultPatientSharePercentage(15);
+        provider.setCoverages(new ArrayList<>());
         provider.setSupportedByClinic(true);
+        provider = insuranceProviderRepository.save(provider);
+        InsuranceCoverage cov = new InsuranceCoverage();
+        cov.setInsuranceProvider(provider); cov.setPatientSharePercentage(15);
+        provider.addCoverage(cov);
         return insuranceProviderRepository.save(provider);
     }
 

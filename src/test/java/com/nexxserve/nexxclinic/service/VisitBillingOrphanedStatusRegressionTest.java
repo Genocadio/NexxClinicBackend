@@ -1,6 +1,8 @@
 package com.nexxserve.nexxclinic.service;
 
 import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
+import com.nexxserve.nexxclinic.entity.InsuranceCoverage;
+import java.util.ArrayList;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.entity.Department;
 import com.nexxserve.nexxclinic.entity.Patient;
@@ -263,8 +265,11 @@ class VisitBillingOrphanedStatusRegressionTest {
         com.nexxserve.nexxclinic.entity.InsuranceProvider provider = new com.nexxserve.nexxclinic.entity.InsuranceProvider();
         provider.setInsuranceName("Test Insurance");
         provider.setSupportedByClinic(true);
-        provider.setDefaultPatientSharePercentage(15); // Patient pays 15%
+        provider.setCoverages(new ArrayList<>());
         provider = insuranceProviderRepository.save(provider);
+        InsuranceCoverage cov = new InsuranceCoverage();
+        cov.setInsuranceProvider(provider); cov.setPatientSharePercentage(15); // Patient pays 15%
+        provider.addCoverage(cov); provider = insuranceProviderRepository.save(provider);
 
         com.nexxserve.nexxclinic.entity.PatientInsurance insurance = new com.nexxserve.nexxclinic.entity.PatientInsurance();
         insurance.setPatient(fx.visit().getPatient());
@@ -646,8 +651,11 @@ class VisitBillingOrphanedStatusRegressionTest {
         com.nexxserve.nexxclinic.entity.InsuranceProvider provider = new com.nexxserve.nexxclinic.entity.InsuranceProvider();
         provider.setInsuranceName("Bucket Insurance");
         provider.setSupportedByClinic(true);
-        provider.setDefaultPatientSharePercentage(15);
+        provider.setCoverages(new ArrayList<>());
         provider = insuranceProviderRepository.save(provider);
+        InsuranceCoverage cov2 = new InsuranceCoverage();
+        cov2.setInsuranceProvider(provider); cov2.setPatientSharePercentage(15);
+        provider.addCoverage(cov2); provider = insuranceProviderRepository.save(provider);
 
         com.nexxserve.nexxclinic.entity.PatientInsurance insurance = new com.nexxserve.nexxclinic.entity.PatientInsurance();
         insurance.setPatient(fx.visit().getPatient());
@@ -713,8 +721,11 @@ class VisitBillingOrphanedStatusRegressionTest {
         com.nexxserve.nexxclinic.entity.InsuranceProvider provider = new com.nexxserve.nexxclinic.entity.InsuranceProvider();
         provider.setInsuranceName("Split Insurance");
         provider.setSupportedByClinic(true);
-        provider.setDefaultPatientSharePercentage(15);
+        provider.setCoverages(new ArrayList<>());
         provider = insuranceProviderRepository.save(provider);
+        InsuranceCoverage cov3 = new InsuranceCoverage();
+        cov3.setInsuranceProvider(provider); cov3.setPatientSharePercentage(15);
+        provider.addCoverage(cov3); provider = insuranceProviderRepository.save(provider);
 
         com.nexxserve.nexxclinic.entity.PatientInsurance unsavedInsurance = new com.nexxserve.nexxclinic.entity.PatientInsurance();
         unsavedInsurance.setPatient(fx.visit().getPatient());
@@ -940,8 +951,11 @@ class VisitBillingOrphanedStatusRegressionTest {
             new com.nexxserve.nexxclinic.entity.InsuranceProvider();
         provider.setInsuranceName("Coverage Insurance-" + UUID.randomUUID());
         provider.setSupportedByClinic(true);
-        provider.setDefaultPatientSharePercentage(15);
+        provider.setCoverages(new ArrayList<>());
         provider = insuranceProviderRepository.save(provider);
+        InsuranceCoverage cov4 = new InsuranceCoverage();
+        cov4.setInsuranceProvider(provider); cov4.setPatientSharePercentage(15);
+        provider.addCoverage(cov4); provider = insuranceProviderRepository.save(provider);
 
         com.nexxserve.nexxclinic.entity.PatientInsurance insurance =
             new com.nexxserve.nexxclinic.entity.PatientInsurance();

@@ -874,10 +874,10 @@ public class VisitBillingService {
                 }
             }
         }
-        Map<UUID, Map<UUID, ProductInsuranceCoverage>> prefetchedCoverages =
-            pricingCalculator.prefetchCoverages(insuranceProductIds, insuranceProviderIds);
-        Map<UUID, Map<UUID, List<com.nexxserve.nexxclinic.entity.InsuranceCoverageRule>>> prefetchedRules =
-            pricingCalculator.prefetchCoverageRules(insuranceProviderIds);
+        Map<UUID, Map<UUID, ProductInsuranceCoverage>> prefetchedProductCoverages =
+            pricingCalculator.prefetchProductCoverages(insuranceProductIds, insuranceProviderIds);
+        Map<UUID, Map<UUID, List<com.nexxserve.nexxclinic.entity.InsuranceCoverage>>> prefetchedShareCoverages =
+            pricingCalculator.prefetchPatientShareCoverages(insuranceProviderIds);
 
         Set<UUID> exemptedRootDepartmentIds = new LinkedHashSet<>();
         Map<UUID, VisitDepartmentBilling> departmentBillingByRoot =
@@ -963,7 +963,7 @@ public class VisitBillingService {
                 BigDecimal unitPrice = pricingCalculator.resolveDefaultUnitPrice(
                     item,
                     appliedInsurance,
-                    prefetchedCoverages
+                    prefetchedProductCoverages
                 );
                 BigDecimal quantity = requestedQuantityByItem.containsKey(
                     item.getId()
@@ -988,7 +988,7 @@ public class VisitBillingService {
                     ? requestedPatientShareOverrideByItem.get(item.getId()) : null;
                 com.nexxserve.nexxclinic.service.billing.BillingPricingCalculator.ResolvedPatientShare resolved =
                     pricingCalculator.resolvePatientSharePercentage(
-                        appliedInsurance, departmentId, encounterType, override, prefetchedRules
+                        appliedInsurance, departmentId, encounterType, override, prefetchedShareCoverages
                     );
 
                 if (lineExemptionType == ExemptionType.FULL) {
@@ -1007,7 +1007,7 @@ public class VisitBillingService {
                         quantity,
                         lineTotal,
                         resolved.percentage(),
-                        prefetchedCoverages
+                        prefetchedProductCoverages
                     );
                     patientAmount = toMoney(lineTotal.subtract(coveredAmount));
                     if (lineExemptionType == ExemptionType.PATIENT_SHARE) {
@@ -1025,7 +1025,7 @@ public class VisitBillingService {
                             + "("
                             + appliedInsurance.getInsuranceProvider().getInsuranceName()
                             + ", providerPct="
-                            + appliedInsurance.getInsuranceProvider().getDefaultPatientSharePercentage()
+                            + appliedInsurance.getInsuranceProvider().getBasePatientSharePercentage()
                             + ")";                    log.debug(
                         "[BILL-DIAG] visit={} rootDept={} product='{}' (id={}, qty={}, exemption={}, coverage={}, insurance={}): unitPrice={} lineTotal={} covered={} patientAmount={} patientSharePct={} source={}",
                         visit.getId(), group.rootVisitDepartmentId(),

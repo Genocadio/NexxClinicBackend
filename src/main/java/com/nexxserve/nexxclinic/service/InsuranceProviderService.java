@@ -3,36 +3,43 @@ package com.nexxserve.nexxclinic.service;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.dto.out.InsuranceProviderDto;
 import com.nexxserve.nexxclinic.dto.out.PaginationDto;
+import com.nexxserve.nexxclinic.entity.Department;
+import com.nexxserve.nexxclinic.entity.InsuranceCoverage;
 import com.nexxserve.nexxclinic.entity.InsuranceProvider;
+import com.nexxserve.nexxclinic.graphql.input.InsuranceCoverageInput;
 import com.nexxserve.nexxclinic.graphql.input.CreateInsuranceProviderInput;
 import com.nexxserve.nexxclinic.graphql.input.SearchInsuranceProvidersInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdateInsuranceProviderInput;
 import com.nexxserve.nexxclinic.mappers.out.InsuranceProviderMapper;
+import com.nexxserve.nexxclinic.repository.DepartmentRepository;
 import com.nexxserve.nexxclinic.repository.InsuranceProviderRepository;
 import com.nexxserve.nexxclinic.repository.PatientInsuranceRepository;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.domain.*;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Optional;
-import java.util.UUID;
-import java.util.List;
 
 @Service
 public class InsuranceProviderService {
 
     private final InsuranceProviderRepository insuranceProviderRepository;
     private final PatientInsuranceRepository patientInsuranceRepository;
+    private final DepartmentRepository departmentRepository;
     private final InsuranceProviderMapper mapper;
 
     public InsuranceProviderService(
             InsuranceProviderRepository insuranceProviderRepository,
             PatientInsuranceRepository patientInsuranceRepository,
+            DepartmentRepository departmentRepository,
             InsuranceProviderMapper mapper
     ) {
         this.insuranceProviderRepository = insuranceProviderRepository;
         this.patientInsuranceRepository = patientInsuranceRepository;
+        this.departmentRepository = departmentRepository;
         this.mapper = mapper;
     }
 
@@ -60,17 +67,35 @@ public class InsuranceProviderService {
             return ApiResponse.error("Acronym already exists.");
         }
 
-        Integer coverage = input.defaultPatientSharePercentage();
-        if (coverage == null || coverage < 0 || coverage > 100) {
-            return ApiResponse.error("Coverage must be 0-100.");
+        // Validate coverages
+        List<InsuranceCoverageInput> coverageInputs = input.coverages();
+        if (coverageInputs == null || coverageInputs.isEmpty()) {
+            return ApiResponse.error("At least one coverage is required.");
+        }
+
+        // Check at least one base coverage (no conditions)
+        boolean hasBase = coverageInputs.stream()
+            .anyMatch(c -> c.departmentId() == null && c.encounterType() == null);
+        if (!hasBase) {
+            return ApiResponse.error("At least one base coverage (no department or encounter type) is required.");
         }
 
         InsuranceProvider provider = new InsuranceProvider();
         provider.setInsuranceName(insuranceName);
         provider.setAcronym(acronym);
-        provider.setDefaultPatientSharePercentage(coverage);
         provider.setSupportedByClinic(input.supportedByClinic() == null || input.supportedByClinic());
         provider.setIconUrl(blankToNull(input.iconUrl()));
+
+        // Create coverages
+        List<InsuranceCoverage> coverages = new ArrayList<>();
+        for (InsuranceCoverageInput covInput : coverageInputs) {
+            InsuranceCoverage cov = buildCoverage(covInput, provider);
+            if (cov == null) {
+                return ApiResponse.error("Invalid coverage: department not found.");
+            }
+            coverages.add(cov);
+        }
+        provider.setCoverages(coverages);
 
         InsuranceProvider saved = insuranceProviderRepository.save(provider);
 
@@ -90,7 +115,6 @@ public class InsuranceProviderService {
             return ApiResponse.error("id and input are required.");
         }
 
-        // S8 fix: an unknown id must be a clean error, not a RuntimeException -> 500.
         Optional<InsuranceProvider> providerOptional = insuranceProviderRepository.findById(id);
         if (providerOptional.isEmpty()) {
             return ApiResponse.error("Insurance provider not found");
@@ -106,16 +130,38 @@ public class InsuranceProviderService {
             provider.setAcronym(blankToNull(input.acronym()));
         }
 
-        if (input.defaultPatientSharePercentage() != null) {
-            provider.setDefaultPatientSharePercentage(input.defaultPatientSharePercentage());
-        }
-
         if (input.supportedByClinic() != null) {
             provider.setSupportedByClinic(input.supportedByClinic());
         }
 
         if (input.iconUrl() != null) {
             provider.setIconUrl(blankToNull(input.iconUrl()));
+        }
+
+        // Replace coverages if provided
+        if (input.coverages() != null) {
+            List<InsuranceCoverageInput> coverageInputs = input.coverages();
+            if (coverageInputs.isEmpty()) {
+                return ApiResponse.error("At least one coverage is required.");
+            }
+
+            boolean hasBase = coverageInputs.stream()
+                .anyMatch(c -> c.departmentId() == null && c.encounterType() == null);
+            if (!hasBase) {
+                return ApiResponse.error("At least one base coverage (no department or encounter type) is required.");
+            }
+
+            // Clear existing coverages (orphanRemoval handles deletion)
+            provider.getCoverages().clear();
+
+            // Add new coverages
+            for (InsuranceCoverageInput covInput : coverageInputs) {
+                InsuranceCoverage cov = buildCoverage(covInput, provider);
+                if (cov == null) {
+                    return ApiResponse.error("Invalid coverage: department not found.");
+                }
+                provider.addCoverage(cov);
+            }
         }
 
         InsuranceProvider saved = insuranceProviderRepository.save(provider);
@@ -200,6 +246,29 @@ public class InsuranceProviderService {
     // =========================
     // HELPERS
     // =========================
+
+    private InsuranceCoverage buildCoverage(InsuranceCoverageInput input, InsuranceProvider provider) {
+        if (input.patientSharePercentage() == null || input.patientSharePercentage() < 0 || input.patientSharePercentage() > 100) {
+            return null;
+        }
+
+        Department department = null;
+        if (input.departmentId() != null) {
+            Optional<Department> deptOpt = departmentRepository.findById(input.departmentId());
+            if (deptOpt.isEmpty()) {
+                return null;
+            }
+            department = deptOpt.get();
+        }
+
+        InsuranceCoverage coverage = new InsuranceCoverage();
+        coverage.setInsuranceProvider(provider);
+        coverage.setDepartment(department);
+        coverage.setEncounterType(input.encounterType());
+        coverage.setPatientSharePercentage(input.patientSharePercentage());
+        return coverage;
+    }
+
     private String requiredTrim(String value) {
         return (value == null || value.isBlank()) ? null : value.trim();
     }

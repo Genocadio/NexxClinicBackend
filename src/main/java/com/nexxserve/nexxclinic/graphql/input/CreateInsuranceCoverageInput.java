@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import java.util.UUID;
 
-public record CreateInsuranceCoverageRuleInput(
+public record CreateInsuranceCoverageInput(
     @NotNull(message = "insuranceProviderId is required")
     UUID insuranceProviderId,
 

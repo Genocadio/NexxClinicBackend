@@ -8,7 +8,7 @@ package com.nexxserve.nexxclinic.model;
 public enum PatientShareSource {
     /** Per-line override provided during billing (highest priority). */
     OVERRIDE,
-    /** Matched an {@code InsuranceCoverageRule} (dept + encounter type). */
+    /** Matched an {@code InsuranceCoverage} (dept + encounter type). */
     RULE,
     /** Fell back to {@code PatientInsurance.patientSharePercentage} (patient-specific default). */
     PATIENT_DEFAULT,
