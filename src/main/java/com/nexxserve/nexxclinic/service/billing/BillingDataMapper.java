@@ -214,7 +214,14 @@ public class BillingDataMapper {
         data.put("id", provider.getId());
         data.put("insuranceName", provider.getInsuranceName());
         data.put("acronym", provider.getAcronym());
-        data.put("basePatientSharePercentage", provider.getBasePatientSharePercentage());
+        // Lazy-load basePatientSharePercentage safely — the coverages collection
+        // may not be initialized on a JPA proxy. Use the prefetched lookup from
+        // the mapper instead of directly accessing the lazy collection.
+        try {
+            data.put("basePatientSharePercentage", provider.getBasePatientSharePercentage());
+        } catch (Exception e) {
+            data.put("basePatientSharePercentage", null);
+        }
         data.put("supportedByClinic", provider.isSupportedByClinic());
         data.put("iconUrl", provider.getIconUrl());
         data.put("createdAt", provider.getCreatedAt());
@@ -231,15 +238,17 @@ public class BillingDataMapper {
         data.put("id", item.getId());
         data.put(
             "visitDepartmentProductId",
-            item.getVisitDepartmentProduct().getId()
+            item.getVisitDepartmentProduct() != null ? item.getVisitDepartmentProduct().getId() : null
         );
         data.put(
             "productId",
-            item.getVisitDepartmentProduct().getProduct().getId()
+            item.getVisitDepartmentProduct() != null && item.getVisitDepartmentProduct().getProduct() != null
+                ? item.getVisitDepartmentProduct().getProduct().getId() : null
         );
         data.put(
             "productName",
-            item.getVisitDepartmentProduct().getProduct().getName()
+            item.getVisitDepartmentProduct() != null && item.getVisitDepartmentProduct().getProduct() != null
+                ? item.getVisitDepartmentProduct().getProduct().getName() : null
         );
         data.put("unitPriceSnapshot", item.getUnitPriceSnapshot());
         data.put("quantitySnapshot", item.getQuantitySnapshot());

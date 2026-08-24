@@ -147,6 +147,16 @@ public class StandaloneFormMutationController {
         return formService.unlinkFormFromDepartment(departmentId, formId);
     }
 
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
+    public ApiResponse<StandaloneFormDto> setStandaloneFormAsTemplate(
+            @Argument UUID formId,
+            @Argument Boolean isTemplate,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return formService.setFormAsTemplate(formId, isTemplate != null && isTemplate);
+    }
+
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN})
     @MutationMapping
     public ApiResponse<StandaloneFormDto> setDefaultStandaloneFormForDepartment(

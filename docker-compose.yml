@@ -1,10 +1,34 @@
+# ============================================================================
+# NexxClinic Backend — Local Docker Stack
+#
+# Usage:
+#   docker compose up -d              — build & start everything
+#   docker compose up -d --build      — force rebuild then start
+#   docker compose logs -f backend    — follow backend logs
+#   docker compose exec backend bash  — shell into backend container
+#   docker compose down -v            — stop and wipe volumes
+#
+# Seed demo data (after stack is up):
+#   docker compose exec backend bash /app/seed-local.sh
+#
+# Credentials:
+#   admin  / Password123  (ADMIN)
+#   doctor / Password123  (CLINICIAN + FINANCE + RECEPTION)
+#
+# Ports:
+#   Backend:    http://localhost:8080  (GraphQL at /graphql, GraphiQL at /graphiql)
+#   Postgres:   localhost:5432
+#   Meilisearch: localhost:7700
+# ============================================================================
+
 services:
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
   postgres:
     image: postgres:17-alpine
     container_name: nexxclinic-postgres
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-nexxclinic}
       POSTGRES_USER: ${POSTGRES_USER:-nexxclinic_user}
@@ -13,16 +37,18 @@ services:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nexxclinic_user} -d ${POSTGRES_DB:-nexxclinic}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
+  # ── Meilisearch ─────────────────────────────────────────────────────────────
   meilisearch:
     image: getmeili/meilisearch:v1.12
     container_name: nexxclinic-meilisearch
     restart: unless-stopped
     ports:
-      - "7700:7700"
+      - "${MEILI_PORT:-7700}:7700"
     environment:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-nexxclinic_meili_master_key}
       MEILI_NO_ANALYTICS: "true"
@@ -30,11 +56,55 @@ services:
     volumes:
       - meilisearch_data:/meili_data
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:7700/health || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:7700/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  # ── Backend (Spring Boot) ───────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nexxclinic-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    environment:
+      # ── Database ──
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-nexxclinic}
+      DB_USER: ${POSTGRES_USER:-nexxclinic_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-nexxclinic_pass}
+      # ── Meilisearch ──
+      MEILI_URL: http://meilisearch:7700
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-nexxclinic_meili_master_key}
+      MEILI_ENABLED: "true"
+      # ── Storage ──
+      STORAGE_TYPE: ${STORAGE_TYPE:-LOCAL}
+      LOCAL_STORAGE_PATH: /data/storage
+      # ── JWT ──
+      JWT_SECRET: ${JWT_SECRET:-nexxclinic-local-dev-jwt-secret-change-in-production-32b}
+      JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES:-480}
+      JWT_REFRESH_EXPIRATION_DAYS: ${JWT_REFRESH_EXPIRATION_DAYS:-30}
+      # ── JVM ──
+      JAVA_OPTS: ${JAVA_OPTS:--Xmx512m -Xms256m}
+    volumes:
+      - local_storage:/data/storage
+      - ./seed-local.sh:/app/seed-local.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 20
+      start_period: 60s
 
 volumes:
   postgres_data:
   meilisearch_data:
+  local_storage:

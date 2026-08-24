@@ -470,10 +470,14 @@ public class WorkerService {
     @Transactional(readOnly = true)
     public ApiResponse searchWorkers(String name, RoleName role, Boolean activeOnly, UUID departmentId) {
         // Meilisearch first (typo-tolerant, ranked); the DB query below is the fallback.
-        if (meilisearchIndexService.isEnabled()) {
+        // Only invoke Meilisearch when there's at least one search param;
+        // plain listing goes straight to the database.
+        String normalizedName = blankToNull(name);
+        boolean hasSearchParams = normalizedName != null || role != null || activeOnly != null || departmentId != null;
+        if (hasSearchParams && meilisearchIndexService.isEnabled()) {
             try {
                 MeilisearchIndexService.SearchHit hit = meilisearchIndexService.searchWorkers(
-                        blankToNull(name),
+                        normalizedName,
                         role,
                         activeOnly,
                         departmentId
@@ -485,7 +489,6 @@ public class WorkerService {
             }
         }
 
-        String normalizedName = blankToNull(name);
         List<Map<String, Object>> users = workerRepository.searchWorkers(normalizedName, role, activeOnly, departmentId)
                 .stream()
                 .map(this::workerToMap)

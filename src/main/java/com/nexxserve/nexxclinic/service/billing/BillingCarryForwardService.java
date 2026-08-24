@@ -121,8 +121,11 @@ public class BillingCarryForwardService {
 
             // Skip departments whose billed products were all removed by a later
             // edit — they have nothing to carry forward.
+            // Guard: getInsuranceBillings() may return null on legacy or corrupted data.
             List<BillVisitInput.BillVisitDepartmentProductInput> products =
-                prevDeptBilling.getInsuranceBillings().stream()
+                (prevDeptBilling.getInsuranceBillings() == null
+                    ? java.util.List.<DepartmentInsuranceBilling>of()
+                    : prevDeptBilling.getInsuranceBillings()).stream()
                     .filter(ib -> ib != null)
                     .flatMap(ib -> ib.getItems().stream())
                     .filter(item -> item != null && item.getVisitDepartmentProduct() != null)

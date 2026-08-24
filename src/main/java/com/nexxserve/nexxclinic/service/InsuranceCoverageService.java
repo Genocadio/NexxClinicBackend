@@ -109,14 +109,22 @@ public class InsuranceCoverageService {
             rule.setInsuranceProvider(providerOpt.get());
         }
 
+        // Update department: when input.departmentId() is present, look it up and set it;
+        // when null and insuranceProviderId is also being changed, allow clearing to null
+        // to create a provider-wide rule. When only encounterType or patientSharePercentage
+        // is being updated, leave department unchanged (null means the caller didn't send it).
         if (input.departmentId() != null) {
             Optional<Department> deptOpt = departmentRepository.findById(input.departmentId());
             if (deptOpt.isEmpty()) {
                 return ApiResponse.error("Department not found.");
             }
             rule.setDepartment(deptOpt.get());
-        } else if (input.departmentId() == null && input.insuranceProviderId() != null) {
-            // Allow explicitly clearing department to create a provider-wide rule
+        } else if (input.departmentId() == null
+                && input.encounterType() == null
+                && input.patientSharePercentage() == null
+                && input.insuranceProviderId() != null) {
+            // Only clear department when it is the ONLY field being changed
+            // (i.e. the caller sent departmentId=null and nothing else).
             rule.setDepartment(null);
         }
 

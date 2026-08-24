@@ -979,11 +979,21 @@ public class VisitBillingService {
                     item.getId(), ExemptionType.NONE
                 );
 
-                // Resolve patient share percentage via the 3-layer chain
-                UUID departmentId = item.getVisitDepartment() != null
-                    ? item.getVisitDepartment().getDepartment().getId() : null;
-                EncounterType encounterType = item.getVisitDepartment() != null
-                    ? item.getVisitDepartment().getEncounterType() : null;
+                // Resolve patient share percentage via the multi-layer chain.
+                // Guard: item.getVisitDepartment() or getDepartment() may be null on
+                // deserialized/detached entities, so extract identifiers defensively.
+                UUID departmentId = null;
+                EncounterType encounterType = null;
+                try {
+                    if (item.getVisitDepartment() != null) {
+                        encounterType = item.getVisitDepartment().getEncounterType();
+                        if (item.getVisitDepartment().getDepartment() != null) {
+                            departmentId = item.getVisitDepartment().getDepartment().getId();
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to extract department/encounterType from item {}: {}", item.getId(), e.getMessage());
+                }
                 Integer override = requestedPatientShareOverrideByItem != null
                     ? requestedPatientShareOverrideByItem.get(item.getId()) : null;
                 com.nexxserve.nexxclinic.service.billing.BillingPricingCalculator.ResolvedPatientShare resolved =
@@ -1019,14 +1029,18 @@ public class VisitBillingService {
 
                 // DIAG: per-line money evaluation.
                 if (log.isDebugEnabled()) {
-                    String insuranceInfo = appliedInsurance == null
-                        ? "null"
-                        : appliedInsurance.getId()
-                            + "("
-                            + appliedInsurance.getInsuranceProvider().getInsuranceName()
-                            + ", providerPct="
-                            + appliedInsurance.getInsuranceProvider().getBasePatientSharePercentage()
-                            + ")";                    log.debug(
+                    String insuranceInfo = "null";
+                    if (appliedInsurance != null) {
+                        try {
+                            var provider = appliedInsurance.getInsuranceProvider();
+                            insuranceInfo = appliedInsurance.getId()
+                                + "(" + (provider != null ? provider.getInsuranceName() : "?")
+                                + ", providerPct=" + (provider != null ? provider.getBasePatientSharePercentage() : "?")
+                                + ")";
+                        } catch (Exception e) {
+                            insuranceInfo = appliedInsurance.getId() + "(lazy-load-error)";
+                        }
+                    }                    log.debug(
                         "[BILL-DIAG] visit={} rootDept={} product='{}' (id={}, qty={}, exemption={}, coverage={}, insurance={}): unitPrice={} lineTotal={} covered={} patientAmount={} patientSharePct={} source={}",
                         visit.getId(), group.rootVisitDepartmentId(),
                         productName(item),

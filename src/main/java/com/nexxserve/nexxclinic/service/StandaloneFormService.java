@@ -74,7 +74,7 @@ public class StandaloneFormService {
         form.setDescription(input.description());
         form.setType(input.type());
         form.setCategory(input.category());
-        form.setTemplate(input.isTemplate() != null && input.isTemplate());
+        form.setIsTemplate(input.isTemplate() != null && input.isTemplate());
         form.setCreatedBy(workerId);
 
         StandaloneForm savedForm = formRepository.save(form);
@@ -106,7 +106,7 @@ public class StandaloneFormService {
         form.setType(input.type());
         form.setCategory(input.category());
         if (input.isTemplate() != null) {
-            form.setTemplate(input.isTemplate());
+            form.setIsTemplate(input.isTemplate());
         }
 
         // S8 fix: a form with no version rows must fail with a clean error, not a
@@ -177,7 +177,7 @@ public class StandaloneFormService {
         newForm.setDescription(source.getDescription());
         newForm.setType(source.getType());
         newForm.setCategory(source.getCategory());
-        newForm.setTemplate(false);
+        newForm.setIsTemplate(false);
         newForm.setCreatedBy(workerId);
 
         StandaloneForm savedForm = formRepository.save(newForm);
@@ -514,6 +514,27 @@ public class StandaloneFormService {
     public ApiResponse<Boolean> unlinkFormFromDepartment(UUID departmentId, UUID formId) {
         departmentStandaloneFormRepository.deleteByDepartmentIdAndStandaloneFormId(departmentId, formId);
         return ApiResponse.success("Form unlinked from department", true);
+    }
+
+    @Transactional
+    public ApiResponse<StandaloneFormDto> setFormAsTemplate(UUID formId, boolean isTemplate) {
+        Optional<StandaloneForm> formOpt = formRepository.findById(formId);
+        if (formOpt.isEmpty() || formOpt.get().isDeleted()) {
+            return ApiResponse.error("Form not found");
+        }
+
+        StandaloneForm form = formOpt.get();
+        form.setIsTemplate(isTemplate);
+        formRepository.save(form);
+
+        StandaloneFormVersion latest = versionRepository
+                .findTopByFormIdOrderByMajorVersionDescMinorVersionDesc(formId)
+                .orElse(null);
+
+        return ApiResponse.success(
+                isTemplate ? "Form set as template" : "Form template flag removed",
+                mapToDto(form, latest)
+        );
     }
 
     @Transactional

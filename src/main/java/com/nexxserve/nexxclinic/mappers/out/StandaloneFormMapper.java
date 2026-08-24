@@ -21,6 +21,7 @@ public abstract class StandaloneFormMapper {
     protected final ObjectMapper objectMapper = new ObjectMapper();
 
     @Mapping(target = "activeVersion", ignore = true)
+    @Mapping(source = "isTemplate", target = "isTemplate")
     public abstract StandaloneFormDto toDto(StandaloneForm entity);
 
     @Mapping(source = "form.id", target = "formId")

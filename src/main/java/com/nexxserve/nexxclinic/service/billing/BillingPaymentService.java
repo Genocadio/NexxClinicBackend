@@ -137,11 +137,22 @@ public class BillingPaymentService {
         }
 
         DepartmentInsuranceBilling insuranceBilling = billingOptional.get();
-        Visit visit = insuranceBilling
-            .getVisitDepartmentBilling()
-            .getVisitBilling()
-            .getVisit();
-        if (visit != null && visit.getStatus() == VisitStatus.CANCELLED) {
+        // Null-safe: the chain getVisitDepartmentBilling() -> getVisitBilling() -> getVisit()
+        // may break on legacy data where an intermediate FK is null.
+        Visit visit = null;
+        try {
+            if (insuranceBilling.getVisitDepartmentBilling() != null
+                && insuranceBilling.getVisitDepartmentBilling().getVisitBilling() != null) {
+                visit = insuranceBilling.getVisitDepartmentBilling().getVisitBilling().getVisit();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to resolve visit from billing {}: {}",
+                insuranceBilling.getId(), e.getMessage());
+        }
+        if (visit == null) {
+            return ApiResponse.error("Cannot resolve visit from this billing. Data may be corrupt.");
+        }
+        if (visit.getStatus() == VisitStatus.CANCELLED) {
             return ApiResponse.error(
                 "Cancelled visits cannot accept billing payments."
             );

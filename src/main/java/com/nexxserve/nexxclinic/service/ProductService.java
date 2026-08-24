@@ -238,7 +238,10 @@ public class ProductService {
         String name = input == null ? null : blankToNull(input.name());
 
         // Meilisearch first (typo-tolerant, ranked); DB spec is the fallback.
-        if (meilisearchIndexService.isEnabled()) {
+        // Only invoke Meilisearch when there's at least one search param;
+        // plain pagination/listing goes straight to the database.
+        boolean hasSearchParams = name != null || (input != null && input.type() != null);
+        if (hasSearchParams && meilisearchIndexService.isEnabled()) {
             try {
                 MeilisearchIndexService.SearchHit hit = meilisearchIndexService.searchProducts(
                         name,

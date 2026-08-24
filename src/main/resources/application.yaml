@@ -39,8 +39,14 @@ meilisearch:
   enabled: ${MEILI_ENABLED:true}
 
 supabase:
-  url: https://supa.med.rw
-  service-key: SECRET
+  # Storage backend: LOCAL (filesystem) or SUPABASE (self-hosted Supabase Storage).
+  # When LOCAL, files are saved under localStoragePath and served by /api/media/.
+  # When SUPABASE, files are uploaded to Supabase Storage via HTTP.
+  storage-type: ${STORAGE_TYPE:LOCAL}
+  url: ${SUPABASE_URL:https://supa.med.rw}
+  service-key: ${SUPABASE_SERVICE_KEY:SECRET}
+  # Root directory for local file storage (only used when storage-type=LOCAL).
+  local-storage-path: ${LOCAL_STORAGE_PATH:./storage}
   bucket-public: uploads-public
   bucket-private: uploads-private
   # Bucket for generated invoice PDFs; created automatically on first use.

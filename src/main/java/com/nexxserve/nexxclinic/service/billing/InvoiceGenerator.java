@@ -11,8 +11,9 @@ import com.nexxserve.nexxclinic.repository.DepartmentInsuranceBillingRepository;
 import com.nexxserve.nexxclinic.repository.VisitBillingItemRepository;
 import com.nexxserve.nexxclinic.repository.VisitBillingVersionRepository;
 import com.nexxserve.nexxclinic.repository.WorkerRepository;
+import com.nexxserve.nexxclinic.config.SupabaseProperties;
+import com.nexxserve.nexxclinic.service.FileStorageService;
 import com.nexxserve.nexxclinic.service.InvoicePdfGenerator;
-import com.nexxserve.nexxclinic.service.SupabaseStorageService;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -53,7 +54,8 @@ public class InvoiceGenerator {
     private final BillingValidation billingValidation;
     private final BillingVersionBuilder billingVersionBuilder;
     private final BillingDataMapper billingDataMapper;
-    private final SupabaseStorageService supabaseStorageService;
+    private final FileStorageService storageService;
+    private final SupabaseProperties storageProps;
     private final TransactionTemplate transactionTemplate;
     private final TransactionTemplate readOnlyTransactionTemplate;
     private final int signedUrlExpirySeconds;
@@ -69,7 +71,8 @@ public class InvoiceGenerator {
         BillingValidation billingValidation,
         BillingVersionBuilder billingVersionBuilder,
         BillingDataMapper billingDataMapper,
-        SupabaseStorageService supabaseStorageService,
+        FileStorageService storageService,
+        SupabaseProperties storageProps,
         PlatformTransactionManager transactionManager,
         @Value("${billing.invoice.signed-url-expiry-seconds:300}") int signedUrlExpirySeconds
     ) {
@@ -81,7 +84,8 @@ public class InvoiceGenerator {
         this.billingValidation = billingValidation;
         this.billingVersionBuilder = billingVersionBuilder;
         this.billingDataMapper = billingDataMapper;
-        this.supabaseStorageService = supabaseStorageService;
+        this.storageService = storageService;
+        this.storageProps = storageProps;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.readOnlyTransactionTemplate = new TransactionTemplate(transactionManager);
         this.readOnlyTransactionTemplate.setReadOnly(true);
@@ -112,18 +116,15 @@ public class InvoiceGenerator {
 
         DepartmentInsuranceBilling billing = snapshot.billing();
 
-        // Invoice already stored — return a fresh signed URL (pure IO, no DB tx held).
+        // Invoice already stored — return a fresh download URL (pure IO, no DB tx held).
         if (hasText(billing.getInvoiceUrl())) {
             try {
-                String signed = supabaseStorageService.signedUrl(
-                    billing.getInvoiceUrl(),
-                    signedUrlExpirySeconds
-                );
+                String url = resolveDownloadUrl(billing.getInvoiceUrl());
                 return ApiResponse.success(
                     "Invoice already exists.",
-                    Map.of("signedUrl", signed)
+                    Map.of("signedUrl", url)
                 );
-            } catch (IOException e) {
+            } catch (Exception e) {
                 return ApiResponse.error(
                     "Invoice exists but could not generate download URL."
                 );
@@ -178,12 +179,12 @@ public class InvoiceGenerator {
         }
 
         try {
-            String signed = supabaseStorageService.signedUrl(objectPath, signedUrlExpirySeconds);
+            String url = resolveDownloadUrl(objectPath);
             return ApiResponse.success(
                 "Invoice generated successfully.",
-                Map.of("signedUrl", signed)
+                Map.of("signedUrl", url)
             );
-        } catch (IOException e) {
+        } catch (Exception e) {
             return ApiResponse.error(
                 "Invoice generated but could not create download URL."
             );
@@ -289,11 +290,10 @@ public class InvoiceGenerator {
             String clinicName = (clinicProfile != null)
                 ? clinicProfile.getName()
                 : null;
-            String objectPath = supabaseStorageService.buildObjectPath(
-                clinicName,
-                billing.getId().toString()
+            String objectPath = buildInvoiceObjectPath(
+                clinicName, billing.getId().toString()
             );
-            supabaseStorageService.upload(pdfBytes, objectPath);
+            storageService.upload(pdfBytes, invoiceBucket(), objectPath, "application/pdf");
             return objectPath;
         } finally {
             Files.deleteIfExists(tempFile);
@@ -352,10 +352,7 @@ public class InvoiceGenerator {
             return;
         }
         try {
-            supabaseStorageService.delete(
-                supabaseStorageService.invoiceBucket(),
-                objectPath
-            );
+            storageService.delete(invoiceBucket(), objectPath);
             log.info(
                 "Cleaned up orphaned invoice upload {} for billing {}.",
                 objectPath,
@@ -429,6 +426,24 @@ public class InvoiceGenerator {
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private String invoiceBucket() {
+        String bucket = storageProps.getBucketInvoices();
+        return (bucket == null || bucket.isBlank()) ? "data" : bucket;
+    }
+
+    private String buildInvoiceObjectPath(String clinicName, String billingId) {
+        String filename = "invoice-" + billingId + ".pdf";
+        if (clinicName != null && !clinicName.isBlank()) {
+            String safe = clinicName.trim().replaceAll("[^a-zA-Z0-9_\\-]", "_");
+            return "invoices/" + safe + "/" + filename;
+        }
+        return "invoices/" + filename;
+    }
+
+    private String resolveDownloadUrl(String objectPath) throws IOException {
+        return storageService.getSignedUrl(invoiceBucket(), objectPath, signedUrlExpirySeconds);
     }
 
     /**

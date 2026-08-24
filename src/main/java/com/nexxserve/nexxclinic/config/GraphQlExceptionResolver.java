@@ -3,6 +3,7 @@ package com.nexxserve.nexxclinic.config;
 import graphql.GraphQLError;
 import graphql.GraphqlErrorBuilder;
 import graphql.schema.DataFetchingEnvironment;
+import org.hibernate.LazyInitializationException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import java.util.Map;
@@ -74,13 +75,32 @@ public class GraphQlExceptionResolver extends DataFetcherExceptionResolverAdapte
             log.warn("Concurrent update or lock contention on field '{}'", env.getField().getName(), ex);
             return buildError(env, ErrorType.BAD_REQUEST, "CONCURRENT_UPDATE",
                     "The record is being updated by another user. Please refresh and try again.");
+        }        /* ------------- LAZY / PROXY ERRORS ---------------- */
+
+        // LazyInitializationException fires when a @OneToMany / @ManyToOne collection
+        // is accessed outside a transaction (e.g., a mapper called from a read-only
+        // query that detached the entity). Surface as a recoverable error.
+        if (ex instanceof LazyInitializationException lie) {
+            log.warn("Lazy loading error on field '{}': {}", env.getField().getName(), lie.getMessage());
+            return buildError(env, ErrorType.INTERNAL_ERROR, "LAZY_LOAD_ERROR",
+                    "A related record could not be loaded. Please refresh and try again.");
+        }
+
+        /* ------------- NULL POINTER ERRORS ---------------- */
+
+        // NullPointerException / IllegalArgument(=null check) from business logic
+        // that hit an unexpected null. Log the context so the dev can trace it, but
+        // surface a user-friendly message.
+        if (ex instanceof NullPointerException npe) {
+            log.error("NPE on field '{}': {}", env.getField().getName(), npe.getMessage(), npe);
+            return buildError(env, ErrorType.INTERNAL_ERROR, "NULL_REFERENCE",
+                    "A required record was missing. Please refresh and try again.");
         }
 
         /* ------------- INTERNAL ERRORS ------------------- */
         // Log the stack trace – *before* we build the error to keep it in your logs.
         log.error("GraphQL internal error on field '{}' ({}): {}",
-                env.getField().getName(),
-                ex.getClass().getSimpleName(),
+                env.getField().getName(), ex.getClass().getSimpleName(),
                 ex.getMessage(), ex);
 
         return buildError(env,

@@ -82,6 +82,7 @@ public class BillingQueryService {
     public Set<UUID> loadVisitInsurancePatientIds(UUID visitId) {
         List<VisitInsurance> visitInsurances = visitInsuranceRepository.findByVisitId(visitId);
         return visitInsurances.stream()
+            .filter(v -> v.getPatientInsurance() != null)
             .map(v -> v.getPatientInsurance().getId())
             .collect(Collectors.toSet());
     }

@@ -20,12 +20,12 @@ public class UploadService {
 
     private static final Logger log = LoggerFactory.getLogger(UploadService.class);
 
-    private final SupabaseStorageService storageService;
+    private final FileStorageService storageService;
     private final SupabaseProperties supabaseProperties;
     private final UploadRepository uploadRepository;
 
     public UploadService(
-            SupabaseStorageService storageService,
+            FileStorageService storageService,
             SupabaseProperties supabaseProperties,
             UploadRepository uploadRepository
     ) {
@@ -59,7 +59,7 @@ public class UploadService {
 
             String url = null;
             if (visibility == UploadVisibility.PUBLIC) {
-                url = storageService.publicUrl(bucket, storagePath);
+                url = storageService.getPublicUrl(bucket, storagePath);
             }
 
             Upload upload = new Upload();
@@ -77,7 +77,7 @@ public class UploadService {
             return ApiResponse.success("File uploaded successfully",
                     new UploadData(upload.getId(), upload.getUrl()));
         } catch (IOException e) {
-            log.error("Failed to upload file to Supabase", e);
+            log.error("Failed to upload file", e);
             return ApiResponse.error("Failed to upload file: " + e.getMessage());
         }
     }
@@ -106,8 +106,8 @@ public class UploadService {
 
         try {
             storageService.delete(upload.getBucket(), upload.getStoragePath());
-        } catch (IOException e) {
-            log.error("Failed to delete file from Supabase storage, removing DB record anyway", e);
+        } catch (Exception e) {
+            log.error("Failed to delete file from storage, removing DB record anyway", e);
         }
 
         uploadRepository.delete(upload);
@@ -140,18 +140,33 @@ public class UploadService {
                     ? supabaseProperties.getBucketPublic()
                     : supabaseProperties.getBucketPrivate();
 
+            // For visibility change, re-upload to the new bucket
+            // (works for both local and supabase — just copies to a different directory/bucket)
+            java.nio.file.Path sourceFile = null;
+            if (storageService instanceof LocalStorageService local) {
+                sourceFile = local.resolve(upload.getBucket(), upload.getStoragePath());
+            }
+
             byte[] fileBytes;
-            try (var is = new java.net.URL(storageService.fullPublicUrl(upload.getBucket(), upload.getStoragePath())).openStream()) {
-                fileBytes = is.readAllBytes();
+            if (sourceFile != null) {
+                fileBytes = java.nio.file.Files.readAllBytes(sourceFile);
+            } else {
+                // Supabase: download from the public URL
+                try (var is = new java.net.URL(
+                    supabaseProperties.getUrl() + storageService.getPublicUrl(upload.getBucket(), upload.getStoragePath())
+                ).openStream()) {
+                    fileBytes = is.readAllBytes();
+                }
             }
 
             storageService.upload(fileBytes, newBucket, upload.getStoragePath(), upload.getContentType());
 
+            // Delete from old bucket
             storageService.delete(upload.getBucket(), upload.getStoragePath());
 
             String url = null;
             if (newVisibility == UploadVisibility.PUBLIC) {
-                url = storageService.publicUrl(newBucket, upload.getStoragePath());
+                url = storageService.getPublicUrl(newBucket, upload.getStoragePath());
             }
 
             upload.setBucket(newBucket);

@@ -9,7 +9,7 @@ import org.mapstruct.Mapping;
 
 import java.util.List;
 
-@Mapper(componentModel = "spring")
+@Mapper(componentModel = "spring", uses = {InsuranceProviderMapper.class})
 public interface ProductMapper {
 
     ProductDto toDto(Product product);

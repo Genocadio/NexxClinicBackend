@@ -1,5 +1,6 @@
 package com.nexxserve.nexxclinic.config;
 
+import com.nexxserve.nexxclinic.model.StorageType;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -10,17 +11,33 @@ import org.springframework.stereotype.Component;
  * supabase:
  *   url: https://supa.med.rw
  *   service-key: YOUR_SERVICE_ROLE_KEY
+ *   storage-type: LOCAL  # or SUPABASE
+ *   local-storage-path: ./storage
  * </pre>
  */
 @Component
 @ConfigurationProperties(prefix = "supabase")
 public class SupabaseProperties {
 
-    /** Base URL of the self-hosted Supabase instance (no trailing slash). */
+    /**
+     * Storage backend type. When {@code LOCAL}, files are saved to the filesystem
+     * and served by the backend. When {@code SUPABASE}, files are uploaded to
+     * Supabase Storage via HTTP. Defaults to {@code LOCAL} so the system works
+     * out of the box without Supabase configured.
+     */
+    private StorageType storageType = StorageType.LOCAL;
+
+    /** Base URL of the self-hosted Supabase instance (no trailing slash). Ignored when storageType=LOCAL. */
     private String url;
 
-    /** Service-role key with full Storage access. */
+    /** Service-role key with full Storage access. Ignored when storageType=LOCAL. */
     private String serviceKey;
+
+    /**
+     * Root directory for local file storage (relative to working dir or absolute).
+     * Only used when storageType=LOCAL. Subdirectories: uploads/, invoices/.
+     */
+    private String localStoragePath = "./storage";
 
     /** Bucket name for public uploads. */
     private String bucketPublic = "uploads-public";
@@ -45,6 +62,30 @@ public class SupabaseProperties {
 
     /** Base backoff (ms) between retries; doubles each attempt. Default 500. */
     private long retryBackoffMs = 500;
+
+    public StorageType getStorageType() {
+        return storageType;
+    }
+
+    public void setStorageType(StorageType storageType) {
+        this.storageType = storageType;
+    }
+
+    public String getLocalStoragePath() {
+        return localStoragePath;
+    }
+
+    public void setLocalStoragePath(String localStoragePath) {
+        this.localStoragePath = localStoragePath;
+    }
+
+    public boolean isLocalMode() {
+        return storageType == StorageType.LOCAL;
+    }
+
+    public boolean isSupabaseMode() {
+        return storageType == StorageType.SUPABASE;
+    }
 
     public String getUrl() {
         return url;

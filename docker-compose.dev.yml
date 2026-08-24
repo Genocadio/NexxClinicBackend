@@ -1,0 +1,30 @@
+# ============================================================================
+# NexxClinic Backend — Development Override
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# This overrides:
+#   - Backend: runs `gradle bootRun` with live reload (no rebuild needed)
+#   - Exposes JVM debug port 5005
+#   - Relaxed health checks for faster iteration
+# ============================================================================
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: build
+    # Override entrypoint to run bootRun instead of the fat JAR
+    entrypoint: ["sh", "-c", "gradle bootRun --no-daemon -Dspring-boot.run.jvmArguments='$JAVA_OPTS'"]
+    working_dir: /app
+    environment:
+      JAVA_OPTS: "-Xmx512m -Xms256m -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+      - "5005:5005"  # JVM debug
+    healthcheck:
+      # Relaxed during dev — bootRun takes a while to start
+      start_period: 120s
+      retries: 30

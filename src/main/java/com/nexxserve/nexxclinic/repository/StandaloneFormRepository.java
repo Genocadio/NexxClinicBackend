@@ -22,7 +22,11 @@ public interface StandaloneFormRepository extends JpaRepository<StandaloneForm, 
             predicates.add(cb.isFalse(root.get("isDeleted")));
 
             if (isTemplate != null) {
-                predicates.add(cb.equal(root.get("isTemplate"), isTemplate));
+                if (isTemplate) {
+                    predicates.add(cb.isTrue(root.get("isTemplate")));
+                } else {
+                    predicates.add(cb.isFalse(root.get("isTemplate")));
+                }
             }
             if (category != null && !category.trim().isEmpty()) {
                 predicates.add(cb.equal(cb.lower(root.get("category")), category.trim().toLowerCase()));

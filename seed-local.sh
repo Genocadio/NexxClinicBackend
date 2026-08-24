@@ -119,7 +119,7 @@ INSERT INTO insurance_coverage (id, insurance_provider_id, department_id, encoun
 ('e000000b-0000-0000-0000-00000000000b', 'b0000004-0000-0000-0000-000000000004', NULL, 'INPATIENT_ADMISSION', 8, now(), now());
 
 -- ╔══════════════════════════════════════════════════════════════════════════╗
--- ║  PRODUCTS  (20: 8 drugs, 8 medical acts, 4 consumables)                  ║
+-- ║  PRODUCTS  (34: 11 drugs, 17 medical acts, 6 consumables)                 ║
 -- ╚══════════════════════════════════════════════════════════════════════════╝
 INSERT INTO products (id, type, code, unit, name, generic_name, description, clinic_price, private_rhic_price, created_at, updated_at, metadata) VALUES
 ('10000001-0000-0000-0000-000000000001', 'DRUG', 'DRG-001', 'TABLET',   'Amoxicillin 500mg',    'Amoxicillin',    'Antibiotic capsule',            2500.00,  3000.00, now(), now(), lo_from_bytea(0, E'\\x7b7d')),
@@ -141,7 +141,25 @@ INSERT INTO products (id, type, code, unit, name, generic_name, description, cli
 ('10000011-0000-0000-0000-000000000011', 'CONSUMABLE_DEVICE', 'CSM-001', 'PIECE', 'Syringe 5ml',    NULL, 'Disposable syringe',           500.00,   700.00, now(), now(), lo_from_bytea(0, E'\\x7b7d')),
 ('10000012-0000-0000-0000-000000000012', 'CONSUMABLE_DEVICE', 'CSM-002', 'PIECE', 'Gloves (pair)',  NULL, 'Disposable latex gloves',      300.00,   400.00, now(), now(), lo_from_bytea(0, E'\\x7b7d')),
 ('10000013-0000-0000-0000-000000000013', 'CONSUMABLE_DEVICE', 'CSM-003', 'PIECE', 'IV Cannula 20G', NULL, 'Intravenous cannula',          1200.00,  1500.00, now(), now(), lo_from_bytea(0, E'\\x7b7d')),
-('10000014-0000-0000-0000-000000000014', 'CONSUMABLE_DEVICE', 'CSM-004', 'PIECE', 'Surgical Mask',  NULL, 'Disposable face mask',         200.00,   300.00, now(), now(), lo_from_bytea(0, E'\\x7b7d'));
+('10000014-0000-0000-0000-000000000014', 'CONSUMABLE_DEVICE', 'CSM-004', 'PIECE', 'Surgical Mask',  NULL, 'Disposable face mask',         200.00,   300.00, now(), now(), lo_from_bytea(0, E'\\x7b7d')),
+-- ── Ophthalmic procedures ──────────────────────────────────────────────────
+('10000015-0000-0000-0000-000000000015', 'MEDICAL_ACT', 'ACT-009', 'DOSE', 'Refraction Test',         NULL, 'Visual acuity & refraction',          5000.00,  6000.00, now(), now(), lo_from_bytea(0, E'\\x7b7d')),
+('10000016-0000-0000-0000-000000000016', 'MEDICAL_ACT', 'ACT-010', 'DOSE', 'Fundoscopy',              NULL, 'Retinal examination',                 8000.00, 10000.00, now(), now(), lo_from_bytea(0, E'\\x7b7d')),
+('10000017-0000-0000-0000-000000000017', 'MEDICAL_ACT', 'ACT-011', 'DOSE', 'Tonometry',               NULL, 'Intraocular pressure measurement',    6000.00,  7500.00, now(), now(), lo_from_bytea(0, E'\\x7b7d')),
+('10000018-0000-0000-0000-000000000018', 'MEDICAL_ACT', 'ACT-012', 'DOSE', 'Slit Lamp Examination',   NULL, 'Anterior segment biomicroscopy',      7000.00,  8500.00, now(), now(), lo_from_bytea(0, E'\\x7b7d')),
+('10000019-0000-0000-0000-000000000019', 'MEDICAL_ACT', 'ACT-013', 'DOSE', 'Ophthalmic Consultation', NULL, 'Eye doctor consultation',            10000.00, 12000.00, now(), now(), lo_from_bytea(0, E'\\x7b7d')),
+-- ── Dental procedures ───────────────────────────────────────────────────────
+('1000001a-0000-0000-0000-00000000001a', 'MEDICAL_ACT', 'ACT-014', 'DOSE', 'Dental Scaling',          NULL, 'Calculus removal & polishing',        12000.00, 15000.00, now(), now(), lo_from_bytea(0, E'\\x7b7d')),
+('1000001b-0000-0000-0000-00000000001b', 'MEDICAL_ACT', 'ACT-015', 'DOSE', 'Dental Filling',          NULL, 'Composite/amalgam filling',           18000.00, 22000.00, now(), now(), lo_from_bytea(0, E'\\x7b7d')),
+('1000001c-0000-0000-0000-00000000001c', 'MEDICAL_ACT', 'ACT-016', 'DOSE', 'Root Canal Treatment',    NULL, 'Endodontic therapy',                  45000.00, 55000.00, now(), now(), lo_from_bytea(0, E'\\x7b7d')),
+('1000001d-0000-0000-0000-00000000001d', 'MEDICAL_ACT', 'ACT-017', 'DOSE', 'Dental Crown',            NULL, 'Porcelain/metal crown placement',     60000.00, 72000.00, now(), now(), lo_from_bytea(0, E'\\x7b7d')),
+-- ── Eye drops / ophthalmic drugs ───────────────────────────────────────────
+('1000001e-0000-0000-0000-00000000001e', 'DRUG', 'DRG-009', 'VIAL',   'Timolol Eye Drops',       'Timolol',      'Glaucoma eye drops',                  3500.00,  4200.00, now(), now(), lo_from_bytea(0, E'\\x7b7d')),
+('1000001f-0000-0000-0000-00000000001f', 'DRUG', 'DRG-010', 'VIAL',   'Chloramphenicol Eye Drops','Chloramphenicol','Antibiotic eye drops',             2000.00,  2500.00, now(), now(), lo_from_bytea(0, E'\\x7b7d')),
+('10000020-0000-0000-0000-000000000020', 'DRUG', 'DRG-011', 'TUBE',   'Dental Gel (Metronidazole)','Metronidazole','Periodontal gel',                  2800.00,  3400.00, now(), now(), lo_from_bytea(0, E'\\x7b7d')),
+-- ── Consumables ────────────────────────────────────────────────────────────
+('10000021-0000-0000-0000-000000000021', 'CONSUMABLE_DEVICE', 'CSM-005', 'PIECE', 'Contact Lens',       NULL, 'Soft contact lens (per lens)',         15000.00, 18000.00, now(), now(), lo_from_bytea(0, E'\\x7b7d')),
+('10000022-0000-0000-0000-000000000022', 'CONSUMABLE_DEVICE', 'CSM-006', 'BOX',   'Dental Filling Kit', NULL, 'Composite filling material kit',       8000.00, 10000.00, now(), now(), lo_from_bytea(0, E'\\x7b7d'));
 
 -- ╔══════════════════════════════════════════════════════════════════════════╗
 -- ║  PRODUCT INSURANCE COVERAGE                                               ║
@@ -159,14 +177,38 @@ INSERT INTO product_insurance_coverages (id, product_id, insurance_provider_id, 
 (gen_random_uuid(), '10000011-0000-0000-0000-000000000011', 'b0000001-0000-0000-0000-000000000001', 400.00,   true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
 (gen_random_uuid(), '10000012-0000-0000-0000-000000000012', 'b0000001-0000-0000-0000-000000000001', 250.00,   true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
 -- Insulin NOT covered by RSSB
-(gen_random_uuid(), '10000005-0000-0000-0000-000000000005', 'b0000001-0000-0000-0000-000000000001', 0.00,     false, true, false, 'CUSTOM_HOURS', 'ALL', now(), now());
+(gen_random_uuid(), '10000005-0000-0000-0000-000000000005', 'b0000001-0000-0000-0000-000000000001', 0.00,     false, true, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+-- Ophthalmic & dental
+(gen_random_uuid(), '10000015-0000-0000-0000-000000000015', 'b0000001-0000-0000-0000-000000000001', 4000.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '10000016-0000-0000-0000-000000000016', 'b0000001-0000-0000-0000-000000000001', 6500.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '10000017-0000-0000-0000-000000000017', 'b0000001-0000-0000-0000-000000000001', 4800.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '10000018-0000-0000-0000-000000000018', 'b0000001-0000-0000-0000-000000000001', 5500.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '10000019-0000-0000-0000-000000000019', 'b0000001-0000-0000-0000-000000000001', 8000.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '1000001a-0000-0000-0000-00000000001a', 'b0000001-0000-0000-0000-000000000001', 9500.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '1000001b-0000-0000-0000-00000000001b', 'b0000001-0000-0000-0000-000000000001', 14000.00, true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+-- Root canal NOT covered by RSSB
+(gen_random_uuid(), '1000001c-0000-0000-0000-00000000001c', 'b0000001-0000-0000-0000-000000000001', 0.00,     false, true, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+-- Crown NOT covered by RSSB
+(gen_random_uuid(), '1000001d-0000-0000-0000-00000000001d', 'b0000001-0000-0000-0000-000000000001', 0.00,     false, true, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '1000001e-0000-0000-0000-00000000001e', 'b0000001-0000-0000-0000-000000000001', 2800.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '1000001f-0000-0000-0000-00000000001f', 'b0000001-0000-0000-0000-000000000001', 1600.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '10000020-0000-0000-0000-000000000020', 'b0000001-0000-0000-0000-000000000001', 2200.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '10000021-0000-0000-0000-000000000021', 'b0000001-0000-0000-0000-000000000001', 12000.00, true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '10000022-0000-0000-0000-000000000022', 'b0000001-0000-0000-0000-000000000001', 6500.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now());
 
 -- MMI covers select products
 INSERT INTO product_insurance_coverages (id, product_id, insurance_provider_id, cost, covered, not_paid, require_medical_advisor, drug_administration_frequency, must_prescribed_by, created_at, updated_at) VALUES
 (gen_random_uuid(), '10000001-0000-0000-0000-000000000001', 'b0000002-0000-0000-0000-000000000002', 1800.00, true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
 (gen_random_uuid(), '10000002-0000-0000-0000-000000000002', 'b0000002-0000-0000-0000-000000000002', 500.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
 (gen_random_uuid(), '1000000c-0000-0000-0000-00000000000c', 'b0000002-0000-0000-0000-000000000002', 3500.00, true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
-(gen_random_uuid(), '1000000f-0000-0000-0000-00000000000f', 'b0000002-0000-0000-0000-000000000002', 7000.00, true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now());
+(gen_random_uuid(), '1000000f-0000-0000-0000-00000000000f', 'b0000002-0000-0000-0000-000000000002', 7000.00, true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+-- Ophthalmic & dental
+(gen_random_uuid(), '10000015-0000-0000-0000-000000000015', 'b0000002-0000-0000-0000-000000000002', 3800.00, true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '10000019-0000-0000-0000-000000000019', 'b0000002-0000-0000-0000-000000000002', 7500.00, true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '1000001a-0000-0000-0000-00000000001a', 'b0000002-0000-0000-0000-000000000002', 9000.00, true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '1000001b-0000-0000-0000-00000000001b', 'b0000002-0000-0000-0000-000000000002', 13500.00,true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '1000001e-0000-0000-0000-00000000001e', 'b0000002-0000-0000-0000-000000000002', 2600.00, true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '1000001f-0000-0000-0000-00000000001f', 'b0000002-0000-0000-0000-000000000002', 1500.00, true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now());
 
 -- OLDMUTUAL covers most products
 INSERT INTO product_insurance_coverages (id, product_id, insurance_provider_id, cost, covered, not_paid, require_medical_advisor, drug_administration_frequency, must_prescribed_by, created_at, updated_at) VALUES
@@ -179,7 +221,22 @@ INSERT INTO product_insurance_coverages (id, product_id, insurance_provider_id, 
 (gen_random_uuid(), '1000000d-0000-0000-0000-00000000000d', 'b0000003-0000-0000-0000-000000000003', 2200.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
 (gen_random_uuid(), '1000000f-0000-0000-0000-00000000000f', 'b0000003-0000-0000-0000-000000000003', 7000.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
 (gen_random_uuid(), '10000011-0000-0000-0000-000000000011', 'b0000003-0000-0000-0000-000000000003', 350.00,   true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
-(gen_random_uuid(), '10000013-0000-0000-0000-000000000013', 'b0000003-0000-0000-0000-000000000003', 900.00,   true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now());
+(gen_random_uuid(), '10000013-0000-0000-0000-000000000013', 'b0000003-0000-0000-0000-000000000003', 900.00,   true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+-- Ophthalmic & dental
+(gen_random_uuid(), '10000015-0000-0000-0000-000000000015', 'b0000003-0000-0000-0000-000000000003', 3500.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '10000016-0000-0000-0000-000000000016', 'b0000003-0000-0000-0000-000000000003', 6000.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '10000017-0000-0000-0000-000000000017', 'b0000003-0000-0000-0000-000000000003', 4500.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '10000018-0000-0000-0000-000000000018', 'b0000003-0000-0000-0000-000000000003', 5200.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '10000019-0000-0000-0000-000000000019', 'b0000003-0000-0000-0000-000000000003', 7500.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '1000001a-0000-0000-0000-00000000001a', 'b0000003-0000-0000-0000-000000000003', 9000.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '1000001b-0000-0000-0000-00000000001b', 'b0000003-0000-0000-0000-000000000003', 13000.00, true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '1000001c-0000-0000-0000-00000000001c', 'b0000003-0000-0000-0000-000000000003', 35000.00, true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '1000001d-0000-0000-0000-00000000001d', 'b0000003-0000-0000-0000-000000000003', 48000.00, true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '1000001e-0000-0000-0000-00000000001e', 'b0000003-0000-0000-0000-000000000003', 2700.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '1000001f-0000-0000-0000-00000000001f', 'b0000003-0000-0000-0000-000000000003', 1500.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '10000020-0000-0000-0000-000000000020', 'b0000003-0000-0000-0000-000000000003', 2100.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '10000021-0000-0000-0000-000000000021', 'b0000003-0000-0000-0000-000000000003', 11000.00, true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '10000022-0000-0000-0000-000000000022', 'b0000003-0000-0000-0000-000000000003', 6000.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now());
 
 -- Radiant covers most products
 INSERT INTO product_insurance_coverages (id, product_id, insurance_provider_id, cost, covered, not_paid, require_medical_advisor, drug_administration_frequency, must_prescribed_by, created_at, updated_at) VALUES
@@ -191,7 +248,23 @@ INSERT INTO product_insurance_coverages (id, product_id, insurance_provider_id, 
 (gen_random_uuid(), '1000000c-0000-0000-0000-00000000000c', 'b0000004-0000-0000-0000-000000000004', 3500.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
 (gen_random_uuid(), '1000000e-0000-0000-0000-00000000000e', 'b0000004-0000-0000-0000-000000000004', 9000.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
 (gen_random_uuid(), '1000000f-0000-0000-0000-00000000000f', 'b0000004-0000-0000-0000-000000000004', 8000.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
-(gen_random_uuid(), '10000013-0000-0000-0000-000000000013', 'b0000004-0000-0000-0000-000000000004', 800.00,   true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now());
+(gen_random_uuid(), '10000013-0000-0000-0000-000000000013', 'b0000004-0000-0000-0000-000000000004', 800.00,   true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+-- Ophthalmic & dental
+(gen_random_uuid(), '10000015-0000-0000-0000-000000000015', 'b0000004-0000-0000-0000-000000000004', 3600.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '10000016-0000-0000-0000-000000000016', 'b0000004-0000-0000-0000-000000000004', 6200.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '10000017-0000-0000-0000-000000000017', 'b0000004-0000-0000-0000-000000000004', 4600.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '10000018-0000-0000-0000-000000000018', 'b0000004-0000-0000-0000-000000000004', 5300.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '10000019-0000-0000-0000-000000000019', 'b0000004-0000-0000-0000-000000000004', 7800.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '1000001a-0000-0000-0000-00000000001a', 'b0000004-0000-0000-0000-000000000004', 9200.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '1000001b-0000-0000-0000-00000000001b', 'b0000004-0000-0000-0000-000000000004', 13800.00, true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+-- Root canal NOT covered by Radiant
+(gen_random_uuid(), '1000001c-0000-0000-0000-00000000001c', 'b0000004-0000-0000-0000-000000000004', 0.00,     false, true, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '1000001d-0000-0000-0000-00000000001d', 'b0000004-0000-0000-0000-000000000004', 46000.00, true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '1000001e-0000-0000-0000-00000000001e', 'b0000004-0000-0000-0000-000000000004', 2800.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '1000001f-0000-0000-0000-00000000001f', 'b0000004-0000-0000-0000-000000000004', 1600.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '10000020-0000-0000-0000-000000000020', 'b0000004-0000-0000-0000-000000000004', 2200.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '10000021-0000-0000-0000-000000000021', 'b0000004-0000-0000-0000-000000000004', 11500.00, true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now()),
+(gen_random_uuid(), '10000022-0000-0000-0000-000000000022', 'b0000004-0000-0000-0000-000000000004', 6200.00,  true, false, false, 'CUSTOM_HOURS', 'ALL', now(), now());
 
 -- ╔══════════════════════════════════════════════════════════════════════════╗
 -- ║  PATIENTS                                                               ║
@@ -199,7 +272,11 @@ INSERT INTO product_insurance_coverages (id, product_id, insurance_provider_id, 
 INSERT INTO patients (id, first_name, last_name, full_name, gender, date_of_birth, patient_identifier, primary_phone_number, village, cell, city, district, created_at, updated_at) VALUES
 ('d0000001-0000-0000-0000-000000000001', 'Jean',   'Hakizimana', 'Jean Hakizimana',  'MALE',   '1985-03-15', 'PAT-00001', '+250788111001', 'Kimironko',  'Gasabo',      'Kigali', 'Gasabo', now(), now()),
 ('d0000002-0000-0000-0000-000000000002', 'Marie',  'Uwimana',    'Marie Uwimana',    'FEMALE', '1992-07-22', 'PAT-00002', '+250788111002', 'Nyamirambo',  'Nyarugenge',  'Kigali', 'Nyarugenge', now(), now()),
-('d0000003-0000-0000-0000-000000000003', 'Patrick','Mugenzi',    'Patrick Mugenzi',  'MALE',   '1978-11-08', 'PAT-00003', '+250788111003', 'Rubavu',      'Rubavu',      'Rubavu', 'Rubavu', now(), now());
+('d0000003-0000-0000-0000-000000000003', 'Patrick','Mugenzi',    'Patrick Mugenzi',  'MALE',   '1978-11-08', 'PAT-00003', '+250788111003', 'Rubavu',      'Rubavu',      'Rubavu', 'Rubavu', now(), now()),
+('d0000004-0000-0000-0000-000000000004', 'Claudine','Mukamana',  'Claudine Mukamana','FEMALE', '1990-05-12', 'PAT-00004', '+250788111004', 'Kicukiro',    'Kicukiro',    'Kigali', 'Kicukiro', now(), now()),
+('d0000005-0000-0000-0000-000000000005', 'Emmanuel','Ndayisaba', 'Emmanuel Ndayisaba','MALE',  '1982-09-30', 'PAT-00005', '+250788111005', 'Musanze',     'Musanze',     'Musanze','Musanze', now(), now()),
+('d0000006-0000-0000-0000-000000000006', 'Alice',   'Nyirabatware','Alice Nyirabatware','FEMALE','1995-01-18', 'PAT-00006', '+250788111006', 'Huye',        'Huye',        'Huye',   'Huye', now(), now()),
+('d0000007-0000-0000-0000-000000000007', 'Thomas',  'Bizimana',  'Thomas Bizimana',  'MALE',   '1975-12-03', 'PAT-00007', '+250788111007', 'Gisenyi',     'Rubavu',      'Rubavu', 'Rubavu', now(), now());
 
 -- ╔══════════════════════════════════════════════════════════════════════════╗
 -- ║  PATIENT INSURANCES                                                      ║
@@ -209,7 +286,15 @@ INSERT INTO patient_insurances (id, patient_id, insurance_provider_id, insurance
 (gen_random_uuid(), 'd0000001-0000-0000-0000-000000000001', 'b0000003-0000-0000-0000-000000000003', 'OM-JEAN-002',    false, 'Jean Hakizimana',  'Self-employed',       '2025-06-01', '2026-06-01', false, now(), now()),
 (gen_random_uuid(), 'd0000002-0000-0000-0000-000000000002', 'b0000004-0000-0000-0000-000000000004', 'RAD-MARIE-001',  true,  'Marie Uwimana',   'Radiant Health Co',   '2025-03-01', '2026-03-01', false, now(), now()),
 (gen_random_uuid(), 'd0000003-0000-0000-0000-000000000003', 'b0000002-0000-0000-0000-000000000002', 'MMI-PAT-001',    true,  'Patrick Mugenzi', 'Rwanda Mines Board',  '2025-01-01', '2026-12-31', false, now(), now()),
-(gen_random_uuid(), 'd0000003-0000-0000-0000-000000000003', 'b0000003-0000-0000-0000-000000000003', 'OM-PAT-002',     false, 'Patrick Mugenzi', 'Self-employed',       '2025-04-01', '2026-04-01', false, now(), now());
+(gen_random_uuid(), 'd0000003-0000-0000-0000-000000000003', 'b0000003-0000-0000-0000-000000000003', 'OM-PAT-002',     false, 'Patrick Mugenzi', 'Self-employed',       '2025-04-01', '2026-04-01', false, now(), now()),
+-- Claudine: Radiant
+(gen_random_uuid(), 'd0000004-0000-0000-0000-000000000004', 'b0000004-0000-0000-0000-000000000004', 'RAD-CLAUDINE-001', true, 'Claudine Mukamana', 'Kigali City Council', '2025-02-01', '2026-02-01', false, now(), now()),
+-- Emmanuel: RSSB + Radiant
+(gen_random_uuid(), 'd0000005-0000-0000-0000-000000000005', 'b0000001-0000-0000-0000-000000000001', 'RSSB-EMMANUEL-001', true, 'Emmanuel Ndayisaba', 'Government of Rwanda', '2025-01-01', '2026-12-31', false, now(), now()),
+(gen_random_uuid(), 'd0000005-0000-0000-0000-000000000005', 'b0000004-0000-0000-0000-000000000004', 'RAD-EMMANUEL-002', false, 'Emmanuel Ndayisaba', 'Self-employed', '2025-06-01', '2026-06-01', false, now(), now()),
+-- Alice: self-pay (no insurance)
+-- Thomas: Old Mutual
+(gen_random_uuid(), 'd0000007-0000-0000-0000-000000000007', 'b0000003-0000-0000-0000-000000000003', 'OM-THOMAS-001', true, 'Thomas Bizimana', 'Rubavu District Hospital', '2025-03-01', '2026-03-01', false, now(), now());
 
 -- ╔══════════════════════════════════════════════════════════════════════════╗
 -- ║  DEPARTMENT INSURANCE POLICIES                                           ║
@@ -231,23 +316,40 @@ INSERT INTO department_insurance_policies (id, department_id, insurance_provider
 SQL
 
 echo ""
+echo ""
+echo "🔍  Clearing Meilisearch indexes (will re-index on next boot)..."
+MEILI_URL="${MEILI_URL:-http://localhost:7700}"
+MEILI_KEY="${MEILI_MASTER_KEY:-nexxclinic_meili_master_key}"
+for idx in products patients workers; do
+  curl -sf -X DELETE "${MEILI_URL}/indexes/${idx}/documents" \
+    -H "Authorization: Bearer ${MEILI_KEY}" >/dev/null 2>&1 || true
+done
+echo "  ✅ Meilisearch indexes cleared"
+
+echo ""
 echo "✅  Seed complete!"
 echo ""
-echo "┌─────────────────────────────────────────────────────────┐"
-echo "│  DEMO ACCOUNTS (password: Password123)                 │"
-echo "├─────────────┬───────────────────────────────────────────┤"
-echo "│  admin      │  ADMIN role (full access)                │"
-echo "│  doctor     │  CLINICIAN + FINANCE + RECEPTION roles   │"
-echo "├─────────────┼───────────────────────────────────────────┤"
-echo "│  Patients:  │  Jean Hakizimana (RSSB + OLDMUTUAL)     │"
-echo "│             │  Marie Uwimana (Radiant)                 │"
-echo "│             │  Patrick Mugenzi (MMI + OLDMUTUAL)       │"
-echo "├─────────────┼───────────────────────────────────────────┤"
-echo "│  Insurance: │  RSSB (single tier: 20%)                │"
-echo "│             │  MMI (single tier: 15%)                 │"
-echo "│             │  OLDMUTUAL (multi: 20/10/15/12%)        │"
-echo "│             │  Radiant (multi: 25/5/10/8%)            │"
-echo "├─────────────┼───────────────────────────────────────────┤"
-echo "│  Products:  │  20 (8 drugs, 8 acts, 4 consumables)    │"
-echo "│  Depts:     │  Dental, Nursing, Internal Medicine      │"
-echo "└─────────────┴───────────────────────────────────────────┘"
+echo "┌─────────────────────────────────────────────────────────────┐"
+echo "│  DEMO ACCOUNTS (password: Password123)                     │"
+echo "├─────────────┬───────────────────────────────────────────────┤"
+echo "│  admin      │  ADMIN role (full access)                    │"
+echo "│  doctor     │  CLINICIAN + FINANCE + RECEPTION roles       │"
+echo "├─────────────┼───────────────────────────────────────────────┤"
+echo "│  Patients:  │  Jean Hakizimana (RSSB + OLDMUTUAL)         │"
+echo "│             │  Marie Uwimana (Radiant)                     │"
+echo "│             │  Patrick Mugenzi (MMI + OLDMUTUAL)           │"
+echo "│             │  Claudine Mukamana (Radiant)                 │"
+echo "│             │  Emmanuel Ndayisaba (RSSB + Radiant)         │"
+echo "│             │  Alice Nyirabatware (self-pay)               │"
+echo "│             │  Thomas Bizimana (OLDMUTUAL)                 │"
+echo "├─────────────┼───────────────────────────────────────────────┤"
+echo "│  Insurance: │  RSSB (single tier: 20%)                    │"
+echo "│             │  MMI (single tier: 15%)                     │"
+echo "│             │  OLDMUTUAL (multi: 20/10/15/12%)            │"
+echo "│             │  Radiant (multi: 25/5/10/8%)                │"
+echo "├─────────────┼───────────────────────────────────────────────┤"
+echo "│  Products:  │  34 (11 drugs, 17 acts, 6 consumables)        │"
+echo "│  Depts:     │  Dental, Nursing, Internal Medicine          │"
+echo "├─────────────┼───────────────────────────────────────────────┤"
+echo "│  ⚠  Run 'docker compose restart backend' to apply changes │"
+echo "└─────────────┴───────────────────────────────────────────────┘"

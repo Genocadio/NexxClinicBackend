@@ -124,12 +124,32 @@ public class MeilisearchIndexService {
     }
 
     private void ensureIndex(String uid, String[] searchable, String[] filterable) throws Exception {
-        Index index = client().index(uid);
+        // Always delete + recreate to guarantee the primary key is 'id'.
+        // Meilisearch can't auto-detect the primary key when fields like
+        // "notPaid" end with 'id', and the Java SDK's getPrimaryKey() reads
+        // a cached field that is never populated after createIndex().
+        try {
+            client().index(uid).getStats(); // succeeds if index exists
+            log.info("Deleting existing Meilisearch index '{}' for fresh creation…", uid);
+            waitFor(client().index(uid), client().deleteIndex(uid));
+            Thread.sleep(500); // small grace period for Meilisearch to finish deletion
+        } catch (Exception e) {
+            // Index doesn't exist yet — fine
+        }
+        TaskInfo createTask = client().createIndex(uid, "id");
+        waitFor(client().index(uid), createTask);
+        // Verify the primary key was actually set
+        Index created = client().index(uid);
+        created.fetchPrimaryKey();
+        if (created.getPrimaryKey() == null) {
+            log.warn("Meilisearch index '{}' created but primaryKey not confirmed; adding docs with explicit PK", uid);
+        }
+        // Apply searchable/filterable settings
         Settings settings = new Settings();
         settings.setSearchableAttributes(searchable);
         settings.setFilterableAttributes(filterable);
-        TaskInfo task = index.updateSettings(settings);
-        waitFor(index, task);
+        TaskInfo task = created.updateSettings(settings);
+        waitFor(created, task);
     }
 
     private void waitFor(Index index, TaskInfo task) {
@@ -378,10 +398,9 @@ public class MeilisearchIndexService {
         }
         try {
             Index index = client().index(uid);
-            // Fire-and-forget: Meilisearch processes tasks in order, so the document
-            // becomes searchable shortly after. Not waiting keeps write transactions
-            // fast and never blocks them on Meilisearch latency.
-            index.addDocuments(json(List.of(doc)));
+            // Pass primary key explicitly — Meilisearch can't auto-detect it
+            // when fields like "notPaid" end with "id".
+            index.addDocuments(json(List.of(doc)), "id");
         } catch (Exception e) {
             log.warn("Meilisearch upsert to {} failed: {}", uid, e.getMessage());
         }
@@ -467,7 +486,9 @@ public class MeilisearchIndexService {
         waitFor(index, wipe);
         for (int i = 0; i < docs.size(); i += SYNC_BATCH_SIZE) {
             List<Map<String, Object>> batch = docs.subList(i, Math.min(i + SYNC_BATCH_SIZE, docs.size()));
-            TaskInfo task = index.addDocuments(json(batch));
+            // Pass primary key explicitly — Meilisearch can't auto-detect it
+            // when fields like "notPaid" end with "id".
+            TaskInfo task = index.addDocuments(json(batch), "id");
             waitFor(index, task);
         }
     }
@@ -487,6 +508,43 @@ public class MeilisearchIndexService {
             log.warn("Meilisearch stats for {} failed: {}", uid, e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * Returns the number of documents currently in the given Meilisearch index,
+     * or -1 if the index doesn't exist or Meilisearch is unreachable.
+     */
+    public long getDocumentCount(String uid) {
+        if (!isEnabled()) {
+            return -1;
+        }
+        try {
+            IndexStats stats = client().index(uid).getStats();
+            return stats != null ? stats.getNumberOfDocuments() : -1;
+        } catch (Exception e) {
+            log.warn("Meilisearch stats for {} failed: {}", uid, e.getMessage());
+            return -1;
+        }
+    }
+
+    /**
+     * Returns the number of rows in the database for the entity behind the given
+     * Meilisearch index, or -1 if the index is unknown.
+     */
+    public long getDbCount(String uid) {
+        try {
+            if (PRODUCTS_INDEX.equals(uid)) {
+                return productRepository.count();
+            } else if (PATIENTS_INDEX.equals(uid)) {
+                return patientRepository.count();
+            } else if (WORKERS_INDEX.equals(uid)) {
+                return workerRepository.count();
+            }
+        } catch (Exception e) {
+            log.warn("DB count for {} failed: {}", uid, e.getMessage());
+            return -1;
+        }
+        return -1;
     }
 
     private String json(List<Map<String, Object>> docs) {

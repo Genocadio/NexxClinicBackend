@@ -113,7 +113,11 @@ public class PatientService {
         }
 
         // Meilisearch first (typo-tolerant, ranked); the DB spec below is the fallback.
-        if (meilisearchIndexService.isEnabled()) {
+        // Only invoke Meilisearch when there's at least one search param;
+        // plain pagination/listing goes straight to the database.
+        boolean hasSearchParams = name != null || phoneNumber != null || insuranceProviderId != null
+                || exactAge != null || minAge != null || maxAge != null;
+        if (hasSearchParams && meilisearchIndexService.isEnabled()) {
             try {
                 MeilisearchIndexService.SearchHit hit = meilisearchIndexService.searchPatients(
                         name,

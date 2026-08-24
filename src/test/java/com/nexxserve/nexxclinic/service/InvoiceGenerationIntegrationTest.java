@@ -120,7 +120,7 @@ class InvoiceGenerationIntegrationTest {
     private VisitDepartmentNoteRepository visitDepartmentNoteRepository;
 
     @MockitoBean
-    private SupabaseStorageService supabaseStorageService;
+    private FileStorageService fileStorageService;
 
     @MockitoSpyBean
     private DepartmentInsuranceBillingRepository departmentInsuranceBillingRepository;
@@ -241,11 +241,10 @@ class InvoiceGenerationIntegrationTest {
         );
     }
 
-    /** Stubs the Supabase storage calls used by the render/upload phase. */
-    private void stubStorage(String objectPath) {
-        when(supabaseStorageService.buildObjectPath(any(), anyString()))
-            .thenReturn(objectPath);
-        when(supabaseStorageService.invoiceBucket()).thenReturn("data");
+    /** Stubs the file storage calls used by the render/upload phase. */
+    private void stubStorage(String objectPath) throws Exception {
+        when(fileStorageService.getSignedUrl("data", objectPath, 300))
+            .thenReturn("https://signed/" + objectPath);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -255,10 +254,9 @@ class InvoiceGenerationIntegrationTest {
     @Test
     void generateInvoiceUploadsAndPersistsInvoiceUrl() throws Exception {
         Fixture fx = persistBilledVisit(VisitProductStatus.BILLED);
-        String objectPath = "invoices/TestClinic/invoice-" + fx.billing().getId() + ".pdf";
+        // No ClinicProfile in fixture → clinicName=null → path = invoices/invoice-{id}.pdf
+        String objectPath = "invoices/invoice-" + fx.billing().getId() + ".pdf";
         stubStorage(objectPath);
-        when(supabaseStorageService.signedUrl(objectPath, 300))
-            .thenReturn("https://signed/" + objectPath);
 
         ApiResponse<?> response = invoiceGenerator.generateInvoice(
                 fx.billing().getId(),
@@ -279,8 +277,8 @@ class InvoiceGenerationIntegrationTest {
         assertEquals(objectPath, reloaded.getInvoiceUrl());
 
         // Phase 2 uploaded the file; after persist, the signed URL was generated.
-        verify(supabaseStorageService).upload(any(byte[].class), eq(objectPath));
-        verify(supabaseStorageService).signedUrl(objectPath, 300);
+        verify(fileStorageService).upload(any(byte[].class), eq("data"), eq(objectPath), eq("application/pdf"));
+        verify(fileStorageService).getSignedUrl("data", objectPath, 300);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -309,7 +307,7 @@ class InvoiceGenerationIntegrationTest {
 
         assertEquals(ResponseStatus.ERROR, response.status());
         assertTrue(response.message().contains("unread notes"));
-        verifyNoInteractions(supabaseStorageService);
+        verifyNoInteractions(fileStorageService);
     }
 
     @Test
@@ -330,7 +328,7 @@ class InvoiceGenerationIntegrationTest {
 
         assertEquals(ResponseStatus.ERROR, response.status());
         assertTrue(response.message().contains("latest billing version"));
-        verifyNoInteractions(supabaseStorageService);
+        verifyNoInteractions(fileStorageService);
     }
 
     @Test
@@ -344,7 +342,7 @@ class InvoiceGenerationIntegrationTest {
 
         assertEquals(ResponseStatus.ERROR, response.status());
         assertTrue(response.message().contains("all visit products are billed"));
-        verifyNoInteractions(supabaseStorageService);
+        verifyNoInteractions(fileStorageService);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -360,7 +358,7 @@ class InvoiceGenerationIntegrationTest {
         // runs against the real repository.
         when(departmentInsuranceBillingRepository.findById(fx.billing().getId()))
             .thenReturn(Optional.empty());
-        String objectPath = "invoices/TestClinic/invoice-" + fx.billing().getId() + ".pdf";
+        String objectPath = "invoices/invoice-" + fx.billing().getId() + ".pdf";
         stubStorage(objectPath);
 
         ApiResponse<?> response = invoiceGenerator.generateInvoice(
@@ -371,8 +369,8 @@ class InvoiceGenerationIntegrationTest {
         assertEquals(ResponseStatus.ERROR, response.status());
         assertTrue(response.message().contains("no longer available"));
         // The file was uploaded, then orphaned and deleted.
-        verify(supabaseStorageService).upload(any(byte[].class), eq(objectPath));
-        verify(supabaseStorageService).delete("data", objectPath);
+        verify(fileStorageService).upload(any(byte[].class), eq("data"), eq(objectPath), eq("application/pdf"));
+        verify(fileStorageService).delete("data", objectPath);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -398,7 +396,7 @@ class InvoiceGenerationIntegrationTest {
                 Optional.of(newer)                             // Phase 3: version 2 is latest now
             );
 
-        String objectPath = "invoices/TestClinic/invoice-" + fx.billing().getId() + ".pdf";
+        String objectPath = "invoices/invoice-" + fx.billing().getId() + ".pdf";
         stubStorage(objectPath);
 
         ApiResponse<?> response = invoiceGenerator.generateInvoice(
@@ -413,7 +411,7 @@ class InvoiceGenerationIntegrationTest {
                 .findById(fx.billing().getId()).orElseThrow().getInvoiceUrl(),
                 "stale billing must not receive a fresh invoice URL");
         // The file was uploaded, then orphaned and deleted.
-        verify(supabaseStorageService).upload(any(byte[].class), eq(objectPath));
-        verify(supabaseStorageService).delete("data", objectPath);
+        verify(fileStorageService).upload(any(byte[].class), eq("data"), eq(objectPath), eq("application/pdf"));
+        verify(fileStorageService).delete("data", objectPath);
     }
 }

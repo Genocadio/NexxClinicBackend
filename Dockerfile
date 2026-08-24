@@ -20,7 +20,7 @@ WORKDIR /app
 
 COPY --from=build /app/build/libs/*.jar app.jar
 
-RUN chown -R spring:spring /app
+RUN mkdir -p /data/storage && chown -R spring:spring /app /data/storage
 USER spring
 
 EXPOSE 8080

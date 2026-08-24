@@ -100,11 +100,11 @@ public class StandaloneForm {
         this.category = category;
     }
 
-    public boolean isTemplate() {
+    public boolean getIsTemplate() {
         return isTemplate;
     }
 
-    public void setTemplate(boolean template) {
+    public void setIsTemplate(boolean template) {
         isTemplate = template;
     }
 

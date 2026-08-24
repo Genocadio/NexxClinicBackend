@@ -39,8 +39,10 @@ meilisearch:
   enabled: ${MEILI_ENABLED:true}
 
 supabase:
+  storage-type: ${STORAGE_TYPE:LOCAL}
   url: ${SUPABASE_URL:http://localhost:8000}
   service-key: ${SUPABASE_SERVICE_KEY:YOUR_SERVICE_ROLE_KEY}
+  local-storage-path: ${LOCAL_STORAGE_PATH:./storage}
   bucket-public: ${SUPABASE_BUCKET_PUBLIC:uploads-public}
   bucket-private: ${SUPABASE_BUCKET_PRIVATE:uploads-private}
   bucket-invoices: ${SUPABASE_BUCKET_INVOICES:data}

@@ -134,4 +134,7 @@ extend type Mutation {
   linkStandaloneFormToDepartment(departmentId: ID!, formId: ID!): StandaloneFormResponse!
   unlinkStandaloneFormFromDepartment(departmentId: ID!, formId: ID!): BooleanResponse!
   setDefaultStandaloneFormForDepartment(departmentId: ID!, formId: ID!): StandaloneFormResponse!
+
+  # Template toggle
+  setStandaloneFormAsTemplate(formId: ID!, isTemplate: Boolean!): StandaloneFormResponse!
 }
