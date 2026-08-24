@@ -153,8 +153,12 @@ public class BillingPricingCalculator {
             return new ResolvedPatientShare(patientDefault, PatientShareSource.PATIENT_DEFAULT);
         }
 
-        // Layer 4: provider base coverage (from InsuranceProvider.getCoverages())
-        Integer providerDefault = appliedInsurance.getInsuranceProvider().getBasePatientSharePercentage();
+        // Layer 4: provider base coverage — try prefetched map first, then lazy-load
+        Integer providerDefault = lookupBaseCoveragePercentage(providerId, prefetchedCoverages);
+        if (providerDefault == null) {
+            // Fallback: lazy-load from the entity (works within @Transactional)
+            providerDefault = appliedInsurance.getInsuranceProvider().getBasePatientSharePercentage();
+        }
         if (providerDefault != null) {
             return new ResolvedPatientShare(providerDefault, PatientShareSource.PROVIDER_DEFAULT);
         }
@@ -164,7 +168,10 @@ public class BillingPricingCalculator {
     }
 
     /**
-     * Determines whether a per-line override is allowed.
+     * Determines whether a per-line override is allowed. Only an exact
+     * (department + encounterType) coverage rule blocks the override; partial
+     * matches, base-only setups and rule sets for other departments must not
+     * silently swallow it.
      */
     private boolean isOverrideAllowed(
         UUID providerId,
@@ -180,36 +187,45 @@ public class BillingPricingCalculator {
             return true;
         }
 
-        boolean hasDeptMatch = false;
-        boolean hasEncounterMatch = false;
-        boolean hasExactMatch = false;
-
         for (Map.Entry<UUID, List<InsuranceCoverage>> entry : byDept.entrySet()) {
             UUID covDeptId = entry.getKey();
             for (InsuranceCoverage cov : entry.getValue()) {
-                EncounterType covEnc = cov.getEncounterType();
-
-                if (deptMatches(departmentId, covDeptId) && encounterType != null && encounterType.equals(covEnc)) {
-                    hasExactMatch = true;
-                }
-                if (deptMatches(departmentId, covDeptId)) {
-                    hasDeptMatch = true;
-                }
-                if (covEnc != null && encounterType != null && encounterType.equals(covEnc)) {
-                    hasEncounterMatch = true;
+                if (
+                    deptMatches(departmentId, covDeptId) &&
+                    encounterType != null &&
+                    encounterType.equals(cov.getEncounterType())
+                ) {
+                    return false;
                 }
             }
         }
-
-        if (hasExactMatch) return false;
-        if (hasDeptMatch || hasEncounterMatch) return true;
-        return false;
+        return true;
     }
 
     private boolean deptMatches(UUID departmentId, UUID covDeptId) {
         if (departmentId == null && covDeptId == null) return true;
         if (departmentId == null || covDeptId == null) return false;
         return departmentId.equals(covDeptId);
+    }
+
+    /**
+     * Looks up the base (unconditional) coverage percentage from the prefetched map.
+     */
+    private Integer lookupBaseCoveragePercentage(
+        UUID providerId,
+        Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetchedCoverages
+    ) {
+        if (prefetchedCoverages == null) return null;
+        Map<UUID, List<InsuranceCoverage>> byDept = prefetchedCoverages.get(providerId);
+        if (byDept == null) return null;
+        List<InsuranceCoverage> baseCoverages = byDept.get(null);
+        if (baseCoverages == null) return null;
+        for (InsuranceCoverage cov : baseCoverages) {
+            if (cov.getEncounterType() == null) {
+                return cov.getPatientSharePercentage();
+            }
+        }
+        return null;
     }
 
     /**
