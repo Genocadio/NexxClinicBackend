@@ -67,13 +67,13 @@ INSERT INTO departments (id, name, nursing, support_requests, requests_products,
 -- ╔══════════════════════════════════════════════════════════════════════════╗
 -- ║  USERS / WORKERS  (password: Password123 → BCrypt hash)                 ║
 -- ╚══════════════════════════════════════════════════════════════════════════╝
-INSERT INTO workers (id, first_name, last_name, username, email, phone_number, password_hash, gender, account_status, active, auto_reset, must_change_on_next_login, max_active_sessions, required, created_at, updated_at, department_id) VALUES
+INSERT INTO workers (id, first_name, last_name, username, email, phone_number, password_hash, gender, account_status, active, auto_reset, must_change_on_next_login, max_active_sessions, required, created_at, updated_at, department_id, has_expiration) VALUES
 ('c0000001-0000-0000-0000-000000000001', 'Admin', 'User', 'admin', 'admin@nexxclinic.local', '+250788000001',
- '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy',
- 'MALE', 'ACTIVE', true, false, false, 5, false, now(), now(), NULL),
+ '$2a$10$UDIeB3I6ose0CNjGhXs6.uw2mCcE5HWtlydcEY5Ju1munIwXx9rqi',
+ 'MALE', 'ACTIVE', true, false, false, 5, false, now(), now(), NULL, false),
 ('c0000002-0000-0000-0000-000000000002', 'Multi', 'Role', 'doctor', 'doctor@nexxclinic.local', '+250788000002',
- '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy',
- 'MALE', 'ACTIVE', true, false, false, 5, false, now(), now(), 'a0000003-0000-0000-0000-000000000003');
+ '$2a$10$UDIeB3I6ose0CNjGhXs6.uw2mCcE5HWtlydcEY5Ju1munIwXx9rqi',
+ 'MALE', 'ACTIVE', true, false, false, 5, false, now(), now(), 'a0000003-0000-0000-0000-000000000003', false);
 
 INSERT INTO worker_roles (worker_id, role_name) VALUES
 ('c0000001-0000-0000-0000-000000000001', 'ADMIN'),
