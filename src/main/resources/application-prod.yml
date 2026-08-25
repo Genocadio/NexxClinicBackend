@@ -33,6 +33,11 @@ spring:
     init:
       mode: never
 
+billing:
+  invoice:
+    paper-size: ${INVOICE_PAPER_SIZE:letter}
+    signed-url-expiry-seconds: ${INVOICE_SIGNED_URL_EXPIRY:300}
+
 meilisearch:
   url: ${MEILI_URL:http://localhost:7700}
   api-key: ${MEILI_MASTER_KEY}

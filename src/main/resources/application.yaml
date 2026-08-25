@@ -77,6 +77,12 @@ logging:
       max-history: 10
       total-size-cap: 100MB
 
+billing:
+  invoice:
+    # Paper size for invoice PDFs: letter, a4p (A4 portrait), a4l (A4 landscape), pos (80mm thermal)
+    paper-size: ${INVOICE_PAPER_SIZE:letter}
+    signed-url-expiry-seconds: ${INVOICE_SIGNED_URL_EXPIRY:300}
+
 app:
   jwt:
     secret: ${JWT_SECRET:change-this-secret-to-a-long-random-value-at-least-32-bytes}

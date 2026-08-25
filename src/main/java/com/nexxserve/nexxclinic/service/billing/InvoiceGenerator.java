@@ -14,6 +14,7 @@ import com.nexxserve.nexxclinic.repository.WorkerRepository;
 import com.nexxserve.nexxclinic.config.SupabaseProperties;
 import com.nexxserve.nexxclinic.service.FileStorageService;
 import com.nexxserve.nexxclinic.service.InvoicePdfGenerator;
+import com.nexxserve.nexxclinic.service.PaperSize;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -59,6 +60,7 @@ public class InvoiceGenerator {
     private final TransactionTemplate transactionTemplate;
     private final TransactionTemplate readOnlyTransactionTemplate;
     private final int signedUrlExpirySeconds;
+    private final PaperSize invoicePaperSize;
 
     private static final Logger log = LoggerFactory.getLogger(InvoiceGenerator.class);
 
@@ -74,7 +76,8 @@ public class InvoiceGenerator {
         FileStorageService storageService,
         SupabaseProperties storageProps,
         PlatformTransactionManager transactionManager,
-        @Value("${billing.invoice.signed-url-expiry-seconds:300}") int signedUrlExpirySeconds
+        @Value("${billing.invoice.signed-url-expiry-seconds:300}") int signedUrlExpirySeconds,
+        @Value("${billing.invoice.paper-size:letter}") String paperSizeKey
     ) {
         this.departmentInsuranceBillingRepository = departmentInsuranceBillingRepository;
         this.clinicProfileRepository = clinicProfileRepository;
@@ -90,6 +93,8 @@ public class InvoiceGenerator {
         this.readOnlyTransactionTemplate = new TransactionTemplate(transactionManager);
         this.readOnlyTransactionTemplate.setReadOnly(true);
         this.signedUrlExpirySeconds = signedUrlExpirySeconds;
+        this.invoicePaperSize = PaperSize.from(paperSizeKey);
+        log.info("Invoice paper size set to: {} (scale={})", this.invoicePaperSize.key(), this.invoicePaperSize.scale());
     }
 
     public ApiResponse generateInvoice(
@@ -296,7 +301,8 @@ public class InvoiceGenerator {
                 tempFile,
                 billing,
                 snapshot.items(),
-                clinicProfile
+                clinicProfile,
+                invoicePaperSize
             );
 
             // Upload to Supabase Storage  data/{invoices}/{clinicName?}/invoice-{id}.pdf
