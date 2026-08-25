@@ -72,14 +72,14 @@ public class VisitService {
     private final PatientInsuranceRepository patientInsuranceRepository;
     private final DepartmentRepository departmentRepository;
     private final ProductRepository productRepository;
-    private final WorkerRepository workerRepository;
-
-    private final WorkerMapper workerMapper;
+    private final WorkerRepository workerRepository;    private final WorkerMapper workerMapper;
     private final PatientMapper patientMapper;
     private final PatientInsuranceMapper patientInsuranceMapper;
 
     // Delegate to the split services for DTO building
     private final VisitDepartmentService visitDepartmentService;
+
+    private final com.nexxserve.nexxclinic.repository.DepartmentInsuranceBillingRepository departmentInsuranceBillingRepository;
 
     public VisitService(
             VisitRepository visitRepository,
@@ -99,7 +99,8 @@ public class VisitService {
             WorkerMapper workerMapper,
             PatientMapper patientMapper,
             PatientInsuranceMapper patientInsuranceMapper,
-            VisitDepartmentService visitDepartmentService
+            VisitDepartmentService visitDepartmentService,
+            com.nexxserve.nexxclinic.repository.DepartmentInsuranceBillingRepository departmentInsuranceBillingRepository
     ) {
         this.visitRepository = visitRepository;
         this.visitInsuranceRepository = visitInsuranceRepository;
@@ -119,6 +120,7 @@ public class VisitService {
         this.patientMapper = patientMapper;
         this.patientInsuranceMapper = patientInsuranceMapper;
         this.visitDepartmentService = visitDepartmentService;
+        this.departmentInsuranceBillingRepository = departmentInsuranceBillingRepository;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -400,6 +402,10 @@ public class VisitService {
             return ApiResponse.error("Cancelled visit cannot be completed.");
         }
 
+        if (visit.getStatus() == VisitStatus.BILL_EDITING) {
+            return ApiResponse.error("Cannot complete a visit in billing edit mode. Use completeBillEditing first.");
+        }
+
         // D1/D2 fix: enforce unread-notes gate during completion.
         long unreadNotes = visitDepartmentNoteRepository.countUnreadNotesForVisit(visitId, actingUser.getId());
         if (unreadNotes > 0) {
@@ -528,6 +534,10 @@ public class VisitService {
             return ApiResponse.error("Completed visit cannot be cancelled.");
         }
 
+        if (visit.getStatus() == VisitStatus.BILL_EDITING) {
+            return ApiResponse.error("Cannot cancel a visit in billing edit mode. Use cancelBillEditing first.");
+        }
+
         // Billing guard: a visit that has been billed (any billing container exists)
         // cannot be cancelled — it has a financial and audit trail.
         if (!visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId).isEmpty()) {
@@ -567,12 +577,14 @@ public class VisitService {
 
         Visit visit = visitOptional.get();
         if (visit.getStatus() == VisitStatus.COMPLETED) {
-            return ApiResponse.error("Cannot add insurances to a completed visit.");
+            return ApiResponse.error("Cannot add insurances to a completed visit. Use startBillEditing to enter billing edit mode first.");
         }
 
         if (visit.getStatus() == VisitStatus.CANCELLED) {
             return ApiResponse.error("Cannot add insurances to a cancelled visit.");
         }
+
+        // BILL_EDITING: allowed — insurance mutations permitted in billing edit mode
 
         List<UUID> uniqueIds = normalizeUniqueIds(insuranceIds);
         if (uniqueIds.isEmpty()) {
@@ -616,12 +628,14 @@ public class VisitService {
 
         Visit visit = visitOptional.get();
         if (visit.getStatus() == VisitStatus.COMPLETED) {
-            return ApiResponse.error("Cannot remove insurances from a completed visit.");
+            return ApiResponse.error("Cannot remove insurances from a completed visit. Use startBillEditing to enter billing edit mode first.");
         }
 
         if (visit.getStatus() == VisitStatus.CANCELLED) {
             return ApiResponse.error("Cannot remove insurances from a cancelled visit.");
         }
+
+        // BILL_EDITING: allowed — insurance mutations permitted in billing edit mode
 
         List<UUID> uniqueIds = normalizeUniqueIds(insuranceIds);
         if (uniqueIds.isEmpty()) {
@@ -638,6 +652,16 @@ public class VisitService {
 
         if (linksToRemove.size() != uniqueIds.size()) {
             return ApiResponse.error("One or more insurances are not linked to this visit.");
+        }
+
+        // Guard: block removal of insurances that are already used in billing
+        for (UUID insuranceId : uniqueIds) {
+            if (departmentInsuranceBillingRepository.existsByVisitIdAndPatientInsuranceId(visitId, insuranceId)) {
+                return ApiResponse.error(
+                    "Cannot remove this insurance — it is already used in a bill. " +
+                    "Edit the bill first, change the insurance on the billed items, then remove it."
+                );
+            }
         }
 
         visitInsuranceRepository.deleteAll(linksToRemove);
@@ -950,9 +974,10 @@ public class VisitService {
     }
 
     public void reopenVisitIfCompleted(Visit visit) {
+        // BILL_EDITING: visits in BILL_EDITING mode stay in BILL_EDITING.
+        // COMPLETED visits are no longer auto-reopened — use startBillEditing instead.
         if (visit.getStatus() == VisitStatus.COMPLETED) {
-            visit.setStatus(VisitStatus.IN_PROGRESS);
-            visitRepository.save(visit);
+            // No longer auto-reopen. Use startBillEditing mutation.
         }
     }
 

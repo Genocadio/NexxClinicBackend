@@ -60,6 +60,17 @@ public class DepartmentInsuranceBilling {
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal outstandingAmount;
 
+    /**
+     * Classifies the unpaid outstanding portion:
+     * LOAN = patient still owes, GIVEAWAY = clinic absorbs.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "outstanding_type", length = 16)
+    private com.nexxserve.nexxclinic.model.OutstandingType outstandingType;
+
+    @Column(name = "outstanding_reason", length = 500)
+    private String outstandingReason;
+
     @Column
     private String invoiceUrl;
 
@@ -206,6 +217,22 @@ public class DepartmentInsuranceBilling {
 
     public void setInvoiceUrl(String invoiceUrl) {
         this.invoiceUrl = invoiceUrl;
+    }
+
+    public com.nexxserve.nexxclinic.model.OutstandingType getOutstandingType() {
+        return outstandingType;
+    }
+
+    public void setOutstandingType(com.nexxserve.nexxclinic.model.OutstandingType outstandingType) {
+        this.outstandingType = outstandingType;
+    }
+
+    public String getOutstandingReason() {
+        return outstandingReason;
+    }
+
+    public void setOutstandingReason(String outstandingReason) {
+        this.outstandingReason = outstandingReason;
     }
 
     public List<VisitBillingItem> getItems() {

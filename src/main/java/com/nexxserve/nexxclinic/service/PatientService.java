@@ -107,6 +107,8 @@ public class PatientService {
         UUID insuranceProviderId = input == null ? null : input.insuranceProviderId();
         String phoneNumber = input == null ? null : blankToNull(input.phoneNumber());
         String name = input == null ? null : blankToNull(input.name());
+        String insuranceCardNumber = input == null ? null : blankToNull(input.insuranceCardNumber());
+        String gender = input == null ? null : blankToNull(input.gender());
 
         if (insuranceProviderId != null && !insuranceProviderRepository.existsById(insuranceProviderId)) {
             return ApiResponse.error("Insurance provider not found.");
@@ -116,6 +118,7 @@ public class PatientService {
         // Only invoke Meilisearch when there's at least one search param;
         // plain pagination/listing goes straight to the database.
         boolean hasSearchParams = name != null || phoneNumber != null || insuranceProviderId != null
+                || insuranceCardNumber != null || gender != null
                 || exactAge != null || minAge != null || maxAge != null;
         if (hasSearchParams && meilisearchIndexService.isEnabled()) {
             try {
@@ -123,6 +126,8 @@ public class PatientService {
                         name,
                         phoneNumber,
                         insuranceProviderId,
+                        insuranceCardNumber,
+                        gender,
                         exactAge,
                         minAge,
                         maxAge,
@@ -142,6 +147,31 @@ public class PatientService {
         }
 
         Specification<Patient> spec = (root, query, cb) -> cb.conjunction();
+
+        // Insurance card number filter
+        if (insuranceCardNumber != null) {
+            String normalizedCard = insuranceCardNumber.toLowerCase();
+            Set<UUID> cardPatientIds = patientInsuranceRepository.findAll().stream()
+                    .filter(pi -> pi.getInsuranceCardNumber() != null
+                            && pi.getInsuranceCardNumber().toLowerCase().contains(normalizedCard))
+                    .map(pi -> pi.getPatient().getId())
+                    .collect(java.util.stream.Collectors.toSet());
+
+            if (cardPatientIds.isEmpty()) {
+                return ApiResponse.success(
+                        "Patients fetched.",
+                        List.of(),
+                        new com.nexxserve.nexxclinic.dto.out.PaginationDto(0, size, page, 0)
+                );
+            }
+
+            spec = spec.and((root, query, cb) -> root.get("id").in(cardPatientIds));
+        }
+
+        // Gender filter
+        if (gender != null) {
+            spec = spec.and((root, query, cb) -> cb.equal(cb.lower(root.get("gender")), gender.toLowerCase()));
+        }
 
         // Insurance provider filter
         if (insuranceProviderId != null) {

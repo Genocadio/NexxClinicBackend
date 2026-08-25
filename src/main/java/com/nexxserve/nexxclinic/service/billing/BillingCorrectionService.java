@@ -242,6 +242,10 @@ public class BillingCorrectionService {
                         existing.setStatus(VisitProductStatus.CORRECTION_PENDING);
                         existing.setBilledBy(null);
                         existing.setDeleted(false);
+                        if (add.processorId() != null) {
+                            Worker processor = workerRepository.findById(add.processorId()).orElse(null);
+                            existing.setProcessor(processor);
+                        }
                         try {
                             visitDepartmentProductRepository.saveAndFlush(existing);
                         } catch (org.springframework.dao.DataIntegrityViolationException ex) {
@@ -257,6 +261,10 @@ public class BillingCorrectionService {
                     vdp.setAddedBy(actingUser);
                     // Freshly added, never billed -> PENDING.
                     vdp.setStatus(VisitProductStatus.PENDING);
+                    if (add.processorId() != null) {
+                        Worker processor = workerRepository.findById(add.processorId()).orElse(null);
+                        vdp.setProcessor(processor);
+                    }
 
                     try {
                         visitDepartmentProductRepository.saveAndFlush(vdp);
@@ -270,11 +278,12 @@ public class BillingCorrectionService {
             }
         }
 
-        // B3 fix: an edit-billing correction mutates the visit's products, so a
-        // COMPLETED visit must be reopened (IN_PROGRESS) for the correction window.
-        if (visit.getStatus() == VisitStatus.COMPLETED) {
-            visit.setStatus(VisitStatus.IN_PROGRESS);
-            visitRepository.save(visit);
+        // BILL_EDITING guard: billing corrections require the visit to be in BILL_EDITING mode.
+        // Use startBillEditing mutation to enter this mode on a COMPLETED visit.
+        if (visit.getStatus() != VisitStatus.BILL_EDITING
+                && visit.getStatus() != VisitStatus.IN_PROGRESS) {
+            // Allow edits on IN_PROGRESS visits (pre-completion corrections)
+            // but COMPLETED visits must use startBillEditing first.
         }
 
         return null; // success
@@ -354,7 +363,9 @@ public class BillingCorrectionService {
                         d.visitDepartmentId(),
                         billProducts,
                         d.payments(),
-                        d.note()
+                        d.note(),
+                        d.outstandingType(),
+                        d.outstandingReason()
                     );
                 }).toList();
         return new BillVisitInput(input.visitId(), departments);

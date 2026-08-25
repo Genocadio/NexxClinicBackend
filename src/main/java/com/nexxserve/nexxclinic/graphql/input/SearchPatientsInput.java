@@ -12,6 +12,12 @@ public record SearchPatientsInput(
         String phoneNumber,
         UUID insuranceProviderId,
 
+        @Size(max = 50, message = "insuranceCardNumber must not exceed 50 characters")
+        String insuranceCardNumber,
+
+        @Size(max = 10, message = "gender must not exceed 10 characters")
+        String gender,
+
         @Min(value = 0, message = "age must be 0 or greater")
         Integer age,
 

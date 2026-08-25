@@ -96,5 +96,18 @@ public interface DepartmentInsuranceBillingRepository extends JpaRepository<Depa
      * of hard-deleted even when no visit link or billing item points at it.
      */
     boolean existsByPatientInsuranceIdAndInvoiceUrlIsNotNull(UUID patientInsuranceId);
+
+    /**
+     * Whether any billing bucket for the given visit references the specified patient insurance.
+     */
+    @Query("""
+            SELECT COUNT(b) > 0 FROM DepartmentInsuranceBilling b
+            WHERE b.visitDepartmentBilling.visitBilling.visit.id = :visitId
+              AND b.patientInsurance.id = :patientInsuranceId
+            """)
+    boolean existsByVisitIdAndPatientInsuranceId(
+            @Param("visitId") UUID visitId,
+            @Param("patientInsuranceId") UUID patientInsuranceId
+    );
 }
 

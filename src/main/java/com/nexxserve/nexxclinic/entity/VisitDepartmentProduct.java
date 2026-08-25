@@ -43,7 +43,7 @@ public class VisitDepartmentProduct {
     private BigDecimal quantity;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 16)
+    @Column(nullable = false, length = 32)
     private VisitProductStatus status;
 
     /**

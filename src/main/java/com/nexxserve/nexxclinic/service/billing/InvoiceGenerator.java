@@ -117,6 +117,8 @@ public class InvoiceGenerator {
         DepartmentInsuranceBilling billing = snapshot.billing();
 
         // Invoice already stored — return a fresh download URL (pure IO, no DB tx held).
+        // If the stored URL can't be resolved (e.g. file missing from storage),
+        // fall through to regenerate a fresh PDF below.
         if (hasText(billing.getInvoiceUrl())) {
             try {
                 String url = resolveDownloadUrl(billing.getInvoiceUrl());
@@ -125,9 +127,13 @@ public class InvoiceGenerator {
                     Map.of("signedUrl", url)
                 );
             } catch (Exception e) {
-                return ApiResponse.error(
-                    "Invoice exists but could not generate download URL."
+                log.warn(
+                    "Stored invoice URL {} for billing {} could not be resolved ({}), regenerating.",
+                    billing.getInvoiceUrl(),
+                    departmentInsuranceBillingId,
+                    e.getMessage()
                 );
+                // Fall through to Phase 2 to regenerate the PDF.
             }
         }
 
@@ -234,6 +240,14 @@ public class InvoiceGenerator {
             .getVisit();
         if (visit == null) {
             return InvoiceSnapshot.error("Visit not found for billing.");
+        }
+
+        // BLOCK: invoices must not be generated while the visit is in BILL_EDITING
+        // mode — the billing data is in flux and the invoice would be incorrect.
+        if (visit.getStatus() == com.nexxserve.nexxclinic.model.VisitStatus.BILL_EDITING) {
+            return InvoiceSnapshot.error(
+                "Cannot generate invoice while the visit is in billing edit mode. Complete or cancel the edit first."
+            );
         }
 
         // Flow I: invoices are only ever generated for the LATEST billing version.

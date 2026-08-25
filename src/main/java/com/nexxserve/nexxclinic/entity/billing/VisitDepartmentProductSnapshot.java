@@ -55,7 +55,7 @@ public class VisitDepartmentProductSnapshot {
     private BigDecimal unitPrice;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 16)
+    @Column(nullable = false, length = 32)
     private VisitProductStatus status;
 
     @ManyToOne(fetch = FetchType.LAZY)

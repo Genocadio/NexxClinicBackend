@@ -17,6 +17,7 @@ import com.nexxserve.nexxclinic.entity.Product;
 import com.nexxserve.nexxclinic.entity.Worker;
 import com.nexxserve.nexxclinic.model.ProductType;
 import com.nexxserve.nexxclinic.model.RoleName;
+import com.nexxserve.nexxclinic.entity.PatientInsurance;
 import com.nexxserve.nexxclinic.repository.PatientInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.PatientRepository;
 import com.nexxserve.nexxclinic.repository.ProductRepository;
@@ -182,6 +183,8 @@ public class MeilisearchIndexService {
             String query,
             String phoneNumber,
             UUID insuranceProviderId,
+            String insuranceCardNumber,
+            String gender,
             Integer exactAge,
             Integer minAge,
             Integer maxAge,
@@ -194,9 +197,15 @@ public class MeilisearchIndexService {
         if (phoneNumber != null && !phoneNumber.isBlank()) {
             q = (q == null || q.isBlank()) ? phoneNumber : q + " " + phoneNumber;
         }
+        if (insuranceCardNumber != null && !insuranceCardNumber.isBlank()) {
+            q = (q == null || q.isBlank()) ? insuranceCardNumber : q + " " + insuranceCardNumber;
+        }
 
         if (insuranceProviderId != null) {
             filters.add("insuranceProviderIds = \"" + insuranceProviderId + "\"");
+        }
+        if (gender != null && !gender.isBlank()) {
+            filters.add("gender = \"" + gender.toUpperCase() + "\"");
         }
 
         // Age filters are translated into dateOfBirth ranges (same math the DB path uses).
@@ -318,7 +327,7 @@ public class MeilisearchIndexService {
         if (patient == null) {
             return;
         }
-        Map<String, Object> doc = patientDocument(patient, insuranceProviderIdsFor(patient.getId()));
+        Map<String, Object> doc = patientDocument(patient, insuranceIndexDataFor(patient.getId()));
         upsert(PATIENTS_INDEX, doc);
     }
 
@@ -338,17 +347,22 @@ public class MeilisearchIndexService {
         deleteById(PATIENTS_INDEX, id);
     }
 
-    private Set<UUID> insuranceProviderIdsFor(UUID patientId) {
-        return patientInsuranceRepository.findByPatientId(patientId)
-                .stream()
-                // Deactivated policies are no longer applicable, so they must not
-                // match a provider filter in patient search.
+    private record InsuranceIndexData(Set<UUID> providerIds, List<String> cardNumbers) {}
+
+    private InsuranceIndexData insuranceIndexDataFor(UUID patientId) {
+        List<PatientInsurance> insurances = patientInsuranceRepository.findByPatientId(patientId);
+        Set<UUID> providerIds = insurances.stream()
                 .filter(pi -> !pi.isDeactivated())
                 .map(pi -> pi.getInsuranceProvider().getId())
                 .collect(Collectors.toSet());
+        List<String> cardNumbers = insurances.stream()
+                .map(PatientInsurance::getInsuranceCardNumber)
+                .filter(c -> c != null && !c.isBlank())
+                .toList();
+        return new InsuranceIndexData(providerIds, cardNumbers);
     }
 
-    private Map<String, Object> patientDocument(Patient patient, Set<UUID> insuranceProviderIds) {
+    private Map<String, Object> patientDocument(Patient patient, InsuranceIndexData indexData) {
         Map<String, Object> doc = new LinkedHashMap<>();
         doc.put("id", patient.getId().toString());
         doc.put("patientIdentifier", patient.getPatientIdentifier());
@@ -361,9 +375,12 @@ public class MeilisearchIndexService {
         doc.put("passportNumber", patient.getPassportNumber());
         doc.put("dateOfBirth", patient.getDateOfBirth() == null ? null : toEpochDay(patient.getDateOfBirth()));
         doc.put("gender", patient.getGender() == null ? null : patient.getGender().name());
-        doc.put("insuranceProviderIds", insuranceProviderIds == null
+        doc.put("insuranceProviderIds", indexData == null || indexData.providerIds() == null
                 ? List.of()
-                : insuranceProviderIds.stream().map(UUID::toString).toList());
+                : indexData.providerIds().stream().map(UUID::toString).toList());
+        doc.put("insuranceCardNumbers", indexData == null || indexData.cardNumbers() == null
+                ? List.of()
+                : indexData.cardNumbers());
         doc.put("createdAt", patient.getCreatedAt() == null ? null : toEpochDay(patient.getCreatedAt().toLocalDate()));
         return doc;
     }
@@ -467,7 +484,7 @@ public class MeilisearchIndexService {
         Index index = client().index(PATIENTS_INDEX);
         List<Map<String, Object>> docs = new ArrayList<>();
         for (Patient patient : patientRepository.findAll()) {
-            docs.add(patientDocument(patient, insuranceProviderIdsFor(patient.getId())));
+            docs.add(patientDocument(patient, insuranceIndexDataFor(patient.getId())));
         }
         replaceAll(index, docs);
     }

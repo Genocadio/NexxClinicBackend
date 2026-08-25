@@ -2,6 +2,7 @@ package com.nexxserve.nexxclinic.graphql.input;
 
 import com.nexxserve.nexxclinic.model.CoverageType;
 import com.nexxserve.nexxclinic.model.ExemptionType;
+import com.nexxserve.nexxclinic.model.OutstandingType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -42,7 +43,10 @@ public record EditBillVisitInput(
         @Valid
         List<BillVisitInput.BillingPaymentInput> payments,
 
-        String note
+        String note,
+
+        OutstandingType outstandingType,
+        String outstandingReason
     ) {}
 
     public record EditBillVisitBillProductInput(
@@ -66,7 +70,9 @@ public record EditBillVisitInput(
         UUID productId,
 
         @NotNull(message = "quantity is required")
-        BigDecimal quantity
+        BigDecimal quantity,
+
+        UUID processorId
     ) {}
 
     public record EditBillVisitUpdateProductInput(

@@ -2,6 +2,7 @@ package com.nexxserve.nexxclinic.graphql.input;
 
 import com.nexxserve.nexxclinic.model.CoverageType;
 import com.nexxserve.nexxclinic.model.ExemptionType;
+import com.nexxserve.nexxclinic.model.OutstandingType;
 import com.nexxserve.nexxclinic.model.PaymentMethod;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -32,7 +33,10 @@ public record BillVisitInput(
             @Valid
             List<BillingPaymentInput> payments,
 
-            String note
+            String note,
+
+            OutstandingType outstandingType,
+            String outstandingReason
     ) {
     }
 

@@ -149,6 +149,10 @@ public class VisitDepartmentService {
             return ApiResponse.error("Cannot add departments to a cancelled visit.");
         }
 
+        if (visit.getStatus() == VisitStatus.BILL_EDITING) {
+            return ApiResponse.error("Cannot add departments while the bill is being edited.");
+        }
+
         Optional<Department> departmentOptional = departmentRepository.findById(departmentId);
         if (departmentOptional.isEmpty()) {
             return ApiResponse.error("Department not found.");
@@ -637,6 +641,51 @@ public class VisitDepartmentService {
         return ApiResponse.success("Child visit department removed.", visitDepartmentToDto(parent));
     }
 
+    @Transactional
+    public ApiResponse<com.nexxserve.nexxclinic.dto.out.VisitDto> removeVisitDepartment(UUID visitDepartmentId, AuthenticatedUser authUser) {
+        if (visitDepartmentId == null) {
+            return ApiResponse.error("visitDepartmentId is required.");
+        }
+
+        Optional<VisitDepartment> departmentOptional = visitDepartmentRepository.findById(visitDepartmentId);
+        if (departmentOptional.isEmpty()) {
+            return ApiResponse.error("Visit department not found.");
+        }
+
+        VisitDepartment vd = departmentOptional.get();
+        if (vd.getParentVisitDepartment() != null) {
+            return ApiResponse.error("Use removeChildVisitDepartment for child departments.");
+        }
+
+        // Only allowed when the department has 0 products
+        List<VisitDepartmentProduct> products = visitDepartmentProductRepository
+                .findByVisitDepartmentIdIncludingDeleted(vd.getId());
+        if (!products.isEmpty()) {
+            return ApiResponse.error("Cannot remove a department that has products. Remove all products first.");
+        }
+
+        // FK guard: cannot remove if it has clinical/financial dependents
+        if (!visitDepartmentDiagnosisRepository.findByVisitDepartmentId(vd.getId()).isEmpty()
+                || !visitDepartmentMedicationRepository.findByVisitDepartmentId(vd.getId()).isEmpty()
+                || !visitPreInstructionRepository.findByVisitDepartmentIdOrderByCreatedAtAsc(vd.getId()).isEmpty()
+                || visitDepartmentNoteServiceHasNotes(vd.getId())
+                || visitDepartmentBillingRepository.existsByVisitDepartmentId(vd.getId())) {
+            return ApiResponse.error("Cannot remove a department that has notes, diagnoses, medications, pre-instructions or billing history.");
+        }
+
+        Visit visit = vd.getVisit();
+        if (visit.getStatus() == VisitStatus.COMPLETED || visit.getStatus() == VisitStatus.CANCELLED) {
+            return ApiResponse.error("Cannot remove departments from a completed or cancelled visit.");
+        }
+        if (visit.getStatus() == VisitStatus.BILL_EDITING) {
+            return ApiResponse.error("Cannot remove departments while the bill is being edited.");
+        }
+
+        visitDepartmentRepository.delete(vd);
+
+        return ApiResponse.success("Department removed from visit.", visitService.visitToDto(visit, null, authUser));
+    }
+
     // ─────────────────────────────────────────────────────────────
     //  PRODUCTS
     // ─────────────────────────────────────────────────────────────
@@ -654,11 +703,15 @@ public class VisitDepartmentService {
 
         Visit visit = visitOptional.get();
         if (visit.getStatus() == VisitStatus.COMPLETED) {
-            return ApiResponse.error("Cannot add products to a completed visit.");
+            return ApiResponse.error("Cannot add products to a completed visit. Use startBillEditing to enter billing edit mode first.");
         }
 
         if (visit.getStatus() == VisitStatus.CANCELLED) {
             return ApiResponse.error("Cannot add products to a cancelled visit.");
+        }
+
+        if (visit.getStatus() == VisitStatus.BILL_EDITING) {
+            // Allowed: BILL_EDITING mode permits product mutations
         }
 
         Optional<VisitDepartment> visitDepartmentOptional = visitDepartmentRepository.findByVisitIdAndDepartmentId(input.visitId(), input.departmentId());
@@ -1013,6 +1066,94 @@ public class VisitDepartmentService {
 
         VisitDepartment saved = visitDepartmentRepository.save(department);
         return ApiResponse.success("Visit department processor removed.", visitDepartmentToDto(saved));
+    }
+
+    /**
+     * Change (or clear) the processor assigned to an existing visit-department product.
+     *
+     * <p>Ownership guard: only the worker who originally added the product
+     * ({@code addedBy}) may reassign its processor, unless the caller has FINANCE
+     * or ADMIN role. FINANCE/ADMIN may assign any worker; other roles may only pick
+     * from workers already linked to the visit department.
+     */
+    @Transactional
+    public ApiResponse<VisitDepartmentDto> updateVisitDepartmentProductProcessor(
+            com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentProductProcessorInput input,
+            AuthenticatedUser authUser
+    ) {
+        if (input == null || input.visitDepartmentProductId() == null) {
+            return ApiResponse.error("visitDepartmentProductId is required.");
+        }
+
+        Optional<VisitDepartmentProduct> itemOpt = visitDepartmentProductRepository.findById(input.visitDepartmentProductId());
+        if (itemOpt.isEmpty()) {
+            return ApiResponse.error("Visit department product not found.");
+        }
+
+        VisitDepartmentProduct item = itemOpt.get();
+        VisitDepartment visitDepartment = item.getVisitDepartment();
+
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.CANCELLED) {
+            return ApiResponse.error("Cannot change processor on a cancelled department.");
+        }
+
+        // BILL_EDITING mode: allow processor changes on completed/billing departments.
+        Visit visit = visitDepartment.getVisit();
+        boolean billEditingMode = visit != null && visit.getStatus() == VisitStatus.BILL_EDITING;
+
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.COMPLETED && !billEditingMode) {
+            return ApiResponse.error("Cannot change processor on a completed department.");
+        }
+
+        // BILLING guard: once a department is billed, only FINANCE/ADMIN can change processor.
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.BILLING
+                && visitDepartmentBillingRepository.existsByVisitDepartmentId(visitDepartment.getId())
+                && !billEditingMode) {
+            if (!hasFinanceOrAdminRole(authUser)) {
+                return ApiResponse.error("Cannot change processor on a billed department. Only FINANCE or ADMIN can do this.");
+            }
+        }
+
+        Worker actingUser = resolveWorker(authUser);
+        boolean isFinanceOrAdmin = hasFinanceOrAdminRole(authUser);
+
+        // Ownership guard: only the worker who added the product can change its processor,
+        // unless the caller is FINANCE or ADMIN.
+        if (!isFinanceOrAdmin && actingUser != null && item.getAddedBy() != null
+                && !actingUser.getId().equals(item.getAddedBy().getId())) {
+            return ApiResponse.error("Only the worker who added this product can change its processor.");
+        }
+
+        // Resolve the new processor (null means clear).
+        Worker newProcessor = null;
+        if (input.processorId() != null) {
+            // FINANCE/ADMIN may assign any worker; others must pick from the department's processors.
+            if (isFinanceOrAdmin) {
+                Optional<Worker> workerOpt = workerRepository.findById(input.processorId());
+                if (workerOpt.isEmpty()) {
+                    return ApiResponse.error("Processor worker not found.");
+                }
+                newProcessor = workerOpt.get();
+            } else {
+                List<Worker> deptProcessors = normalizeVisitDepartmentProcessors(visitDepartment);
+                newProcessor = findProcessorById(deptProcessors, input.processorId());
+                if (newProcessor == null) {
+                    return ApiResponse.error("processorId must belong to the visit department processors.");
+                }
+            }
+        }
+
+        item.setProcessor(newProcessor);
+        visitDepartmentProductRepository.save(item);
+        return ApiResponse.success("Product processor updated.", visitDepartmentToDto(visitDepartment));
+    }
+
+    private boolean hasFinanceOrAdminRole(AuthenticatedUser authUser) {
+        if (authUser == null || authUser.roles() == null) {
+            return false;
+        }
+        return authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.FINANCE)
+                || authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.ADMIN);
     }
 
     @Transactional
@@ -1463,7 +1604,11 @@ public class VisitDepartmentService {
             return null;
         }
 
-        return ApiResponse.error("processorId is required when the visit department has multiple processors.");
+        // Multiple processors and no explicit processorId: assign the first one
+        // rather than blocking. The billing UI can reassign later via
+        // updateVisitDepartmentProductProcessor if needed.
+        item.setProcessor(processors.get(0));
+        return null;
     }
 
     private List<Worker> resolveAvailableProcessorsForProductAssignment(VisitDepartment visitDepartment) {

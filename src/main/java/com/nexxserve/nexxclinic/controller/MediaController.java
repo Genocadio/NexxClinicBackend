@@ -39,7 +39,7 @@ public class MediaController {
         this.props = props;
     }
 
-    @GetMapping("/{bucket}/{path:.+}")
+    @GetMapping("/{bucket}/{*path}")
     public ResponseEntity<Resource> serveFile(
             @PathVariable String bucket,
             @PathVariable String path
@@ -52,6 +52,11 @@ public class MediaController {
         // Only LocalStorageService has the resolve() method
         if (!(storageService instanceof LocalStorageService local)) {
             return ResponseEntity.notFound().build();
+        }
+
+        // Strip leading slash if present (Spring PathPatternParser includes it in {*path})
+        if (path.startsWith("/")) {
+            path = path.substring(1);
         }
 
         Path file = local.resolve(bucket, path);

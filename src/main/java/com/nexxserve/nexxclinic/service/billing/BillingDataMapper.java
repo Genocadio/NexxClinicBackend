@@ -98,6 +98,8 @@ public class BillingDataMapper {
         data.put("patientPayableAmount", billing.getPatientPayableAmount());
         data.put("paidAmount", billing.getPaidAmount());
         data.put("outstandingAmount", billing.getOutstandingAmount());
+        data.put("outstandingType", billing.getOutstandingType() != null ? billing.getOutstandingType().name() : null);
+        data.put("outstandingReason", billing.getOutstandingReason());
         data.put(
             "items",
             billing

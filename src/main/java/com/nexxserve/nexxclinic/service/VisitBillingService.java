@@ -190,6 +190,22 @@ public class VisitBillingService {
         // runs, so the pessimistic lock must be acquired here, before any mutation.
         visitRepository.findByIdForUpdate(input.visitId());
 
+        // BILL_EDITING guard: editing an already-billed visit requires BILL_EDITING mode.
+        // Use startBillEditing mutation to enter this mode on a COMPLETED visit.
+        java.util.Optional<com.nexxserve.nexxclinic.entity.Visit> visitCheck =
+            visitRepository.findById(input.visitId());
+        if (visitCheck.isPresent()) {
+            com.nexxserve.nexxclinic.entity.Visit v = visitCheck.get();
+            if (v.getStatus() == com.nexxserve.nexxclinic.model.VisitStatus.COMPLETED) {
+                return ApiResponse.error(
+                    "Visit is COMPLETED. Use startBillEditing to enter billing edit mode first."
+                );
+            }
+            if (v.getStatus() == com.nexxserve.nexxclinic.model.VisitStatus.CANCELLED) {
+                return ApiResponse.error("Cannot edit billing on a cancelled visit.");
+            }
+        }
+
         // Error-correction workflow:
         // 1) Synchronize visit department products (add/remove/update)
         // 2) Create a new immutable billing version from the corrected visit state
@@ -891,6 +907,12 @@ public class VisitBillingService {
         VisitBilling visitBilling = new VisitBilling();
         visitBilling.setVisit(visit);
 
+        // Lookup map: visitDepartmentId -> department input (for outstandingType/reason)
+        Map<UUID, BillVisitInput.BillVisitDepartmentInput> deptInputById = new HashMap<>();
+        for (BillVisitInput.BillVisitDepartmentInput d : departmentsToProcess) {
+            deptInputById.put(d.visitDepartmentId(), d);
+        }
+
         for (Map.Entry<
             BillingGroup,
             List<VisitDepartmentProduct>
@@ -1154,6 +1176,12 @@ public class VisitBillingService {
             insuranceBilling.setStatus(
                 paymentDistributor.resolveBillingStatus(paidAmount, patientPayable)
             );
+            // Set outstanding classification from the department input
+            BillVisitInput.BillVisitDepartmentInput deptInput = deptInputById.get(group.rootVisitDepartmentId());
+            if (deptInput != null) {
+                insuranceBilling.setOutstandingType(deptInput.outstandingType());
+                insuranceBilling.setOutstandingReason(deptInput.outstandingReason());
+            }
 
             departmentBilling.setTotalAmount(
                 toMoney(departmentBilling.getTotalAmount().add(total))

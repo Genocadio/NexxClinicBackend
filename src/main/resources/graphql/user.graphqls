@@ -104,6 +104,7 @@ enum VisitStatus {
   IN_PROGRESS
   CANCELLED
   COMPLETED
+  BILL_EDITING
 }
 
 enum VisitProductStatus {
@@ -725,6 +726,9 @@ type DepartmentInsuranceBilling {
   patientPayableAmount: Float!
   paidAmount: Float!
   outstandingAmount: Float!
+  "LOAN if patient owes, GIVEAWAY if clinic absorbs — null when fully paid."
+  outstandingType: String
+  outstandingReason: String
   items: [VisitBillingItem!]!
   createdAt: String!
   updatedAt: String!
@@ -772,6 +776,17 @@ type VisitBillingResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
     data: VisitBilling
+}
+
+type BillEditingResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+    data: BillEditingData
+}
+
+type BillEditingData {
+  visitId: ID!
+  status: String!
 }
 
 type ClinicProfile {
@@ -1159,6 +1174,8 @@ input SearchPatientsInput {
   name: String
   phoneNumber: String
   insuranceProviderId: ID
+  insuranceCardNumber: String
+  gender: String
   age: Int
   minAge: Int
   maxAge: Int
@@ -1331,6 +1348,19 @@ input UpdateVisitDepartmentProductStatusInput {
   status: VisitProductStatus!
 }
 
+input UpdateVisitDepartmentProductProcessorInput {
+  """ID of the visit-department-product whose processor to change."""
+  visitDepartmentProductId: ID!
+  """
+  ID of the worker to assign as processor. Pass null to clear.
+  - FINANCE/ADMIN may assign any worker.
+  - Others may only pick from the visit department's existing processors.
+  - Only the worker who originally added the product may change it (ownership guard),
+    unless the caller is FINANCE or ADMIN.
+  """
+  processorId: ID
+}
+
 input UpdateVisitDepartmentStatusInput {
   visitDepartmentId: ID!
   status: VisitDepartmentStatus!
@@ -1379,6 +1409,10 @@ input BillVisitDepartmentInput {
   does not cover the full payable amount. Optional otherwise.
   """
   note: String
+  """LOAN if patient owes, GIVEAWAY if clinic absorbs the outstanding balance."""
+  outstandingType: String
+  """Free-text reason for the loan or giveaway."""
+  outstandingReason: String
 }
 
 input BillVisitInput {
@@ -1407,11 +1441,14 @@ input EditBillVisitDepartmentInput {
   billProducts: [EditBillVisitBillProductInput!]!
   payments: [BillingPaymentInput!]
   note: String
+  outstandingType: String
+  outstandingReason: String
 }
 
 input EditBillVisitAddProductInput {
   productId: ID!
   quantity: Float!
+  processorId: ID
 }
 
 input EditBillVisitUpdateProductInput {
@@ -1721,12 +1758,16 @@ type Mutation {
   """
   addChildVisitDepartment(input: AddChildVisitDepartmentInput!): VisitDepartmentResponse!
   removeChildVisitDepartment(visitDepartmentId: ID!): VisitDepartmentResponse!
+  """Remove a top-level visit department from a visit. Only allowed when the department has 0 products."""
+  removeVisitDepartment(visitDepartmentId: ID!): VisitResponse!
   addVisitDepartmentProcessor(visitDepartmentId: ID!, processorId: ID!): VisitDepartmentResponse!
   removeVisitDepartmentProcessor(visitDepartmentId: ID!, processorId: ID!): VisitDepartmentResponse!
   linkVisitInsurances(visitId: ID!, insuranceIds: [ID!]!): VisitResponse!
   unlinkVisitInsurances(visitId: ID!, insuranceIds: [ID!]!): VisitResponse!
   completeVisitDepartment(visitDepartmentId: ID!): VisitDepartmentResponse!
   addVisitDepartmentProduct(input: CreateVisitDepartmentProductInput!): VisitDepartmentResponse!
+  """Change (or clear) the processor on an existing visit-department product."""
+  updateVisitDepartmentProductProcessor(input: UpdateVisitDepartmentProductProcessorInput!): VisitDepartmentResponse!
   updateVisitDepartmentProductStatus(input: UpdateVisitDepartmentProductStatusInput!): VisitDepartmentResponse!
   updateVisitDepartmentStatus(input: UpdateVisitDepartmentStatusInput!): VisitDepartmentResponse!
   updateVisitDepartmentProductQuantity(input: UpdateVisitDepartmentProductQuantityInput!): VisitDepartmentResponse!
@@ -1740,6 +1781,14 @@ type Mutation {
   generateInvoice(departmentInsuranceBillingId: ID!): InvoiceResponse!
   flushSoftDeletedVisitProducts(visitId: ID!): BooleanResponse!
   cancelVisit(visitId: ID!): VisitResponse!
+
+  # ── Bill Editing Mode ────────────────────────────────────────────────────
+  """Enter BILL_EDITING mode on a COMPLETED visit to allow billing corrections."""
+  startBillEditing(visitId: ID!): BillEditingResponse!
+  """Exit BILL_EDITING mode and lock billing back to COMPLETED."""
+  completeBillEditing(visitId: ID!): BillEditingResponse!
+  """Exit BILL_EDITING mode without saving (user cancelled the edit)."""
+  cancelBillEditing(visitId: ID!): BillEditingResponse!
   updateClinicProfile(input: UpdateClinicProfileInput!): ClinicProfileResponse!
   deleteClinicProfile: BooleanResponse!
   reindexSearchIndexes(indexes: [SearchIndexType!]!): BooleanResponse!

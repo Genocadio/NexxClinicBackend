@@ -40,9 +40,25 @@ public class LocalStorageService implements FileStorageService {
 
     private void initDirectories() {
         try {
+            // Legacy paths (without bucket prefix) — kept for backward compat.
             Files.createDirectories(storageRoot.resolve("uploads-public"));
             Files.createDirectories(storageRoot.resolve("uploads-private"));
             Files.createDirectories(storageRoot.resolve("invoices"));
+
+            // Bucket-prefixed paths — matches how upload() resolves:
+            //   storageRoot.resolve(bucket).resolve(objectPath)
+            String bucketPublic = props.getBucketPublic();
+            String bucketPrivate = props.getBucketPrivate();
+            String bucketInvoices = props.getBucketInvoices();
+            if (bucketPublic != null && !bucketPublic.isBlank()) {
+                Files.createDirectories(storageRoot.resolve(bucketPublic));
+            }
+            if (bucketPrivate != null && !bucketPrivate.isBlank()) {
+                Files.createDirectories(storageRoot.resolve(bucketPrivate));
+            }
+            if (bucketInvoices != null && !bucketInvoices.isBlank()) {
+                Files.createDirectories(storageRoot.resolve(bucketInvoices).resolve("invoices"));
+            }
             log.info("Local storage initialized at {}", storageRoot);
         } catch (IOException e) {
             throw new IllegalStateException(
