@@ -9,6 +9,7 @@ import com.microsoft.playwright.options.Margin;
 import jakarta.annotation.PreDestroy;
 import java.io.Closeable;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -91,6 +92,22 @@ public class InvoicePdfRenderer implements Closeable {
     // ═══════════════════════════════════════════════════════════════════════════
 
     private byte[] renderHtmlToPdf(String html, String paperSize) {
+        try {
+            return renderHtmlToPdfInternal(html, paperSize);
+        } catch (PlaywrightException e) {
+            // Browser may have crashed — force relaunch on next call, then retry once
+            log.warn("First render attempt failed for paper={}: {}", paperSize, e.getMessage());
+            close();
+            try {
+                return renderHtmlToPdfInternal(html, paperSize);
+            } catch (PlaywrightException retry) {
+                log.error("Retry render also failed for paper={}: {}", paperSize, retry.getMessage(), retry);
+                throw new RuntimeException("Invoice PDF rendering failed: " + retry.getMessage(), retry);
+            }
+        }
+    }
+
+    private byte[] renderHtmlToPdfInternal(String html, String paperSize) {
         ensureBrowser();
         try (Page page = browser.newPage()) {
             page.setContent(html, new Page.SetContentOptions().setWaitUntil(
@@ -103,8 +120,10 @@ public class InvoicePdfRenderer implements Closeable {
             log.debug("Rendered invoice PDF: {} bytes (paper={})", pdfBytes.length, paperSize);
             return pdfBytes;
         } catch (PlaywrightException e) {
-            log.error("Playwright PDF rendering failed for paper={}: {}", paperSize, e.getMessage(), e);
-            throw new RuntimeException("Invoice PDF rendering failed: " + e.getMessage(), e);
+            // Mark browser as potentially dead so next ensureBrowser() relaunches
+            log.error("Playwright PDF rendering failed for paper={}: {}", paperSize, e.getMessage());
+            close();
+            throw e;
         }
     }
 
@@ -144,15 +163,57 @@ public class InvoicePdfRenderer implements Closeable {
 
     private synchronized void ensureBrowser() {
         if (browser != null && browser.isConnected()) return;
+
+        // Try system-installed Chromium first (via Dockerfile pre-installation)
+        String[] chromiumPaths = {
+            "/usr/bin/chromium",
+            "/usr/bin/chromium-browser",
+            "/usr/bin/google-chrome",
+            "/usr/bin/google-chrome-stable",
+            "chromium",
+            "chromium-browser"
+        };
+
         try {
             playwright = Playwright.create();
-            browser = playwright.chromium().launch(
-                new BrowserType.LaunchOptions().setHeadless(true)
-            );
-            log.info("Playwright Chromium launched for invoice rendering");
+
+            BrowserType.LaunchOptions launchOpts = new BrowserType.LaunchOptions()
+                .setHeadless(true)
+                .setArgs(List.of(
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu"
+                ));
+
+            // Check for system-installed Chromium
+            boolean foundSystem = false;
+            for (String path : chromiumPaths) {
+                try {
+                    var process = Runtime.getRuntime().exec(new String[]{"which", path});
+                    int exitCode = process.waitFor();
+                    if (exitCode == 0) {
+                        String resolved = new String(process.getInputStream().readAllBytes()).trim();
+                        if (!resolved.isEmpty()) {
+                            log.info("Using system Chromium at: {}", resolved);
+                            launchOpts.setExecutablePath(Path.of(resolved));
+                            foundSystem = true;
+                            break;
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            browser = playwright.chromium().launch(launchOpts);
+            log.info("Playwright Chromium launched for invoice rendering{}",
+                    foundSystem ? " (system binary)" : " (Playwright-managed)");
         } catch (Exception e) {
+            close(); // clean up partial state
             log.error("Failed to launch Playwright Chromium: {}", e.getMessage(), e);
-            throw new RuntimeException("Cannot start headless browser for invoice rendering", e);
+            throw new RuntimeException(
+                "Cannot start headless browser for invoice rendering. " +
+                "Ensure Chromium is installed in the Docker image or Playwright drivers are available.",
+                e);
         }
     }
 

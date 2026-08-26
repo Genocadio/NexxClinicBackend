@@ -1,7 +1,5 @@
-#!/bin/sh
-# Entrypoint: fix Docker named-volume permissions, then run as spring user.
-# Named volumes are created by Docker daemon (root) on first use, so the
-# spring user (UID 1001) may not be able to create files inside them.
+#!/bin/bash
+# Entrypoint: fix Docker named-volume permissions, then drop to spring user.
 set -e
 
 STORAGE_DIR="/data/storage"
@@ -14,4 +12,4 @@ if [ -d "$STORAGE_DIR" ]; then
 fi
 
 # Drop from root → spring and exec the JVM
-exec su-exec spring java -jar app.jar
+exec runuser -u spring -- java -jar app.jar

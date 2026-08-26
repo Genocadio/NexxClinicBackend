@@ -88,6 +88,8 @@ services:
       # ── Storage ──
       STORAGE_TYPE: ${STORAGE_TYPE:-LOCAL}
       LOCAL_STORAGE_PATH: /data/storage
+      # ── Playwright ──
+      PLAYWRIGHT_BROWSERS_PATH: /opt/playwright-browsers
       # ── JWT ──
       JWT_SECRET: ${JWT_SECRET:-nexxclinic-local-dev-jwt-secret-change-in-production-32b}
       JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES:-480}

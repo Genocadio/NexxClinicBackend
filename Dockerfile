@@ -10,11 +10,51 @@ COPY src/ src/
 
 RUN gradle build --no-daemon -x test
 
-FROM eclipse-temurin:21-jre-alpine
+# ── Runtime: Debian-based (required for Playwright/Chromium — Alpine uses musl) ──
+FROM eclipse-temurin:21-jre-noble
 
-RUN apk add --no-cache wget su-exec && \
-    addgroup -g 1001 -S spring && \
-    adduser -u 1001 -S spring -G spring
+# Install system dependencies required by Playwright Chromium + curl for healthcheck
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Playwright Chromium runtime dependencies
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libdbus-1-3 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libasound2 \
+    libatspi2.0-0 \
+    libwayland-client0 \
+    # Fonts for proper text rendering (especially non-Latin characters)
+    fonts-dejavu-core \
+    fonts-liberation \
+    # Utilities
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js for Playwright driver (required by Java Playwright to manage browsers)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -g 1001 -S spring && \
+    useradd -u 1001 -S spring -g spring -s /bin/bash -m spring
+
+# Pre-install Playwright Chromium at build time (avoids runtime download).
+# Install into a shared location accessible by the spring user.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+RUN mkdir -p /opt/playwright-browsers && chown -R spring:spring /opt/playwright-browsers && \
+    su -s /bin/bash spring -c "npx -y playwright@1.44.0 install --with-deps chromium" || true
 
 WORKDIR /app
 
@@ -28,10 +68,10 @@ RUN mkdir -p /data/storage && \
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1
+    CMD curl -sf http://localhost:8080/actuator/health || exit 1
 
 # Run as root so entrypoint.sh can fix Docker volume permissions,
-# then drop to spring user via su-exec in the script.
+# then drop to spring user via runuser in the script.
 USER root
 
 ENTRYPOINT ["/app/entrypoint.sh"]
