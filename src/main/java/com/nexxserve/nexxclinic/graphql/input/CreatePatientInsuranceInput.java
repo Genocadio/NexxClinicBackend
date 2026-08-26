@@ -34,5 +34,12 @@ public record CreatePatientInsuranceInput(
         LocalDate validFrom,        @NotNull(message = "validUntil is required")
         LocalDate validUntil,
 
-        Integer patientSharePercentage
+        Integer patientSharePercentage,
+
+        /**
+         * Reference to an InsuranceCoverage record whose patientSharePercentage
+         * defines the patient's share. When provided, this takes precedence over
+         * the legacy patientSharePercentage integer.
+         */
+        UUID patientShareCoverageId
 ) {}

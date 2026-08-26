@@ -123,7 +123,7 @@ public class BillingPricingCalculator {
         PatientInsurance appliedInsurance,
         UUID departmentId,
         EncounterType encounterType,
-        Integer perLineOverride,
+        UUID perLineOverrideCoverageId,
         Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetchedCoverages
     ) {
         if (appliedInsurance == null) {
@@ -132,13 +132,19 @@ public class BillingPricingCalculator {
 
         UUID providerId = appliedInsurance.getInsuranceProvider().getId();
 
-        // Layer 1: per-line override — only accepted when no coverage blocks it
-        if (perLineOverride != null) {
-            if (isOverrideAllowed(providerId, departmentId, encounterType, prefetchedCoverages)) {
-                int clamped = Math.max(0, Math.min(100, perLineOverride));
+        // Layer 1: per-line override via InsuranceCoverage ID reference
+        // The frontend sends the ID of a specific InsuranceCoverage record;
+        // we look it up, validate it belongs to the same provider, and use
+        // its percentage — never trusting a raw client-supplied number.
+        if (perLineOverrideCoverageId != null) {
+            InsuranceCoverage overrideCoverage = resolveOverrideCoverage(
+                perLineOverrideCoverageId, providerId, prefetchedCoverages
+            );
+            if (overrideCoverage != null && isOverrideAllowed(providerId, departmentId, encounterType, prefetchedCoverages)) {
+                int clamped = Math.max(0, Math.min(100, overrideCoverage.getPatientSharePercentage()));
                 return new ResolvedPatientShare(clamped, PatientShareSource.OVERRIDE);
             }
-            // Override blocked — fall through to coverage resolution
+            // Override blocked or coverage not found — fall through to coverage resolution
         }
 
         // Layer 2: coverage-based resolution (most specific wins)
@@ -147,8 +153,15 @@ public class BillingPricingCalculator {
             return new ResolvedPatientShare(coveragePct, PatientShareSource.RULE);
         }
 
-        // Layer 3: patient-specific default
-        Integer patientDefault = appliedInsurance.getPatientSharePercentage();
+        // Layer 3: patient-specific default — prefer the FK reference to an
+        // InsuranceCoverage record (new path), fall back to the legacy integer column.
+        Integer patientDefault = null;
+        if (appliedInsurance.getPatientShareCoverage() != null) {
+            patientDefault = appliedInsurance.getPatientShareCoverage().getPatientSharePercentage();
+        }
+        if (patientDefault == null) {
+            patientDefault = appliedInsurance.getPatientSharePercentage();
+        }
         if (patientDefault != null) {
             return new ResolvedPatientShare(patientDefault, PatientShareSource.PATIENT_DEFAULT);
         }
@@ -206,6 +219,42 @@ public class BillingPricingCalculator {
         if (departmentId == null && covDeptId == null) return true;
         if (departmentId == null || covDeptId == null) return false;
         return departmentId.equals(covDeptId);
+    }
+
+    /**
+     * Resolves an InsuranceCoverage by its UUID, validating that it belongs
+     * to the same insurance provider as the applied insurance. Returns null
+     * if the ID is invalid, belongs to a different provider, or the record
+     * doesn't exist.
+     */
+    private InsuranceCoverage resolveOverrideCoverage(
+        UUID coverageId,
+        UUID providerId,
+        Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetchedCoverages
+    ) {
+        // Search through prefetched coverages for this ID
+        if (prefetchedCoverages != null) {
+            Map<UUID, List<InsuranceCoverage>> byDept = prefetchedCoverages.get(providerId);
+            if (byDept != null) {
+                for (List<InsuranceCoverage> deptCoverages : byDept.values()) {
+                    for (InsuranceCoverage cov : deptCoverages) {
+                        if (cov.getId().equals(coverageId)) {
+                            // Validate: must belong to the same provider
+                            if (cov.getInsuranceProvider() != null
+                                    && cov.getInsuranceProvider().getId().equals(providerId)) {
+                                return cov;
+                            }
+                            return null; // Different provider — reject
+                        }
+                    }
+                }
+            }
+        }
+        // Not in prefetched map — lazy-load from DB (works within @Transactional)
+        return coverageRepository.findById(coverageId)
+            .filter(cov -> cov.getInsuranceProvider() != null
+                && cov.getInsuranceProvider().getId().equals(providerId))
+            .orElse(null);
     }
 
     /**

@@ -606,7 +606,7 @@ public class VisitBillingService {
         Map<UUID, java.math.BigDecimal> requestedQuantityByItem =
             new LinkedHashMap<>();
         Map<UUID, ExemptionType> requestedExemptionTypeByItem = new LinkedHashMap<>();
-        Map<UUID, Integer> requestedPatientShareOverrideByItem = new LinkedHashMap<>();
+        Map<UUID, UUID> requestedPatientShareOverrideByItem = new LinkedHashMap<>();
         Set<UUID> requestedProductIds = new LinkedHashSet<>();
 
         List<VisitInsurance> visitInsurances =
@@ -1016,7 +1016,7 @@ public class VisitBillingService {
                 } catch (Exception e) {
                     log.warn("Failed to extract department/encounterType from item {}: {}", item.getId(), e.getMessage());
                 }
-                Integer override = requestedPatientShareOverrideByItem != null
+                UUID override = requestedPatientShareOverrideByItem != null
                     ? requestedPatientShareOverrideByItem.get(item.getId()) : null;
                 com.nexxserve.nexxclinic.service.billing.BillingPricingCalculator.ResolvedPatientShare resolved =
                     pricingCalculator.resolvePatientSharePercentage(

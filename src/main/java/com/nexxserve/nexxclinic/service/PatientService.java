@@ -10,6 +10,7 @@ import com.nexxserve.nexxclinic.mappers.out.PatientInsuranceMapper;
 import com.nexxserve.nexxclinic.mappers.out.PatientMapper;
 import com.nexxserve.nexxclinic.model.ResponseStatus;
 import com.nexxserve.nexxclinic.repository.DepartmentInsuranceBillingRepository;
+import com.nexxserve.nexxclinic.repository.InsuranceCoverageRepository;
 import com.nexxserve.nexxclinic.repository.InsuranceProviderRepository;
 import com.nexxserve.nexxclinic.repository.PatientInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.PatientRepository;
@@ -41,6 +42,7 @@ public class PatientService {
     private final VisitInsuranceRepository visitInsuranceRepository;
     private final VisitBillingItemRepository visitBillingItemRepository;
     private final DepartmentInsuranceBillingRepository departmentInsuranceBillingRepository;
+    private final InsuranceCoverageRepository insuranceCoverageRepository;
     private final VisitService visitService;
     private final MeilisearchIndexService meilisearchIndexService;
 
@@ -54,6 +56,7 @@ public class PatientService {
             VisitInsuranceRepository visitInsuranceRepository,
             VisitBillingItemRepository visitBillingItemRepository,
             DepartmentInsuranceBillingRepository departmentInsuranceBillingRepository,
+            InsuranceCoverageRepository insuranceCoverageRepository,
             VisitService visitService,
             MeilisearchIndexService meilisearchIndexService
     ) {
@@ -66,6 +69,7 @@ public class PatientService {
         this.visitInsuranceRepository = visitInsuranceRepository;
         this.visitBillingItemRepository = visitBillingItemRepository;
         this.departmentInsuranceBillingRepository = departmentInsuranceBillingRepository;
+        this.insuranceCoverageRepository = insuranceCoverageRepository;
         this.visitService = visitService;
         this.meilisearchIndexService = meilisearchIndexService;
     }
@@ -601,7 +605,24 @@ public class PatientService {
         }
 
         // Set patient-specific share percentage override (optional)
-        if (input.patientSharePercentage() != null) {
+        // New path: reference to an InsuranceCoverage record (takes precedence)
+        if (input.patientShareCoverageId() != null) {
+            Optional<com.nexxserve.nexxclinic.entity.InsuranceCoverage> coverageOpt =
+                insuranceCoverageRepository.findById(input.patientShareCoverageId());
+            if (coverageOpt.isEmpty()) {
+                return ApiResponse.error("InsuranceCoverage not found for the given patientShareCoverageId.");
+            }
+            com.nexxserve.nexxclinic.entity.InsuranceCoverage coverage = coverageOpt.get();
+            // Validate: coverage must belong to the same insurance provider
+            if (coverage.getInsuranceProvider() == null
+                    || !coverage.getInsuranceProvider().getId().equals(input.insuranceProviderId())) {
+                return ApiResponse.error("The selected coverage does not belong to the specified insurance provider.");
+            }
+            patientInsurance.setPatientShareCoverage(coverage);
+            // Also store the integer for backward compatibility
+            patientInsurance.setPatientSharePercentage(coverage.getPatientSharePercentage());
+        } else if (input.patientSharePercentage() != null) {
+            // Legacy path: raw integer (backward compatible)
             int pct = input.patientSharePercentage();
             if (pct < 0 || pct > 100) {
                 return ApiResponse.error("patientSharePercentage must be between 0 and 100.");
@@ -695,7 +716,30 @@ public class PatientService {
         }
 
         // Update patient-specific share percentage (null = clear it, use rules/provider default)
-        if (input.patientSharePercentage() != null) {
+        // New path: reference to an InsuranceCoverage record (takes precedence)
+        if (input.patientShareCoverageId() != null) {
+            Optional<com.nexxserve.nexxclinic.entity.InsuranceCoverage> coverageOpt =
+                insuranceCoverageRepository.findById(input.patientShareCoverageId());
+            if (coverageOpt.isEmpty()) {
+                org.springframework.transaction.interceptor.TransactionAspectSupport
+                    .currentTransactionStatus()
+                    .setRollbackOnly();
+                return ApiResponse.error("InsuranceCoverage not found for the given patientShareCoverageId.");
+            }
+            com.nexxserve.nexxclinic.entity.InsuranceCoverage coverage = coverageOpt.get();
+            UUID providerId = patientInsurance.getInsuranceProvider() != null
+                ? patientInsurance.getInsuranceProvider().getId() : null;
+            if (coverage.getInsuranceProvider() == null
+                    || !coverage.getInsuranceProvider().getId().equals(providerId)) {
+                org.springframework.transaction.interceptor.TransactionAspectSupport
+                    .currentTransactionStatus()
+                    .setRollbackOnly();
+                return ApiResponse.error("The selected coverage does not belong to the same insurance provider.");
+            }
+            patientInsurance.setPatientShareCoverage(coverage);
+            patientInsurance.setPatientSharePercentage(coverage.getPatientSharePercentage());
+        } else if (input.patientSharePercentage() != null) {
+            // Legacy path: raw integer (backward compatible)
             int pct = input.patientSharePercentage();
             if (pct < 0 || pct > 100) {
                 org.springframework.transaction.interceptor.TransactionAspectSupport

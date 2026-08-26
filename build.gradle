@@ -31,6 +31,10 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-logging'
 	implementation 'com.fasterxml.jackson.core:jackson-databind'
 	implementation 'org.apache.pdfbox:pdfbox:3.0.0'
+
+	// Invoice PDF rendering via Thymeleaf templates + headless Chromium
+	implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+	implementation 'com.microsoft.playwright:playwright:1.44.0'
 	implementation 'org.springframework:spring-aop'
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'

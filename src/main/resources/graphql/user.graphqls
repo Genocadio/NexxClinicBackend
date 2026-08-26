@@ -1155,6 +1155,8 @@ input CreatePatientInsuranceInput {
   validUntil: String!
   """Optional patient-specific default (0-100). Null = use rules then provider default."""
   patientSharePercentage: Int
+  """Reference to an InsuranceCoverage record. Takes precedence over patientSharePercentage. The backend validates provider ownership."""
+  patientShareCoverageId: ID
 }
 
 input UpdatePatientInsuranceInput {
@@ -1168,6 +1170,8 @@ input UpdatePatientInsuranceInput {
   validFrom: String
   validUntil: String
   patientSharePercentage: Int
+  """Reference to an InsuranceCoverage record. Takes precedence over patientSharePercentage. The backend validates provider ownership."""
+  patientShareCoverageId: ID
 }
 
 input SearchPatientsInput {
@@ -1379,8 +1383,8 @@ input BillVisitDepartmentProductInput {
   patientInsuranceId: ID
   """NONE, PATIENT_SHARE (patient waive, insurance still pays), or FULL (entire line zeroed)."""
   exemptionType: ExemptionType
-  """Override the resolved patient share % for this line. Null = use rule/provider default."""
-  patientSharePercentageOverride: Int
+  """Reference to an InsuranceCoverage record whose patientSharePercentage overrides the resolved % for this line. Null = use rule/provider default. The backend validates that the coverage belongs to the same insurance provider."""
+  patientSharePercentageOverride: ID
 }
 
 input EditBillVisitBillProductInput {
@@ -1390,8 +1394,8 @@ input EditBillVisitBillProductInput {
   quantity: Float
   """NONE, PATIENT_SHARE (patient waive, insurance still pays), or FULL (entire line zeroed)."""
   exemptionType: ExemptionType
-  """Override the resolved patient share % for this line. Null = use rule/provider default."""
-  patientSharePercentageOverride: Int
+  """Reference to an InsuranceCoverage record whose patientSharePercentage overrides the resolved % for this line. Null = use rule/provider default. The backend validates that the coverage belongs to the same insurance provider."""
+  patientSharePercentageOverride: ID
 }
 
 input BillingPaymentInput {

@@ -62,7 +62,7 @@ public record EditBillVisitInput(
 
         ExemptionType exemptionType,
 
-        Integer patientSharePercentageOverride
+        UUID patientSharePercentageOverride
     ) {}
 
     public record EditBillVisitAddProductInput(

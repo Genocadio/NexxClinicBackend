@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <th:block th:fragment="styles">
+    <style>
+      :root {
+        --c-primary:  #1c4580;
+        --c-white:    #ffffff;
+        --c-dark:     #1f1f29;
+        --c-mid:      #6b6e78;
+        --c-light-bg: #f0f2f7;
+        --c-alt-row:  #f7f7fa;
+        --c-border:   #bac0c6;
+        --c-tot-bg:   #f2f4f6;
+        --c-green:    #0f8033;
+        --c-orange:   #c46108;
+        --c-red:      #ad1414;
+        --scale: 1;
+      }
+
+      .invoice {
+        font-family: 'DejaVu Sans', Arial, sans-serif;
+        color: var(--c-dark);
+        width: 100%;
+        box-sizing: border-box;
+        font-size: calc(10px * var(--scale));
+        display: flex;
+        flex-direction: column;
+      }
+
+      .inv-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding-bottom: calc(10px * var(--scale));
+        border-bottom: calc(1.5px * var(--scale)) solid var(--c-primary);
+        margin-bottom: calc(10px * var(--scale));
+      }
+      .clinic-info { max-width: 65%; }
+      .clinic-name {
+        font-weight: bold;
+        font-size: calc(16px * var(--scale));
+        color: var(--c-primary);
+        margin: 0 0 calc(4px * var(--scale)) 0;
+      }
+      .clinic-line {
+        font-size: calc(9px * var(--scale));
+        color: var(--c-dark);
+        margin: calc(2px * var(--scale)) 0;
+      }
+      .clinic-tin {
+        font-size: calc(9px * var(--scale));
+        color: var(--c-mid);
+      }
+      .invoice-badge {
+        background: var(--c-primary);
+        color: var(--c-white);
+        font-weight: bold;
+        font-size: calc(18px * var(--scale));
+        letter-spacing: 2px;
+        padding: calc(14px * var(--scale)) calc(20px * var(--scale));
+        text-align: center;
+        min-width: calc(140px * var(--scale));
+      }
+
+      .inv-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: calc(16px * var(--scale));
+        background: var(--c-light-bg);
+        border: calc(0.5px * var(--scale)) solid var(--c-border);
+        padding: calc(10px * var(--scale)) calc(12px * var(--scale));
+        margin-bottom: calc(10px * var(--scale));
+      }
+      .inv-meta .col { flex: 1; min-width: 0; }
+      .meta-label {
+        font-size: calc(8px * var(--scale));
+        font-weight: bold;
+        color: var(--c-mid);
+        letter-spacing: 1px;
+        margin-bottom: calc(4px * var(--scale));
+      }
+      .meta-bold {
+        font-weight: bold;
+        font-size: calc(11px * var(--scale));
+        margin-bottom: calc(3px * var(--scale));
+      }
+      .meta-kv { font-size: calc(9px * var(--scale)); margin: calc(2px * var(--scale)) 0; }
+      .meta-kv .k { color: var(--c-mid); font-weight: bold; }
+      .meta-kv .v { color: var(--c-dark); }
+
+      .status-value { font-weight: bold; }
+      .status-icon  { font-weight: bold; margin-right: calc(4px * var(--scale)); }
+      .status-PAID            { color: var(--c-green); }
+      .status-PARTIALLY_PAID  { color: var(--c-orange); }
+      .status-UNPAID          { color: var(--c-red); }
+
+      table.items {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: calc(8px * var(--scale));
+        font-size: calc(9px * var(--scale));
+      }
+      table.items thead th {
+        background: var(--c-primary);
+        color: var(--c-white);
+        font-weight: bold;
+        padding: calc(6px * var(--scale)) calc(5px * var(--scale));
+        text-align: right;
+        border-right: calc(0.4px * var(--scale)) solid var(--c-white);
+      }
+      table.items thead th:first-child,
+      table.items thead th:nth-child(2) { text-align: left; }
+      table.items tbody td {
+        padding: calc(5px * var(--scale)) calc(5px * var(--scale));
+        border: calc(0.3px * var(--scale)) solid var(--c-border);
+        text-align: right;
+      }
+      table.items tbody td:first-child,
+      table.items tbody td:nth-child(2) { text-align: left; }
+      table.items tbody tr:nth-child(even) { background: var(--c-alt-row); }
+      table.items tbody tr { page-break-inside: avoid; }
+
+      .totals-wrap { display: flex; justify-content: flex-end; }
+      .totals-box {
+        background: none;
+        border: calc(0.6px * var(--scale)) solid var(--c-border);
+        width: auto;
+        min-width: calc(200px * var(--scale));
+        max-width: 100%;
+        box-sizing: border-box;
+        padding: calc(8px * var(--scale)) 0;
+      }
+      .totals-box.status-UNPAID           { border: calc(2px * var(--scale)) solid var(--c-dark); }
+      .totals-box.status-PARTIALLY_PAID   { border: calc(2px * var(--scale)) dashed var(--c-dark); }
+      .totals-box.status-PAID             { border: calc(1px * var(--scale)) solid var(--c-border); }
+      .totals-row {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: calc(4px * var(--scale));
+        padding: calc(4px * var(--scale)) calc(10px * var(--scale));
+        font-size: calc(10px * var(--scale));
+        word-break: break-word;
+      }
+      .totals-row .lbl { color: var(--c-mid); }
+      .totals-row .val { font-weight: bold; text-align: right; flex: 0 0 auto; margin-left: auto; }
+      .totals-row.outstanding {
+        border-top: calc(1px * var(--scale)) solid var(--c-dark);
+        margin-top: calc(3px * var(--scale));
+        padding-top: calc(6px * var(--scale));
+        font-size: calc(10.5px * var(--scale));
+      }
+      .totals-row.outstanding .lbl { color: var(--c-primary); font-weight: bold; }
+      .totals-row.outstanding.status-UNPAID .val {
+        text-decoration: underline;
+        text-decoration-thickness: calc(1.5px * var(--scale));
+        text-underline-offset: calc(2px * var(--scale));
+      }
+      .totals-row.outstanding.status-PARTIALLY_PAID .val { text-decoration: underline; text-decoration-style: dashed; }
+      .totals-row.outstanding.status-PAID .val { text-decoration: none; }
+      .val-red   { color: var(--c-red); }
+      .val-green { color: var(--c-green); }
+
+      .status-strip {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: calc(4px * var(--scale)) calc(8px * var(--scale));
+        margin-bottom: calc(8px * var(--scale));
+        font-weight: bold; font-size: calc(10px * var(--scale));
+      }
+      .status-strip.status-UNPAID          { border: calc(2px * var(--scale)) solid var(--c-dark); }
+      .status-strip.status-PARTIALLY_PAID  { border: calc(2px * var(--scale)) dashed var(--c-dark); }
+      .status-strip.status-PAID            { border: calc(1px * var(--scale)) solid var(--c-border); }
+
+      .spacer-flex { flex: 1 1 auto; }
+
+      .inv-header-simple {
+        display: flex; justify-content: space-between; align-items: baseline;
+        border-bottom: calc(1.5px * var(--scale)) solid var(--c-primary);
+        padding-bottom: calc(6px * var(--scale));
+        margin-bottom: calc(8px * var(--scale));
+      }
+      .inv-header-simple .title { font-weight: bold; font-size: calc(13px * var(--scale)); color: var(--c-primary); }
+      .inv-header-simple .invno { font-size: calc(9px * var(--scale)); color: var(--c-mid); }
+      table.items-slim {
+        width: 100%; border-collapse: collapse;
+        font-size: calc(8px * var(--scale));
+        margin-bottom: calc(6px * var(--scale));
+      }
+      table.items-slim th {
+        text-align: left; border-bottom: calc(1px * var(--scale)) solid var(--c-dark);
+        padding: calc(3px * var(--scale)) calc(2px * var(--scale));
+      }
+      table.items-slim th:last-child, table.items-slim td:last-child { text-align: right; }
+      table.items-slim td {
+        padding: calc(3px * var(--scale)) calc(2px * var(--scale));
+        border-bottom: calc(1px * var(--scale)) dotted var(--c-border);
+      }
+
+      .inv-footer {
+        display: flex;
+        justify-content: space-between;
+        border-top: calc(0.8px * var(--scale)) solid var(--c-border);
+        padding-top: calc(6px * var(--scale));
+        margin-top: calc(10px * var(--scale));
+        font-size: calc(9px * var(--scale));
+        color: var(--c-mid);
+      }
+    </style>
+  </th:block>
+</head>
+<body>
+  <!-- ═══════════════════════════════════════════════════════════════
+       INVOICE CONTENT FRAGMENT — full layout for A4 portrait/landscape
+       ═══════════════════════════════════════════════════════════════ -->
+  <div th:fragment="invoice(billing, pageNum)" class="invoice">
+
+    <!-- 1. Clinic header -->
+    <div class="inv-header">
+      <div class="clinic-info">
+        <p class="clinic-name" th:text="${billing.clinic.name} ?: 'Medical Clinic'">Clinic Name</p>
+        <p class="clinic-line" th:if="${billing.clinic.address}" th:text="${billing.clinic.address}">Address</p>
+        <p class="clinic-line" th:if="${billing.clinic.phone}" th:text="'Phone: ' + ${billing.clinic.phone}">Phone: +250 788 000 000</p>
+        <p class="clinic-line" th:if="${billing.clinic.email}" th:text="'Email: ' + ${billing.clinic.email}">Email: [email protected]</p>
+        <p class="clinic-line" th:each="c : ${billing.clinic.otherContacts}" th:if="${c.value}"
+           th:text="${c.label} + ': ' + ${c.value}">P.O. Box: 000</p>
+        <p class="clinic-tin" th:if="${billing.clinic.tinNumber}" th:text="'TIN: ' + ${billing.clinic.tinNumber}">TIN</p>
+      </div>
+      <div class="invoice-badge">INVOICE</div>
+    </div>
+
+    <!-- 2. Meta / Bill-To -->
+    <div class="inv-meta">
+      <div class="col">
+        <div class="meta-label">BILL TO</div>
+        <div class="meta-bold" th:text="${billing.patientName}">Patient Name</div>
+        <div class="meta-kv" th:if="${billing.patientPhone}">
+          <span class="k">Phone: </span><span class="v" th:text="${billing.patientPhone}"></span>
+        </div>
+        <div class="meta-kv" th:if="${billing.visitDate}">
+          <span class="k">Visit Date: </span><span class="v" th:text="${billing.visitDate}"></span>
+        </div>
+        <div class="meta-kv" th:if="${billing.departmentName}">
+          <span class="k">Department: </span><span class="v" th:text="${billing.departmentName}"></span>
+        </div>
+        <div class="meta-kv" th:if="${billing.insuranceLine}">
+          <span class="k">Insurance: </span><span class="v" th:text="${billing.insuranceLine}"></span>
+        </div>
+      </div>
+      <div class="col">
+        <div class="meta-label">INVOICE DETAILS</div>
+        <div class="meta-kv"><span class="k">Invoice No: </span><span class="v" th:text="${billing.invoiceNo}"></span></div>
+        <div class="meta-kv" th:if="${billing.invoiceDate}">
+          <span class="k">Invoice Date: </span><span class="v" th:text="${billing.invoiceDate}"></span>
+        </div>
+        <div class="meta-kv">
+          <span class="k">Status: </span>
+          <span class="status-icon" th:switch="${billing.status}">
+            <span th:case="'UNPAID'">&#9888;</span>
+            <span th:case="'PARTIALLY_PAID'">&#9680;</span>
+            <span th:case="*"></span>
+          </span>
+          <span class="status-value" th:classappend="'status-' + ${billing.status}" th:text="${billing.statusLabel}"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Items table -->
+    <table class="items">
+      <thead>
+        <tr>
+          <th>#</th><th>Description</th><th>Qty</th><th>Unit Price</th>
+          <th>Ins. Covered</th><th>Patient Payable</th><th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr th:each="item, iter : ${billing.items}">
+          <td th:text="${iter.count}"></td>
+          <td th:text="${item.productName}"></td>
+          <td th:text="${item.qty}"></td>
+          <td th:text="${item.unitPrice}"></td>
+          <td th:text="${item.insuranceCovered}"></td>
+          <td th:text="${item.patientPayable}"></td>
+          <td th:text="${item.lineTotal}"></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- 4. Totals -->
+    <div class="totals-wrap">
+      <div class="totals-box" th:classappend="'status-' + ${billing.status}">
+        <div class="totals-row">
+          <span class="lbl">Total Amount:</span><span class="val" th:text="${billing.totalAmount}"></span>
+        </div>
+        <div class="totals-row" th:if="${billing.insuranceCoveredAmount != null and billing.insuranceCoveredAmount != '0.00'}">
+          <span class="lbl">Insurance Covered:</span><span class="val" th:text="${billing.insuranceCoveredAmount}"></span>
+        </div>
+        <div class="totals-row">
+          <span class="lbl">Patient Payable:</span><span class="val" th:text="${billing.patientPayableAmount}"></span>
+        </div>
+        <div class="totals-row" th:if="${billing.paidAmount != null and billing.paidAmount != '0.00'}">
+          <span class="lbl">Paid:</span><span class="val val-green" th:text="${billing.paidAmount}"></span>
+        </div>
+        <div class="totals-row outstanding" th:classappend="'status-' + ${billing.status}">
+          <span class="lbl">
+            <span class="status-icon" th:switch="${billing.status}">
+              <span th:case="'UNPAID'">&#9888;</span>
+              <span th:case="'PARTIALLY_PAID'">&#9680;</span>
+              <span th:case="*"></span>
+            </span>Outstanding:
+          </span>
+          <span class="val" th:classappend="${billing.hasOutstanding} ? 'val-red' : 'val-green'"
+                th:text="${billing.outstandingAmount}"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="spacer-flex"></div>
+
+    <!-- 5. Footer -->
+    <div class="inv-footer">
+      <span>Thank you for choosing our services.</span>
+      <span th:text="'Page ' + ${pageNum}">Page 1</span>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       POS CONTENT FRAGMENT — slim layout for receipt printers
+       ═══════════════════════════════════════════════════════════════ -->
+  <div th:fragment="invoicePos(billing, pageNum)" class="invoice">
+
+    <div class="status-strip" th:classappend="'status-' + ${billing.status}">
+      <span th:switch="${billing.status}">
+        <span th:case="'UNPAID'">&#9888; UNPAID</span>
+        <span th:case="'PARTIALLY_PAID'">&#9680; PARTIALLY PAID</span>
+        <span th:case="*" th:text="${billing.statusLabel}"></span>
+      </span>
+      <span th:if="${billing.hasOutstanding}" th:text="'Outstanding: ' + ${billing.outstandingAmount}"></span>
+    </div>
+
+    <div class="inv-header-simple">
+      <span class="title" th:text="${billing.clinic.name} ?: 'Medical Clinic'">Clinic Name</span>
+      <span class="invno" th:text="'#' + ${billing.invoiceNo}">#0001</span>
+    </div>
+    <p class="clinic-line" style="margin:0 0 6px 0;"
+       th:text="${billing.patientName} + (${billing.visitDate} != null ? ' &middot; ' + ${billing.visitDate} : '')">
+       Patient &middot; Date</p>
+
+    <table class="items-slim">
+      <thead><tr><th>#</th><th>Description</th><th>Qty</th><th>Total</th></tr></thead>
+      <tbody>
+        <tr th:each="item, iter : ${billing.items}">
+          <td th:text="${iter.count}"></td>
+          <td th:text="${item.productName}"></td>
+          <td th:text="${item.qty}"></td>
+          <td th:text="${item.lineTotal}"></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="totals-box" th:classappend="'status-' + ${billing.status}" style="width:100%; box-sizing:border-box;">
+      <div class="totals-row">
+        <span class="lbl">Total:</span><span class="val" th:text="${billing.totalAmount}"></span>
+      </div>
+      <div class="totals-row" th:if="${billing.insuranceCoveredAmount != null and billing.insuranceCoveredAmount != '0.00'}">
+        <span class="lbl">Ins. Covered:</span><span class="val" th:text="${billing.insuranceCoveredAmount}"></span>
+      </div>
+      <div class="totals-row">
+        <span class="lbl">Patient Payable:</span><span class="val" th:text="${billing.patientPayableAmount}"></span>
+      </div>
+      <div class="totals-row" th:if="${billing.paidAmount != null and billing.paidAmount != '0.00'}">
+        <span class="lbl">Paid:</span><span class="val val-green" th:text="${billing.paidAmount}"></span>
+      </div>
+      <div class="totals-row outstanding" th:classappend="'status-' + ${billing.status}">
+        <span class="lbl">Outstanding:</span>
+        <span class="val" th:classappend="${billing.hasOutstanding} ? 'val-red' : 'val-green'"
+              th:text="${billing.outstandingAmount}"></span>
+      </div>
+    </div>
+
+    <div class="inv-footer" style="margin-top:8px;">
+      <span>Thank you!</span>
+      <span th:text="'Page ' + ${pageNum}">Page 1</span>
+    </div>
+
+  </div>
+</body>
+</html>

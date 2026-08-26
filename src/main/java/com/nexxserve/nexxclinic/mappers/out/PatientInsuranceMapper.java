@@ -3,6 +3,7 @@ package com.nexxserve.nexxclinic.mappers.out;
 import com.nexxserve.nexxclinic.dto.out.PatientInsuranceDto;
 import com.nexxserve.nexxclinic.entity.PatientInsurance;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 
 @Mapper(
         componentModel = "spring",
@@ -13,5 +14,6 @@ import org.mapstruct.Mapper;
 )
 public interface PatientInsuranceMapper {
 
+    @Mapping(target = "patientShareCoverageId", expression = "java(pi.getPatientShareCoverage() != null ? pi.getPatientShareCoverage().getId() : null)")
     PatientInsuranceDto toDto(PatientInsurance pi);
 }

@@ -171,6 +171,8 @@ public class BillingDataMapper {
         data.put("validUntil", insurance.getValidUntil());
         data.put("deactivated", insurance.isDeactivated());
         data.put("patientSharePercentage", insurance.getPatientSharePercentage());
+        data.put("patientShareCoverageId", insurance.getPatientShareCoverage() != null
+            ? insurance.getPatientShareCoverage().getId() : null);
         data.put("createdAt", insurance.getCreatedAt());
         data.put("updatedAt", insurance.getUpdatedAt());
         return data;

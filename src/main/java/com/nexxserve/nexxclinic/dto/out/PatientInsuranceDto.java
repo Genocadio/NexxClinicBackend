@@ -17,6 +17,7 @@ public record PatientInsuranceDto(
         LocalDate validUntil,
         boolean deactivated,
         Integer patientSharePercentage,
+        UUID patientShareCoverageId,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {}

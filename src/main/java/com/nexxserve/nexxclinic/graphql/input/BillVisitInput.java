@@ -49,7 +49,7 @@ public record BillVisitInput(
             CoverageType coverageType,
             UUID patientInsuranceId,
             ExemptionType exemptionType,
-            Integer patientSharePercentageOverride
+            UUID patientSharePercentageOverride
     ) {
     }
 

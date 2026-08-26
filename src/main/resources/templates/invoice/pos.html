@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8"/>
+  <title>POS Invoice</title>
+  <th:block th:replace="~{invoice/invoice-fragment :: styles}"></th:block>
+
+  <style>
+    @page {
+      size: 80mm auto;
+      margin: 4mm;
+    }
+    body { margin: 0; }
+    .sheet {
+      width: 100%;
+      box-sizing: border-box;
+      --scale: 0.62;
+    }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <div th:replace="~{invoice/invoice-fragment :: invoicePos(${billing}, 1)}"></div>
+  </div>
+</body>
+</html>

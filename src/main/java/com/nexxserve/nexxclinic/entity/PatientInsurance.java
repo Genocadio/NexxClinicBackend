@@ -53,6 +53,16 @@ public class PatientInsurance {
     @Column(name = "patient_share_percentage")
     private Integer patientSharePercentage;
 
+    /**
+     * Reference to an InsuranceCoverage record whose patientSharePercentage
+     * defines the patient's share for this insurance. Replaces the free-form
+     * integer — the backend resolves the actual percentage from the linked
+     * record to prevent tampering.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "patient_share_coverage_id")
+    private InsuranceCoverage patientShareCoverage;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -165,6 +175,14 @@ public class PatientInsurance {
 
     public void setPatientSharePercentage(Integer patientSharePercentage) {
         this.patientSharePercentage = patientSharePercentage;
+    }
+
+    public InsuranceCoverage getPatientShareCoverage() {
+        return patientShareCoverage;
+    }
+
+    public void setPatientShareCoverage(InsuranceCoverage patientShareCoverage) {
+        this.patientShareCoverage = patientShareCoverage;
     }
 
     public LocalDateTime getCreatedAt() {

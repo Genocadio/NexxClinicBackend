@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8"/>
+  <title>A4 Landscape Invoice (2-up)</title>
+  <th:block th:replace="~{invoice/invoice-fragment :: styles}"></th:block>
+
+  <style>
+    @page {
+      size: A4 landscape;
+      margin: 10mm;
+    }
+    body { margin: 0; }
+
+    .sheet {
+      display: flex;
+      width: 100%;
+      height: 100%;
+      page-break-after: always;
+    }
+    .sheet:last-child { page-break-after: auto; }
+
+    .half {
+      flex: 1 1 50%;
+      --scale: 0.82;
+      padding: 6mm;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+    }
+    .half.left  { border-right: 1px dashed var(--c-border); }
+    .half.empty { visibility: hidden; }
+  </style>
+</head>
+<body>
+
+  <!--
+    Model contract:
+      billings : List<InvoiceView>
+
+    Since #lists.partition is unavailable, build sheets of 2 manually.
+    We pad the list to an even length with null, then iterate in pairs.
+    The null check prevents the second half from rendering.
+  -->
+  <div th:with="size=${billings.size()}, padded=${size + (size % 2)}">
+    <div class="sheet" th:each="i : ${#numbers.sequence(0, padded - 1, 2)}"
+         th:with="leftItem=${billings[i]}, rightIdx=${i + 1}, rightItem=(${rightIdx < size} ? ${billings[rightIdx]} : null)">
+
+      <div class="half left">
+        <div th:replace="~{invoice/invoice-fragment :: invoice(${leftItem}, ${(i / 2) + 1})}"></div>
+      </div>
+
+      <div class="half" th:classappend="${rightItem != null} ? '' : 'empty'">
+        <th:block th:if="${rightItem != null}">
+          <div th:replace="~{invoice/invoice-fragment :: invoice(${rightItem}, ${(i / 2) + 1})}"></div>
+        </th:block>
+      </div>
+
+    </div>
+  </div>
+
+</body>
+</html>

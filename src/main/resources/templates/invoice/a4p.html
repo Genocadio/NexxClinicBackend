@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8"/>
+  <title>A4 Portrait Invoice</title>
+  <th:block th:replace="~{invoice/invoice-fragment :: styles}"></th:block>
+
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 14mm;
+    }
+    body { margin: 0; }
+    .sheet {
+      --scale: 1;   /* reference scale — this IS the 1:1 layout */
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+  </style>
+</head>
+<body>
+  <div class="sheet">
+    <div th:replace="~{invoice/invoice-fragment :: invoice(${billing}, 1)}"></div>
+  </div>
+</body>
+</html>
