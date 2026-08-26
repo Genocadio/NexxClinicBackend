@@ -59,6 +59,8 @@ public class WebSecurityConfig {
                     registry.requestMatchers("/actuator/info").permitAll();
                     // Media serving is public by design (patient photos, documents)
                     registry.requestMatchers("/api/media/**").permitAll();
+                    // Dev-only invoice preview (only active on default profile)
+                    registry.requestMatchers("/api/invoices/preview/**").permitAll();
                     // ── Protected REST endpoints ───────────────────────────────
                     // Upload and any other REST mutation require authentication.
                     // Spring Security will return 401 if no valid Bearer token.
