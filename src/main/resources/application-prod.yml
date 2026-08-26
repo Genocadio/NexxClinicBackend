@@ -62,7 +62,7 @@ meilisearch:
   enabled: ${MEILI_ENABLED:true}
 
 supabase:
-  storage-type: ${STORAGE_TYPE:LOCAL}
+  storage-type: ${STORAGE_TYPE:SUPABASE}
   url: ${SUPABASE_URL:http://localhost:8000}
   service-key: ${SUPABASE_SERVICE_KEY:YOUR_SERVICE_ROLE_KEY}
   local-storage-path: ${LOCAL_STORAGE_PATH:./storage}

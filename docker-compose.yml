@@ -86,8 +86,10 @@ services:
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-nexxclinic_meili_master_key}
       MEILI_ENABLED: "true"
       # ── Storage ──
-      STORAGE_TYPE: ${STORAGE_TYPE:-LOCAL}
+      STORAGE_TYPE: ${STORAGE_TYPE:-SUPABASE}
       LOCAL_STORAGE_PATH: /data/storage
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-}
       # ── Playwright ──
       PLAYWRIGHT_BROWSERS_PATH: /opt/playwright-browsers
       # ── JWT ──
