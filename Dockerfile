@@ -49,8 +49,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
-RUN groupadd -g 1001 -S spring && \
-    useradd -u 1001 -S spring -g spring -s /bin/bash -m spring
+RUN groupadd -g 1001 spring && \
+    useradd -u 1001 -g spring -s /bin/bash -m spring
 
 # Pre-install Playwright Chromium at build time (avoids runtime download).
 # Install into a shared location accessible by the spring user.
