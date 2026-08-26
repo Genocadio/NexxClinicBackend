@@ -413,6 +413,8 @@ type PatientInsurance {
   deactivated: Boolean!
   """Optional patient-specific default patient share percentage (0-100). When set, this overrides the provider default for this patient. Null = use rules then provider default."""
   patientSharePercentage: Int
+  """Reference to an InsuranceCoverage record whose patientSharePercentage defines the patient's share."""
+  patientShareCoverageId: ID
   createdAt: String!
   updatedAt: String!
 }
