@@ -151,7 +151,7 @@ class RecordVisitBillingPaymentIntegrationTest {
                     CoverageType.PRIVATE, null, ExemptionType.NONE, null)),
                 List.of(),
                 "Bill with no payment"
-            ))
+            , null, null))
         );
     }
 

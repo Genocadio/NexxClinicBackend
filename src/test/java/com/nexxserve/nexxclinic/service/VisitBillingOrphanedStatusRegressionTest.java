@@ -238,7 +238,7 @@ class VisitBillingOrphanedStatusRegressionTest {
                                 : List.of(new BillVisitInput.BillingPaymentInput(
                                         payment, PaymentMethod.CASH, null)),
                         "Dept Note"
-                );
+                , null, null);
         return new BillVisitInput(fx.visit().getId(), List.of(departmentInput));
     }
 
@@ -305,7 +305,7 @@ class VisitBillingOrphanedStatusRegressionTest {
                 List.of(new BillVisitInput.BillingPaymentInput(
                     new BigDecimal("15.00"), PaymentMethod.CASH, null)),
                 "Note for unread notes check"
-            );
+            , null, null);
         BillVisitInput input = new BillVisitInput(fx.visit().getId(), List.of(departmentInput));
 
         com.nexxserve.nexxclinic.entity.Worker actor = fx.actor();
@@ -609,7 +609,7 @@ class VisitBillingOrphanedStatusRegressionTest {
                         fx.visitDepartment().getId(), List.of(changedQty),
                         List.of(new BillVisitInput.BillingPaymentInput(
                                 new BigDecimal("100.00"), PaymentMethod.CASH, null)),
-                        null);
+                        null, null, null);
         ApiResponse<?> response = visitBillingService.billVisit(
                 new BillVisitInput(fx.visit().getId(), List.of(deptInput)), auth(fx.actor()));
 
@@ -689,7 +689,7 @@ class VisitBillingOrphanedStatusRegressionTest {
                         fx.visitDepartment().getId(), List.of(productInput),
                         List.of(new BillVisitInput.BillingPaymentInput(
                                 new BigDecimal("10.00"), PaymentMethod.CASH, "REF-1")),
-                        "Note");
+                        "Note", null, null);
         ApiResponse<?> response = visitBillingService.billVisit(
                 new BillVisitInput(fx.visit().getId(), List.of(deptInput)), auth(fx.actor()));
         if (response.status() == ResponseStatus.ERROR) {
@@ -789,7 +789,7 @@ class VisitBillingOrphanedStatusRegressionTest {
                                         new BigDecimal("100.00"), PaymentMethod.CASH, "REF-CASH"),
                                 new BillVisitInput.BillingPaymentInput(
                                         new BigDecimal("15.00"), PaymentMethod.MOBILE_MONEY, "REF-MOMO")),
-                        "Note");
+                        "Note", null, null);
         ApiResponse<?> response = visitBillingService.billVisit(
                 new BillVisitInput(fx.visit().getId(), List.of(deptInput)), auth(fx.actor()));
         if (response.status() == ResponseStatus.ERROR) {
@@ -842,7 +842,7 @@ class VisitBillingOrphanedStatusRegressionTest {
                         fx.visitDepartment().getId(), List.of(productInput),
                         List.of(new BillVisitInput.BillingPaymentInput(
                                 new BigDecimal("100.00"), PaymentMethod.MOBILE_MONEY, "MOMO-REF")),
-                        "Note");
+                        "Note", null, null);
         ApiResponse<?> first = visitBillingService.billVisit(
                 new BillVisitInput(fx.visit().getId(), List.of(firstDept)), auth(fx.actor()));
         if (first.status() == ResponseStatus.ERROR) {
@@ -855,7 +855,7 @@ class VisitBillingOrphanedStatusRegressionTest {
         // re-created as CASH).
         BillVisitInput.BillVisitDepartmentInput rebillDept =
                 new BillVisitInput.BillVisitDepartmentInput(
-                        fx.visitDepartment().getId(), List.of(productInput), null, "Note");
+                        fx.visitDepartment().getId(), List.of(productInput), null, "Note", null, null);
         ApiResponse<?> second = visitBillingService.billVisit(
                 new BillVisitInput(fx.visit().getId(), List.of(rebillDept)), auth(fx.actor()));
         if (second.status() == ResponseStatus.ERROR) {
@@ -920,7 +920,7 @@ class VisitBillingOrphanedStatusRegressionTest {
                         vdB.getId(), List.of(productBInput),
                         List.of(new BillVisitInput.BillingPaymentInput(
                                 new BigDecimal("50.00"), PaymentMethod.CASH, null)),
-                        "Note B");
+                        "Note B", null, null);
         ApiResponse<?> response = visitBillingService.billVisit(
                 new BillVisitInput(fx.visit().getId(), List.of(deptBInput)), auth(fx.actor()));
         if (response.status() == ResponseStatus.ERROR) {
@@ -1002,7 +1002,7 @@ class VisitBillingOrphanedStatusRegressionTest {
                 fx.visitDepartment().getId(), List.of(productInput),
                 List.of(new BillVisitInput.BillingPaymentInput(
                     new BigDecimal("100.00"), PaymentMethod.CASH, null)),
-                "Note");
+                "Note", null, null);
         ApiResponse<?> response = visitBillingService.billVisit(
             new BillVisitInput(fx.visit().getId(), List.of(deptInput)), auth(fx.actor()));
 
@@ -1024,7 +1024,7 @@ class VisitBillingOrphanedStatusRegressionTest {
                 fx.visitDepartment().getId(), List.of(productInput),
                 List.of(new BillVisitInput.BillingPaymentInput(
                     new BigDecimal("100.00"), PaymentMethod.CASH, null)),
-                "Note");
+                "Note", null, null);
         ApiResponse<?> response = visitBillingService.billVisit(
             new BillVisitInput(fx.visit().getId(), List.of(deptInput)), auth(fx.actor()));
         if (response.status() == ResponseStatus.ERROR) {
@@ -1052,7 +1052,7 @@ class VisitBillingOrphanedStatusRegressionTest {
                 fx.visitDepartment().getId(), List.of(productInput),
                 List.of(new BillVisitInput.BillingPaymentInput(
                     new BigDecimal("100.00"), PaymentMethod.CASH, null)),
-                "Note");
+                "Note", null, null);
         ApiResponse<?> response = visitBillingService.billVisit(
             new BillVisitInput(fx.visit().getId(), List.of(deptInput)), auth(fx.actor()));
 
@@ -1073,7 +1073,7 @@ class VisitBillingOrphanedStatusRegressionTest {
                 fx.visitDepartment().getId(), List.of(productInput),
                 List.of(new BillVisitInput.BillingPaymentInput(
                     new BigDecimal("100.00"), PaymentMethod.CASH, null)),
-                "Note");
+                "Note", null, null);
         ApiResponse<?> response = visitBillingService.billVisit(
             new BillVisitInput(fx.visit().getId(), List.of(deptInput)), auth(fx.actor()));
 
@@ -1094,7 +1094,7 @@ class VisitBillingOrphanedStatusRegressionTest {
                 fx.visitDepartment().getId(), List.of(productInput),
                 List.of(new BillVisitInput.BillingPaymentInput(
                     new BigDecimal("100.00"), PaymentMethod.CASH, null)),
-                "Note");
+                "Note", null, null);
         ApiResponse<?> response = visitBillingService.billVisit(
             new BillVisitInput(fx.visit().getId(), List.of(deptInput)), auth(fx.actor()));
 
@@ -1116,7 +1116,7 @@ class VisitBillingOrphanedStatusRegressionTest {
                 fx.visitDepartment().getId(), List.of(productInput),
                 List.of(new BillVisitInput.BillingPaymentInput(
                     new BigDecimal("100.00"), PaymentMethod.CASH, null)),
-                "Note");
+                "Note", null, null);
         ApiResponse<?> response = visitBillingService.billVisit(
             new BillVisitInput(fx.visit().getId(), List.of(deptInput)), auth(fx.actor()));
 

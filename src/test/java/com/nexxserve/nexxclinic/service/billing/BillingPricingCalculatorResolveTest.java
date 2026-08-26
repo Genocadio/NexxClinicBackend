@@ -1,5 +1,8 @@
 package com.nexxserve.nexxclinic.service.billing;
 
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
+
 import com.nexxserve.nexxclinic.entity.Department;
 import com.nexxserve.nexxclinic.entity.InsuranceCoverage;
 import com.nexxserve.nexxclinic.entity.InsuranceProvider;
@@ -9,911 +12,406 @@ import com.nexxserve.nexxclinic.model.PatientShareSource;
 import com.nexxserve.nexxclinic.repository.InsuranceCoverageRepository;
 import com.nexxserve.nexxclinic.repository.PatientInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.ProductInsuranceCoverageRepository;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
-
-/**
- * Comprehensive tests for {@link BillingPricingCalculator#resolvePatientSharePercentage}.
- *
- * <p>Covers every layer of the resolution chain:
- * <ol>
- *   <li>Per-line override (when no exact-match coverage blocks it)</li>
- *   <li>Coverage: dept + encounterType (exact match)</li>
- *   <li>Coverage: dept only</li>
- *   <li>Coverage: encounterType only</li>
- *   <li>Base coverage (no conditions)</li>
- *   <li>Patient-specific default ({@code PatientInsurance.patientSharePercentage})</li>
- *   <li>Fallback to 0 (insurance covers everything)</li>
- * </ol>
- */
 class BillingPricingCalculatorResolveTest {
 
-    private final PatientInsuranceRepository patientInsuranceRepository =
-        mock(PatientInsuranceRepository.class);
-    private final ProductInsuranceCoverageRepository productCoverageRepository =
-        mock(ProductInsuranceCoverageRepository.class);
-    private final InsuranceCoverageRepository coverageRepository =
-        mock(InsuranceCoverageRepository.class);
-    private final BillingPricingCalculator calculator =
-        new BillingPricingCalculator(patientInsuranceRepository, productCoverageRepository, coverageRepository);
-
-    // ── Test fixtures ─────────────────────────────────────────────────────────
-
+    private BillingPricingCalculator calculator;
+    private InsuranceProvider provider;
+    private InsuranceProvider otherProvider;
+    private PatientInsurance patientInsurance;
+    private Department deptADepartment;
+    private Department deptBDepartment;
     private UUID deptA;
     private UUID deptB;
-    private InsuranceProvider provider;
-    private PatientInsurance patientInsurance;
 
     @BeforeEach
     void setUp() {
-        deptA = UUID.randomUUID();
-        deptB = UUID.randomUUID();
+        PatientInsuranceRepository pir = mock(PatientInsuranceRepository.class);
+        ProductInsuranceCoverageRepository picr = mock(ProductInsuranceCoverageRepository.class);
+        InsuranceCoverageRepository icr = mock(InsuranceCoverageRepository.class);
+        calculator = new BillingPricingCalculator(pir, picr, icr);
 
         provider = new InsuranceProvider();
         provider.setId(UUID.randomUUID());
-        provider.setCoverages(new ArrayList<>());
+
+        otherProvider = new InsuranceProvider();
+        otherProvider.setId(UUID.randomUUID());
 
         patientInsurance = new PatientInsurance();
-        patientInsurance.setId(UUID.randomUUID());
         patientInsurance.setInsuranceProvider(provider);
+        patientInsurance.setPatientSharePercentage(null);
+
+        deptA = UUID.randomUUID();
+        deptB = UUID.randomUUID();
+
+        deptADepartment = new Department();
+        deptADepartment.setId(deptA);
+        deptBDepartment = new Department();
+        deptBDepartment.setId(deptB);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // ─── helpers ──────────────────────────────────────────────────────
 
-    private Department dept(UUID id) {
-        Department d = new Department();
-        d.setId(id);
-        d.setName("Dept-" + id.toString().substring(0, 8));
-        return d;
+    private InsuranceCoverage cov(InsuranceProvider prov, Department dept, EncounterType enc, int pct) {
+        InsuranceCoverage c = new InsuranceCoverage();
+        c.setId(UUID.randomUUID());
+        c.setInsuranceProvider(prov);
+        c.setDepartment(dept);
+        c.setEncounterType(enc);
+        c.setPatientSharePercentage(pct);
+        return c;
     }
 
-    private InsuranceCoverage baseCoverage(InsuranceProvider p, int pct) {
-        InsuranceCoverage cov = new InsuranceCoverage();
-        cov.setInsuranceProvider(p);
-        cov.setDepartment(null);
-        cov.setEncounterType(null);
-        cov.setPatientSharePercentage(pct);
-        return cov;
+    private InsuranceCoverage baseCov(InsuranceProvider prov, int pct) {
+        return cov(prov, null, null, pct);
     }
 
-    private InsuranceCoverage deptCoverage(InsuranceProvider p, UUID deptId, int pct) {
-        InsuranceCoverage cov = new InsuranceCoverage();
-        cov.setInsuranceProvider(p);
-        cov.setDepartment(dept(deptId));
-        cov.setEncounterType(null);
-        cov.setPatientSharePercentage(pct);
-        return cov;
+    private InsuranceCoverage deptCov(InsuranceProvider prov, Department dept, int pct) {
+        return cov(prov, dept, null, pct);
     }
 
-    private InsuranceCoverage encounterCoverage(InsuranceProvider p, EncounterType et, int pct) {
-        InsuranceCoverage cov = new InsuranceCoverage();
-        cov.setInsuranceProvider(p);
-        cov.setDepartment(null);
-        cov.setEncounterType(et);
-        cov.setPatientSharePercentage(pct);
-        return cov;
+    private InsuranceCoverage encCov(InsuranceProvider prov, EncounterType enc, int pct) {
+        return cov(prov, null, enc, pct);
     }
 
-    private InsuranceCoverage exactCoverage(InsuranceProvider p, UUID deptId, EncounterType et, int pct) {
-        InsuranceCoverage cov = new InsuranceCoverage();
-        cov.setInsuranceProvider(p);
-        cov.setDepartment(dept(deptId));
-        cov.setEncounterType(et);
-        cov.setPatientSharePercentage(pct);
-        return cov;
+    private InsuranceCoverage exactCov(InsuranceProvider prov, Department dept, EncounterType enc, int pct) {
+        return cov(prov, dept, enc, pct);
     }
 
-    /**
-     * Builds a prefetched coverages map keyed by (providerId -> departmentId -> [coverages]).
-     * deptId=null covers are stored under the null key.
-     */
-    private Map<UUID, Map<UUID, List<InsuranceCoverage>>> buildPrefetchedMap(InsuranceCoverage... coverages) {
+    /** Build the prefetched map from varargs coverages. */
+    private Map<UUID, Map<UUID, List<InsuranceCoverage>>> buildPrefetched(InsuranceCoverage... coverages) {
         Map<UUID, Map<UUID, List<InsuranceCoverage>>> map = new HashMap<>();
         for (InsuranceCoverage c : coverages) {
-            UUID pid = c.getInsuranceProvider().getId();
-            UUID did = c.getDepartment() != null ? c.getDepartment().getId() : null;
-            map.computeIfAbsent(pid, k -> new HashMap<>())
-               .computeIfAbsent(did, k -> new ArrayList<>())
+            UUID provId = c.getInsuranceProvider().getId();
+            UUID deptId = c.getDepartment() != null ? c.getDepartment().getId() : null;
+            map.computeIfAbsent(provId, k -> new HashMap<>())
+               .computeIfAbsent(deptId, k -> new ArrayList<>())
                .add(c);
         }
         return map;
     }
 
-    private void addCoveragesToProvider(InsuranceCoverage... coverages) {
-        for (InsuranceCoverage c : coverages) {
-            provider.addCoverage(c);
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Layer 0: null insurance → 0
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════
+    // 0. No insurance
+    // ═══════════════════════════════════════════════════════════════════
 
     @Test
-    void nullInsurance_returnsZero() {
-        BillingPricingCalculator.ResolvedPatientShare result =
-            calculator.resolvePatientSharePercentage(null, deptA, EncounterType.OUTPATIENT, null, null);
-
-        assertEquals(0, result.percentage());
-        assertEquals(PatientShareSource.PROVIDER_DEFAULT, result.source());
+    void noInsurance_returnsZero() {
+        var r = calculator.resolvePatientSharePercentage(null, deptA, EncounterType.OUTPATIENT, null, null);
+        assertEquals(0, r.percentage());
+        assertEquals(PatientShareSource.PROVIDER_DEFAULT, r.source());
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Layer 1: Per-line override
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════
+    // 1. Per-line override via InsuranceCoverage UUID
+    // ═══════════════════════════════════════════════════════════════════
 
     @Nested
     class PerLineOverride {
 
         @Test
-        void overrideAccepted_whenNoCoveragesExist() {
-            // No coverages at all → override is always allowed
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(patientInsurance, deptA, null, 25, null);
-
-            assertEquals(25, result.percentage());
-            assertEquals(PatientShareSource.OVERRIDE, result.source());
+        void accepted_whenNoCoveragesExist() {
+            InsuranceCoverage oc = cov(provider, null, null, 25);
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, EncounterType.OUTPATIENT, oc.getId(), buildPrefetched(oc));
+            assertEquals(25, r.percentage());
+            assertEquals(PatientShareSource.OVERRIDE, r.source());
         }
 
         @Test
-        void overrideAccepted_whenDeptOnlyMatchButNoExactMatch() {
-            // Provider has dept A coverage but no encounter type → dept-only match
-            // means override IS allowed (coverage doesn't fully apply)
-            InsuranceCoverage cov = deptCoverage(provider, deptA, 10);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched = buildPrefetchedMap(cov);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(patientInsurance, deptA, EncounterType.OUTPATIENT, 30, prefetched);
-
-            assertEquals(30, result.percentage());
-            assertEquals(PatientShareSource.OVERRIDE, result.source());
+        void accepted_whenDeptOnlyMatchButNoExactMatch() {
+            InsuranceCoverage dc = deptCov(provider, deptADepartment, 10);
+            InsuranceCoverage oc = cov(provider, null, null, 30);
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, EncounterType.OUTPATIENT, oc.getId(), buildPrefetched(dc, oc));
+            assertEquals(30, r.percentage());
+            assertEquals(PatientShareSource.OVERRIDE, r.source());
         }
 
         @Test
-        void overrideAccepted_whenEncounterOnlyMatchButNoExactMatch() {
-            // Provider has OUTPATIENT coverage but no dept → encounter-only match
-            // means override IS allowed (coverage doesn't fully apply)
-            InsuranceCoverage cov = encounterCoverage(provider, EncounterType.OUTPATIENT, 10);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched = buildPrefetchedMap(cov);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(patientInsurance, deptA, EncounterType.OUTPATIENT, 30, prefetched);
-
-            assertEquals(30, result.percentage());
-            assertEquals(PatientShareSource.OVERRIDE, result.source());
+        void blocked_whenExactDeptAndEncounterMatch() {
+            InsuranceCoverage ec = exactCov(provider, deptADepartment, EncounterType.OUTPATIENT, 10);
+            InsuranceCoverage oc = cov(provider, null, null, 50);
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, EncounterType.OUTPATIENT, oc.getId(), buildPrefetched(ec, oc));
+            assertEquals(10, r.percentage());
+            assertEquals(PatientShareSource.RULE, r.source());
         }
 
         @Test
-        void overrideBlocked_whenExactDeptAndEncounterMatch() {
-            // Provider has exact match for dept A + OUTPATIENT → override blocked
-            InsuranceCoverage cov = exactCoverage(provider, deptA, EncounterType.OUTPATIENT, 10);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched = buildPrefetchedMap(cov);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, 50, prefetched);
-
-            // Override blocked → falls through to coverage resolution → 10%
-            assertEquals(10, result.percentage());
-            assertEquals(PatientShareSource.RULE, result.source());
+        void clampedToMax100() {
+            InsuranceCoverage oc = cov(provider, null, null, 150);
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, null, oc.getId(), buildPrefetched(oc));
+            assertEquals(100, r.percentage());
+            assertEquals(PatientShareSource.OVERRIDE, r.source());
         }
 
         @Test
-        void overrideClampedToMax100() {
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(patientInsurance, deptA, null, 150, null);
-
-            assertEquals(100, result.percentage());
-            assertEquals(PatientShareSource.OVERRIDE, result.source());
+        void clampedToMin0() {
+            InsuranceCoverage oc = cov(provider, null, null, -10);
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, null, oc.getId(), buildPrefetched(oc));
+            assertEquals(0, r.percentage());
+            assertEquals(PatientShareSource.OVERRIDE, r.source());
         }
 
         @Test
-        void overrideClampedToMin0() {
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(patientInsurance, deptA, null, -10, null);
-
-            assertEquals(0, result.percentage());
-            assertEquals(PatientShareSource.OVERRIDE, result.source());
+        void rejected_whenCoverageBelongsToDifferentProvider() {
+            InsuranceCoverage oc = cov(otherProvider, null, null, 50);
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, EncounterType.OUTPATIENT, oc.getId(), buildPrefetched(oc));
+            assertEquals(0, r.percentage());
+            assertEquals(PatientShareSource.PROVIDER_DEFAULT, r.source());
         }
 
         @Test
-        void overrideAllowed_whenDeptOnlyMatchButNotExact() {
-            // Provider has dept A coverage (no encounter type) → dept-only match
-            // means override IS allowed (coverage doesn't fully apply)
-            InsuranceCoverage cov = deptCoverage(provider, deptA, 20);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched = buildPrefetchedMap(cov);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(patientInsurance, deptA, EncounterType.OUTPATIENT, 50, prefetched);
-
-            assertEquals(50, result.percentage());
-            assertEquals(PatientShareSource.OVERRIDE, result.source());
+        void rejected_whenCoverageIdNotFound() {
+            UUID fakeId = UUID.randomUUID();
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, EncounterType.OUTPATIENT, fakeId, Map.of());
+            assertEquals(0, r.percentage());
+            assertEquals(PatientShareSource.PROVIDER_DEFAULT, r.source());
         }
 
         @Test
-        void overrideAllowed_whenEncounterOnlyMatchButNotExact() {
-            // Provider has OUTPATIENT coverage (no dept) → encounter-only match
-            // means override IS allowed (coverage doesn't fully apply)
-            InsuranceCoverage cov = encounterCoverage(provider, EncounterType.OUTPATIENT, 15);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched = buildPrefetchedMap(cov);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(patientInsurance, deptA, EncounterType.OUTPATIENT, 40, prefetched);
-
-            assertEquals(40, result.percentage());
-            assertEquals(PatientShareSource.OVERRIDE, result.source());
+        void zeroTakesEffect() {
+            InsuranceCoverage oc = cov(provider, null, null, 0);
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, EncounterType.OUTPATIENT, oc.getId(), buildPrefetched(oc));
+            assertEquals(0, r.percentage());
+            assertEquals(PatientShareSource.OVERRIDE, r.source());
         }
 
         @Test
-        void overrideAccepted_whenOnlyBaseCoverageExists_inPrefetchedMap() {
-            // Regression: production always passes a populated prefetched map. A provider
-            // backfilled with only a base coverage (V16) used to block every override
-            // because isOverrideAllowed fell through to false whenever ANY rows existed.
-            InsuranceCoverage base = baseCoverage(provider, 20);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched = buildPrefetchedMap(base);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, 30, prefetched);
-
-            assertEquals(30, result.percentage());
-            assertEquals(PatientShareSource.OVERRIDE, result.source());
-        }
-
-        @Test
-        void overrideAccepted_whenRulesExistOnlyForAnotherDepartment() {
-            // Rules for dept B are unrelated to a dept A line — they must not block.
-            InsuranceCoverage otherDept = deptCoverage(provider, deptB, 10);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched = buildPrefetchedMap(otherDept);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, 30, prefetched);
-
-            assertEquals(30, result.percentage());
-            assertEquals(PatientShareSource.OVERRIDE, result.source());
-        }
-
-        @Test
-        void overrideAccepted_whenBasePlusExactRuleForOtherDepartment() {
-            InsuranceCoverage base = baseCoverage(provider, 20);
-            InsuranceCoverage otherDept = exactCoverage(provider, deptB, EncounterType.OUTPATIENT, 5);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched =
-                buildPrefetchedMap(base, otherDept);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, 30, prefetched);
-
-            assertEquals(30, result.percentage());
-            assertEquals(PatientShareSource.OVERRIDE, result.source());
-        }
-
-        @Test
-        void overrideStillBlocked_byExactMatch_withPopulatedPrefetchedMap() {
-            // Guard: the relaxation must NOT weaken the exact-rule block.
-            InsuranceCoverage base = baseCoverage(provider, 20);
-            InsuranceCoverage exact = exactCoverage(provider, deptA, EncounterType.OUTPATIENT, 10);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched =
-                buildPrefetchedMap(base, exact);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, 50, prefetched);
-
-            assertEquals(10, result.percentage());
-            assertEquals(PatientShareSource.RULE, result.source());
+        void exact100TakesEffect() {
+            InsuranceCoverage oc = cov(provider, null, null, 100);
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, EncounterType.OUTPATIENT, oc.getId(), buildPrefetched(oc));
+            assertEquals(100, r.percentage());
+            assertEquals(PatientShareSource.OVERRIDE, r.source());
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Layer 2: Coverage-based resolution (most specific wins)
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════
+    // 2. Coverage-based resolution
+    // ═══════════════════════════════════════════════════════════════════
 
     @Nested
     class CoverageResolution {
 
         @Test
-        void exactMatch_deptAndEncounterType_wins() {
-            InsuranceCoverage base = baseCoverage(provider, 20);
-            InsuranceCoverage deptOnly = deptCoverage(provider, deptA, 15);
-            InsuranceCoverage encOnly = encounterCoverage(provider, EncounterType.OUTPATIENT, 12);
-            InsuranceCoverage exact = exactCoverage(provider, deptA, EncounterType.OUTPATIENT, 8);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched =
-                buildPrefetchedMap(base, deptOnly, encOnly, exact);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, null, prefetched);
-
-            assertEquals(8, result.percentage());
-            assertEquals(PatientShareSource.RULE, result.source());
+        void exactDeptAndEncounter() {
+            InsuranceCoverage c = exactCov(provider, deptADepartment, EncounterType.OUTPATIENT, 8);
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, EncounterType.OUTPATIENT, null, buildPrefetched(c));
+            assertEquals(8, r.percentage());
+            assertEquals(PatientShareSource.RULE, r.source());
         }
 
         @Test
-        void deptOnlyMatch_whenNoExactMatch() {
-            InsuranceCoverage base = baseCoverage(provider, 20);
-            InsuranceCoverage deptOnly = deptCoverage(provider, deptA, 15);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched =
-                buildPrefetchedMap(base, deptOnly);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.INPATIENT_ADMISSION, null, prefetched);
-
-            assertEquals(15, result.percentage());
-            assertEquals(PatientShareSource.RULE, result.source());
+        void deptOnly_matchesDept() {
+            InsuranceCoverage c = deptCov(provider, deptADepartment, 10);
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, EncounterType.OUTPATIENT, null, buildPrefetched(c));
+            assertEquals(10, r.percentage());
+            assertEquals(PatientShareSource.RULE, r.source());
         }
 
         @Test
-        void encounterTypeOnlyMatch_whenNoDeptMatch() {
-            InsuranceCoverage base = baseCoverage(provider, 20);
-            InsuranceCoverage encOnly = encounterCoverage(provider, EncounterType.INPATIENT_OBSERVATION, 10);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched =
-                buildPrefetchedMap(base, encOnly);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptB, EncounterType.INPATIENT_OBSERVATION, null, prefetched);
-
-            assertEquals(10, result.percentage());
-            assertEquals(PatientShareSource.RULE, result.source());
+        void noMatchingDept_usesBase() {
+            InsuranceCoverage c = baseCov(provider, 25);
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptB, EncounterType.OUTPATIENT, null, buildPrefetched(c));
+            assertEquals(25, r.percentage());
+            assertEquals(PatientShareSource.RULE, r.source());
         }
 
         @Test
-        void baseCoverage_usedAsLastResortInCoverageResolution() {
-            InsuranceCoverage base = baseCoverage(provider, 25);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched =
-                buildPrefetchedMap(base);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, null, prefetched);
-
-            assertEquals(25, result.percentage());
-            assertEquals(PatientShareSource.RULE, result.source());
+        void multipleDepts_eachGetsOwnRate() {
+            InsuranceCoverage cA = deptCov(provider, deptADepartment, 10);
+            InsuranceCoverage cB = deptCov(provider, deptBDepartment, 30);
+            var map = buildPrefetched(cA, cB);
+            assertEquals(10, calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, null, null, map).percentage());
+            assertEquals(30, calculator.resolvePatientSharePercentage(
+                patientInsurance, deptB, null, null, map).percentage());
         }
 
         @Test
-        void differentDepartments_getDifferentPercentages() {
-            InsuranceCoverage base = baseCoverage(provider, 20);
-            InsuranceCoverage deptAOnly = deptCoverage(provider, deptA, 10);
-            InsuranceCoverage deptBOnly = deptCoverage(provider, deptB, 30);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched =
-                buildPrefetchedMap(base, deptAOnly, deptBOnly);
-
-            BillingPricingCalculator.ResolvedPatientShare resultA =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, null, null, prefetched);
-            assertEquals(10, resultA.percentage());
-
-            BillingPricingCalculator.ResolvedPatientShare resultB =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptB, null, null, prefetched);
-            assertEquals(30, resultB.percentage());
+        void encounterOnly_matchesEncounter() {
+            InsuranceCoverage c = encCov(provider, EncounterType.OUTPATIENT, 5);
+            var map = buildPrefetched(c);
+            assertEquals(5, calculator.resolvePatientSharePercentage(
+                patientInsurance, null, EncounterType.OUTPATIENT, null, map).percentage());
+            assertEquals(0, calculator.resolvePatientSharePercentage(
+                patientInsurance, null, EncounterType.INPATIENT_ADMISSION, null, map).percentage());
         }
 
         @Test
-        void differentEncounterTypes_getDifferentPercentages() {
-            InsuranceCoverage base = baseCoverage(provider, 20);
-            InsuranceCoverage outp = encounterCoverage(provider, EncounterType.OUTPATIENT, 5);
-            InsuranceCoverage inpat = encounterCoverage(provider, EncounterType.INPATIENT_ADMISSION, 35);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched =
-                buildPrefetchedMap(base, outp, inpat);
-
-            BillingPricingCalculator.ResolvedPatientShare resultOutp =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, null, EncounterType.OUTPATIENT, null, prefetched);
-            assertEquals(5, resultOutp.percentage());
-
-            BillingPricingCalculator.ResolvedPatientShare resultInpat =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, null, EncounterType.INPATIENT_ADMISSION, null, prefetched);
-            assertEquals(35, resultInpat.percentage());
+        void noMatchingCoverage_fallsThrough() {
+            InsuranceCoverage c = exactCov(provider, deptADepartment, EncounterType.OUTPATIENT, 7);
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptB, EncounterType.INPATIENT_ADMISSION, null, buildPrefetched(c));
+            assertEquals(0, r.percentage());
         }
 
         @Test
-        void deptPlusEncounter_overridesDeptOnlyAndEncounterOnly() {
-            InsuranceCoverage base = baseCoverage(provider, 20);
-            InsuranceCoverage deptOnly = deptCoverage(provider, deptA, 15);
-            InsuranceCoverage encOnly = encounterCoverage(provider, EncounterType.OUTPATIENT, 12);
-            InsuranceCoverage exact = exactCoverage(provider, deptA, EncounterType.OUTPATIENT, 7);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched =
-                buildPrefetchedMap(base, deptOnly, encOnly, exact);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, null, prefetched);
-
-            assertEquals(7, result.percentage());
-            assertEquals(PatientShareSource.RULE, result.source());
-        }
-
-        @Test
-        void noDepartmentInBilling_fallsToEncounterTypeOrBase() {
-            InsuranceCoverage base = baseCoverage(provider, 20);
-            InsuranceCoverage encOnly = encounterCoverage(provider, EncounterType.OUTPATIENT, 10);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched =
-                buildPrefetchedMap(base, encOnly);
-
-            // billing with no department → encounter type match
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, null, EncounterType.OUTPATIENT, null, prefetched);
-            assertEquals(10, result.percentage());
-
-            // billing with no department, no encounter type → base
-            BillingPricingCalculator.ResolvedPatientShare resultBase =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, null, null, null, prefetched);
-            assertEquals(20, resultBase.percentage());
-        }
-
-        @Test
-        void emptyPrefetchedMap_returnsNull_forLookup() {
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched = Map.of();
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, null, prefetched);
-
-            // No coverage found → falls through to patient default or provider base
-            // In this case: provider has no base coverage set → 0
-            assertEquals(0, result.percentage());
+        void exactWinsOverBase() {
+            InsuranceCoverage base = baseCov(provider, 20);
+            InsuranceCoverage exact = exactCov(provider, deptADepartment, EncounterType.OUTPATIENT, 5);
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, EncounterType.OUTPATIENT, null, buildPrefetched(base, exact));
+            assertEquals(5, r.percentage());
+            assertEquals(PatientShareSource.RULE, r.source());
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Layer 3: Patient-specific default
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════
+    // 3. Patient default fallback
+    // ═══════════════════════════════════════════════════════════════════
 
     @Nested
     class PatientDefault {
 
         @Test
-        void patientDefaultUsed_whenNoCoverageMatches() {
+        void usedWhenNoCoverageMatches() {
             patientInsurance.setPatientSharePercentage(35);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched = Map.of();
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, null, prefetched);
-
-            assertEquals(35, result.percentage());
-            assertEquals(PatientShareSource.PATIENT_DEFAULT, result.source());
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, EncounterType.OUTPATIENT, null, Map.of());
+            assertEquals(35, r.percentage());
+            assertEquals(PatientShareSource.PATIENT_DEFAULT, r.source());
         }
 
         @Test
-        void patientDefaultSkipped_whenCoverageMatches() {
+        void coverageWinsOverPatientDefault() {
             patientInsurance.setPatientSharePercentage(35);
-            InsuranceCoverage base = baseCoverage(provider, 15);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched =
-                buildPrefetchedMap(base);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, null, prefetched);
-
-            // Coverage base wins over patient default
-            assertEquals(15, result.percentage());
-            assertEquals(PatientShareSource.RULE, result.source());
-        }
-
-        @Test
-        void patientDefault_nullFallsThrough() {
-            patientInsurance.setPatientSharePercentage(null);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched = Map.of();
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, null, null, prefetched);
-
-            // No patient default, no coverage → falls to provider base or 0
-            assertEquals(0, result.percentage());
-        }
-
-        @Test
-        void patientDefault_beatsProviderBase() {
-            patientInsurance.setPatientSharePercentage(40);
-            InsuranceCoverage base = baseCoverage(provider, 15);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched =
-                buildPrefetchedMap(base);
-
-            // Coverage matches (base) → patient default never reached
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, null, null, prefetched);
-            assertEquals(15, result.percentage());
-            assertEquals(PatientShareSource.RULE, result.source());
-
-            // No coverage in prefetched → patient default wins over provider entity base
-            BillingPricingCalculator.ResolvedPatientShare resultNoCov =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, null, null, Map.of());
-            assertEquals(40, resultNoCov.percentage());
-            assertEquals(PatientShareSource.PATIENT_DEFAULT, resultNoCov.source());
+            InsuranceCoverage c = exactCov(provider, deptADepartment, EncounterType.OUTPATIENT, 15);
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, EncounterType.OUTPATIENT, null, buildPrefetched(c));
+            assertEquals(15, r.percentage());
+            assertEquals(PatientShareSource.RULE, r.source());
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Layer 4: Provider base coverage
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════
+    // 4. Provider default fallback
+    // ═══════════════════════════════════════════════════════════════════
 
     @Nested
-    class ProviderBaseCoverage {
+    class ProviderDefault {
 
         @Test
-        void providerBaseFromPrefetchedMap() {
-            InsuranceCoverage base = baseCoverage(provider, 20);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched =
-                buildPrefetchedMap(base);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, null, prefetched);
-
-            assertEquals(20, result.percentage());
-            assertEquals(PatientShareSource.RULE, result.source());
+        void usedWhenNothingElseMatches() {
+            provider.addCoverage(baseCov(provider, 20));
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, EncounterType.OUTPATIENT, null, Map.of());
+            assertEquals(20, r.percentage());
+            assertEquals(PatientShareSource.PROVIDER_DEFAULT, r.source());
         }
 
         @Test
-        void providerBaseFromLazyLoadedEntity_whenPrefetchedEmpty() {
-            // No coverage in prefetched map → falls to lazy-load from entity
-            InsuranceCoverage base = baseCoverage(provider, 20);
-            addCoveragesToProvider(base);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, null, Map.of());
-
-            assertEquals(20, result.percentage());
-            assertEquals(PatientShareSource.PROVIDER_DEFAULT, result.source());
-        }
-
-        @Test
-        void providerBaseFromLazyLoadedEntity_whenPrefetchedNull() {
-            InsuranceCoverage base = baseCoverage(provider, 18);
-            addCoveragesToProvider(base);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, null, null);
-
-            assertEquals(18, result.percentage());
-            assertEquals(PatientShareSource.PROVIDER_DEFAULT, result.source());
-        }
-
-        @Test
-        void providerBaseUsed_whenNoPatientDefaultAndNoCoverageMatch() {
-            patientInsurance.setPatientSharePercentage(null);
-            InsuranceCoverage base = baseCoverage(provider, 22);
-            addCoveragesToProvider(base);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, null, null);
-
-            assertEquals(22, result.percentage());
-            assertEquals(PatientShareSource.PROVIDER_DEFAULT, result.source());
+        void zeroWhenNothingSet() {
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, EncounterType.OUTPATIENT, null, Map.of());
+            assertEquals(0, r.percentage());
+            assertEquals(PatientShareSource.PROVIDER_DEFAULT, r.source());
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Layer 5: Fallback to 0
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════
+    // 5. Override + coverage interaction
+    // ═══════════════════════════════════════════════════════════════════
 
     @Nested
-    class FallbackToZero {
+    class OverrideAndCoverageInteraction {
 
         @Test
-        void zeroReturned_whenNoCoverageAndNoPatientDefaultAndNoProviderBase() {
-            patientInsurance.setPatientSharePercentage(null);
-            // provider has no coverages → getBasePatientSharePercentage() returns null
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, null, null);
-
-            assertEquals(0, result.percentage());
-            assertEquals(PatientShareSource.PROVIDER_DEFAULT, result.source());
+        void overrideWinsOverCoverage_whenAllowed() {
+            InsuranceCoverage dc = deptCov(provider, deptADepartment, 10);
+            InsuranceCoverage oc = cov(provider, null, null, 40);
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, EncounterType.OUTPATIENT, oc.getId(), buildPrefetched(dc, oc));
+            assertEquals(40, r.percentage());
+            assertEquals(PatientShareSource.OVERRIDE, r.source());
         }
 
         @Test
-        void zeroReturned_whenPrefetchedEmptyAndEntityEmpty() {
-            patientInsurance.setPatientSharePercentage(null);
-            // provider coverages list is empty
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, null, null, Map.of());
-
-            assertEquals(0, result.percentage());
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Full chain integration: verify precedence order
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    @Nested
-    class FullChainPrecedence {
-
-        @Test
-        void overrideBeatsAll_whenAllowed() {
-            patientInsurance.setPatientSharePercentage(50);
-            InsuranceCoverage base = baseCoverage(provider, 20);
-            addCoveragesToProvider(base);
-            // No prefetched coverages → override always allowed
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, 33, null);
-
-            assertEquals(33, result.percentage());
-            assertEquals(PatientShareSource.OVERRIDE, result.source());
+        void overrideBlockedByExactMatch_fallsToCoverage() {
+            InsuranceCoverage ec = exactCov(provider, deptADepartment, EncounterType.OUTPATIENT, 7);
+            InsuranceCoverage oc = cov(provider, null, null, 99);
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, EncounterType.OUTPATIENT, oc.getId(), buildPrefetched(ec, oc));
+            assertEquals(7, r.percentage());
+            assertEquals(PatientShareSource.RULE, r.source());
         }
 
         @Test
-        void exactCoverageBeatsDeptOnlyAndBaseAndPatientDefault() {
-            patientInsurance.setPatientSharePercentage(50);
-            InsuranceCoverage base = baseCoverage(provider, 20);
-            InsuranceCoverage deptOnly = deptCoverage(provider, deptA, 15);
-            InsuranceCoverage encOnly = encounterCoverage(provider, EncounterType.OUTPATIENT, 12);
-            InsuranceCoverage exact = exactCoverage(provider, deptA, EncounterType.OUTPATIENT, 7);
-            addCoveragesToProvider(base);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched =
-                buildPrefetchedMap(base, deptOnly, encOnly, exact);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, null, prefetched);
-
-            assertEquals(7, result.percentage());
-            assertEquals(PatientShareSource.RULE, result.source());
+        void wrongProviderOverride_fallsToCoverage() {
+            InsuranceCoverage ec = exactCov(provider, deptADepartment, EncounterType.OUTPATIENT, 12);
+            InsuranceCoverage oc = cov(otherProvider, null, null, 50);
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, EncounterType.OUTPATIENT, oc.getId(), buildPrefetched(ec, oc));
+            assertEquals(12, r.percentage());
+            assertEquals(PatientShareSource.RULE, r.source());
         }
 
         @Test
-        void deptOnlyBeatsBaseAndPatientDefault() {
-            patientInsurance.setPatientSharePercentage(50);
-            InsuranceCoverage base = baseCoverage(provider, 20);
-            InsuranceCoverage deptOnly = deptCoverage(provider, deptA, 15);
-            addCoveragesToProvider(base);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched =
-                buildPrefetchedMap(base, deptOnly);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, null, prefetched);
-
-            assertEquals(15, result.percentage());
-            assertEquals(PatientShareSource.RULE, result.source());
-        }
-
-        @Test
-        void encounterOnlyBeatsBaseAndPatientDefault() {
-            patientInsurance.setPatientSharePercentage(50);
-            InsuranceCoverage base = baseCoverage(provider, 20);
-            InsuranceCoverage encOnly = encounterCoverage(provider, EncounterType.OUTPATIENT, 12);
-            addCoveragesToProvider(base);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched =
-                buildPrefetchedMap(base, encOnly);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, null, EncounterType.OUTPATIENT, null, prefetched);
-
-            assertEquals(12, result.percentage());
-            assertEquals(PatientShareSource.RULE, result.source());
-        }
-
-        @Test
-        void patientDefaultBeatsProviderBase() {
+        void patientDefaultWinsOverProviderDefault() {
             patientInsurance.setPatientSharePercentage(30);
-            InsuranceCoverage base = baseCoverage(provider, 20);
-            addCoveragesToProvider(base);
-            // No prefetched coverages → lookupCoveragePercentage returns null
-            // Patient default (30) beats provider base from lazy-load (20)
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, null, Map.of());
-
-            assertEquals(30, result.percentage());
-            assertEquals(PatientShareSource.PATIENT_DEFAULT, result.source());
-        }
-
-        @Test
-        void providerBaseBeatsZero() {
-            patientInsurance.setPatientSharePercentage(null);
-            InsuranceCoverage base = baseCoverage(provider, 18);
-            addCoveragesToProvider(base);
-            // No prefetched coverages → no coverage match, no patient default
-            // Provider base from lazy-load → 18
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, null, Map.of());
-
-            assertEquals(18, result.percentage());
-            assertEquals(PatientShareSource.PROVIDER_DEFAULT, result.source());
-        }
-
-        @Test
-        void completeChain_exactMatch_winsOverEverything() {
-            // Setup: provider has base 20%, dept-only 15%, encounter-only 12%, exact 5%
-            // Patient has default 40%
-            // Override of 99% is attempted
-            patientInsurance.setPatientSharePercentage(40);
-            InsuranceCoverage base = baseCoverage(provider, 20);
-            InsuranceCoverage deptOnly = deptCoverage(provider, deptA, 15);
-            InsuranceCoverage encOnly = encounterCoverage(provider, EncounterType.OUTPATIENT, 12);
-            InsuranceCoverage exact = exactCoverage(provider, deptA, EncounterType.OUTPATIENT, 5);
-            addCoveragesToProvider(base);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched =
-                buildPrefetchedMap(base, deptOnly, encOnly, exact);
-
-            // Override blocked by exact match → exact match wins
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, 99, prefetched);
-
-            assertEquals(5, result.percentage());
-            assertEquals(PatientShareSource.RULE, result.source());
-        }
-
-        @Test
-        void completeChain_noCoverage_patientDefaultWins() {
-            patientInsurance.setPatientSharePercentage(45);
-            InsuranceCoverage base = baseCoverage(provider, 20);
-            addCoveragesToProvider(base);
-            // Empty prefetched → no coverage match
-            // Patient default (45) beats provider lazy-load (20)
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, null, Map.of());
-
-            assertEquals(45, result.percentage());
-            assertEquals(PatientShareSource.PATIENT_DEFAULT, result.source());
-        }
-
-        @Test
-        void completeChain_nothingSet_returnsZero() {
-            patientInsurance.setPatientSharePercentage(null);
-            // provider has no coverages
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, null, null);
-
-            assertEquals(0, result.percentage());
-            assertEquals(PatientShareSource.PROVIDER_DEFAULT, result.source());
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, EncounterType.OUTPATIENT, null, Map.of());
+            assertEquals(30, r.percentage());
+            assertEquals(PatientShareSource.PATIENT_DEFAULT, r.source());
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Edge cases
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════
+    // 6. Priority chain
+    // ═══════════════════════════════════════════════════════════════════
 
     @Nested
-    class EdgeCases {
+    class PriorityChain {
 
         @Test
-        void zeroPatientSharePercentage_isValidAndReturnsZero() {
-            InsuranceCoverage base = baseCoverage(provider, 0);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched =
-                buildPrefetchedMap(base);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, null, null, prefetched);
-
-            assertEquals(0, result.percentage());
-            assertEquals(PatientShareSource.RULE, result.source());
+        void coverageWinsOverProviderDefault() {
+            InsuranceCoverage base = baseCov(provider, 15);
+            provider.addCoverage(baseCov(provider, 20));
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, EncounterType.OUTPATIENT, null, buildPrefetched(base));
+            assertEquals(15, r.percentage());
+            assertEquals(PatientShareSource.RULE, r.source());
         }
 
         @Test
-        void hundredPatientSharePercentage_returns100() {
-            InsuranceCoverage base = baseCoverage(provider, 100);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched =
-                buildPrefetchedMap(base);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, null, null, prefetched);
-
-            assertEquals(100, result.percentage());
-            assertEquals(PatientShareSource.RULE, result.source());
+        void zeroPercentCoverage_treatedAsValidRule() {
+            InsuranceCoverage c = exactCov(provider, deptADepartment, EncounterType.OUTPATIENT, 0);
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, EncounterType.OUTPATIENT, null, buildPrefetched(c));
+            assertEquals(0, r.percentage());
+            assertEquals(PatientShareSource.RULE, r.source());
         }
 
         @Test
-        void providerHasNoCoveragesAtAll_returnsZero() {
-            // Provider coverages list is empty → getBasePatientSharePercentage() returns null
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, EncounterType.OUTPATIENT, null, null);
-
-            assertEquals(0, result.percentage());
+        void hundredPercentCoverage() {
+            InsuranceCoverage c = exactCov(provider, deptADepartment, EncounterType.OUTPATIENT, 100);
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, EncounterType.OUTPATIENT, null, buildPrefetched(c));
+            assertEquals(100, r.percentage());
+            assertEquals(PatientShareSource.RULE, r.source());
         }
 
         @Test
-        void multipleBaseCoverages_returnsFirst() {
-            // Edge case: if somehow there are multiple base coverages, first one wins
-            InsuranceCoverage base1 = baseCoverage(provider, 15);
-            InsuranceCoverage base2 = baseCoverage(provider, 25);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched =
-                buildPrefetchedMap(base1, base2);
-
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, null, null, prefetched);
-
-            // First base coverage wins (15)
-            assertEquals(15, result.percentage());
-        }
-
-        @Test
-        void coverageWithDifferentDepartmentDoesNotMatch() {
-            InsuranceCoverage base = baseCoverage(provider, 20);
-            InsuranceCoverage deptBOnly = deptCoverage(provider, deptB, 10);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched =
-                buildPrefetchedMap(base, deptBOnly);
-
-            // Billing for deptA → deptB coverage doesn't match, base wins
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, null, null, prefetched);
-
-            assertEquals(20, result.percentage());
-            assertEquals(PatientShareSource.RULE, result.source());
-        }
-
-        @Test
-        void coverageWithDifferentEncounterTypeDoesNotMatch() {
-            InsuranceCoverage base = baseCoverage(provider, 20);
-            InsuranceCoverage inpatObs = encounterCoverage(provider, EncounterType.INPATIENT_OBSERVATION, 10);
-            Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetched =
-                buildPrefetchedMap(base, inpatObs);
-
-            // Billing for OUTPATIENT → INPATIENT_OBSERVATION doesn't match, base wins
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, null, EncounterType.OUTPATIENT, null, prefetched);
-
-            assertEquals(20, result.percentage());
-            assertEquals(PatientShareSource.RULE, result.source());
-        }
-
-        @Test
-        void overrideExactlyAtZero_isAccepted() {
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, null, 0, null);
-
-            assertEquals(0, result.percentage());
-            assertEquals(PatientShareSource.OVERRIDE, result.source());
-        }
-
-        @Test
-        void overrideExactlyAt100_isAccepted() {
-            BillingPricingCalculator.ResolvedPatientShare result =
-                calculator.resolvePatientSharePercentage(
-                    patientInsurance, deptA, null, 100, null);
-
-            assertEquals(100, result.percentage());
-            assertEquals(PatientShareSource.OVERRIDE, result.source());
+        void nullEncounterType_matchesBaseCoverage() {
+            InsuranceCoverage base = baseCov(provider, 20);
+            var r = calculator.resolvePatientSharePercentage(
+                patientInsurance, deptA, null, null, buildPrefetched(base));
+            assertEquals(20, r.percentage());
+            assertEquals(PatientShareSource.RULE, r.source());
         }
     }
 }

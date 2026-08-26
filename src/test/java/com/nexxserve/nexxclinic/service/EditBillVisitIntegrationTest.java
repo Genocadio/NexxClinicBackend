@@ -159,7 +159,7 @@ class EditBillVisitIntegrationTest {
                 List.of(new BillVisitInput.BillingPaymentInput(
                     new BigDecimal("100.00"), PaymentMethod.CASH, null)),
                 "Initial bill"
-            ))
+            , null, null))
         );
     }
 
@@ -189,7 +189,7 @@ class EditBillVisitIntegrationTest {
             List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
                 fx.visitDepartment().getId(),
                 List.of(new EditBillVisitInput.EditBillVisitAddProductInput(
-                    newProduct.getId(), new BigDecimal("3"))),
+                    newProduct.getId(), new BigDecimal("3"), null)),
                 null, null,
                 List.of(
                     new EditBillVisitInput.EditBillVisitBillProductInput(
@@ -197,7 +197,7 @@ class EditBillVisitIntegrationTest {
                     new EditBillVisitInput.EditBillVisitBillProductInput(
                         newProduct.getId(), null, CoverageType.PRIVATE, new BigDecimal("3"), ExemptionType.NONE, null)),
                 null, "Added new product"
-            ))
+            , null, null))
         );
 
         assertEditSuccess(visitBillingService.editBillVisit(input, auth(fx.actor())));
@@ -239,7 +239,7 @@ class EditBillVisitIntegrationTest {
                     List.of(new BillVisitInput.BillingPaymentInput(
                         new BigDecimal("125.00"), PaymentMethod.CASH, null)),
                     "Bill both"
-                ))
+                , null, null))
             ), auth(fx.actor())).status());
 
         // Edit: remove fx.product, keep keepProduct + adjust payment.
@@ -255,7 +255,7 @@ class EditBillVisitIntegrationTest {
                 List.of(new BillVisitInput.BillingPaymentInput(
                     new BigDecimal("25.00"), PaymentMethod.CASH, null)),
                 "Removed product"
-            ))
+            , null, null))
         );
 
         assertEditSuccess(visitBillingService.editBillVisit(input, auth(fx.actor())));
@@ -288,7 +288,7 @@ class EditBillVisitIntegrationTest {
                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
                     fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("5"), ExemptionType.NONE, null)),
                 null, "Updated qty to 5"
-            ))
+            , null, null))
         );
 
         assertEditSuccess(visitBillingService.editBillVisit(input, auth(fx.actor())));
@@ -319,7 +319,7 @@ class EditBillVisitIntegrationTest {
                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
                     fx.catalogProductId(), null, CoverageType.PRIVATE, null, ExemptionType.NONE, null)),
                 null, "Re-bill"
-            ))
+            , null, null))
         );
 
         assertEditSuccess(visitBillingService.editBillVisit(input, auth(fx.actor())));
@@ -347,7 +347,7 @@ class EditBillVisitIntegrationTest {
                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
                     fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("5"), ExemptionType.NONE, null)),
                 null, null
-            ))
+            , null, null))
         );
 
         ApiResponse<?> response = visitBillingService.editBillVisit(input, auth(fx.actor()));
@@ -380,7 +380,7 @@ class EditBillVisitIntegrationTest {
                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
                     fx.catalogProductId(), null, CoverageType.PRIVATE, null, ExemptionType.NONE, null)),
                 null, null
-            ))
+            , null, null))
         );
 
         ApiResponse<?> response = visitBillingService.editBillVisit(input, auth(fx.actor()));
@@ -398,7 +398,7 @@ class EditBillVisitIntegrationTest {
         EditBillVisitInput input = new EditBillVisitInput(
             UUID.randomUUID(),
             List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
-                UUID.randomUUID(), null, null, null, List.of(), null, null))
+                UUID.randomUUID(), null, null, null, List.of(), null, null, null, null))
         );
 
         ApiResponse<?> response = visitBillingService.editBillVisit(input, auth(actor));
@@ -427,7 +427,7 @@ class EditBillVisitIntegrationTest {
                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
                     fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("1"), ExemptionType.NONE, null)),
                 null, null
-            ))
+            , null, null))
         );
 
         ApiResponse<?> response = visitBillingService.editBillVisit(input, auth(fx.actor()));
@@ -461,7 +461,7 @@ class EditBillVisitIntegrationTest {
                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
                     fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("3"), ExemptionType.NONE, null)),
                 null, "Edit 1"
-            ))
+            , null, null))
         ), auth(fx.actor())));
         assertEquals(2, billingVersionCount(fx.visit().getId()));
 
@@ -476,7 +476,7 @@ class EditBillVisitIntegrationTest {
                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
                     fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("7"), ExemptionType.NONE, null)),
                 null, "Edit 2"
-            ))
+            , null, null))
         ), auth(fx.actor())));
         assertEquals(3, billingVersionCount(fx.visit().getId()));
 
@@ -506,7 +506,7 @@ class EditBillVisitIntegrationTest {
                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
                     fx.catalogProductId(), null, CoverageType.PRIVATE, new BigDecimal("5"), ExemptionType.NONE, null)),
                 null, "Edit to 5"
-            ))
+            , null, null))
         ), auth(fx.actor())));
 
         // Incremental billVisit with old qty=1 — must be rejected
@@ -518,7 +518,7 @@ class EditBillVisitIntegrationTest {
                         fx.product().getId(), null, BigDecimal.ONE, CoverageType.PRIVATE, null, ExemptionType.NONE, null)),
                     List.of(new BillVisitInput.BillingPaymentInput(
                         new BigDecimal("100.00"), PaymentMethod.CASH, null)), null
-                ))
+                , null, null))
             ), auth(fx.actor()));
 
         assertEquals(ResponseStatus.ERROR, response.status());
@@ -597,7 +597,7 @@ class EditBillVisitIntegrationTest {
                                     fx.catalogProductId(), null, CoverageType.PRIVATE,
                                     new BigDecimal(idx + 2), ExemptionType.NONE, null)),
                                 null, "Concurrent edit " + idx
-                            ))
+                            , null, null))
                         ), auth(fx.actor()));
                     if (result.status() == ResponseStatus.SUCCESS) {
                         winner.compareAndSet(null, result);
@@ -639,7 +639,7 @@ class EditBillVisitIntegrationTest {
                     CoverageType.PRIVATE, null, ExemptionType.PATIENT_SHARE, null)),
                 List.of(), // no payment needed — patient share is waived
                 "Initial bill with PATIENT_SHARE exemption"
-            ))
+            , null, null))
         );
         assertEquals(ResponseStatus.SUCCESS,
             visitBillingService.billVisit(billInput, auth(fx.actor())).status());
@@ -657,7 +657,7 @@ class EditBillVisitIntegrationTest {
                 List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
                     fx.catalogProductId(), null, CoverageType.PRIVATE, null, ExemptionType.FULL, null)),
                 null, "Changed to FULL exemption"
-            ))
+            , null, null))
         );
 
         assertEditSuccess(visitBillingService.editBillVisit(editInput, auth(fx.actor())));
@@ -682,7 +682,7 @@ class EditBillVisitIntegrationTest {
                     CoverageType.PRIVATE, null, ExemptionType.PATIENT_SHARE, null)),
                 List.of(),
                 "Initial bill with PATIENT_SHARE exemption"
-            ))
+            , null, null))
         );
         assertEquals(ResponseStatus.SUCCESS,
             visitBillingService.billVisit(billInput, auth(fx.actor())).status());
@@ -702,7 +702,7 @@ class EditBillVisitIntegrationTest {
                 List.of(new BillVisitInput.BillingPaymentInput(
                     new BigDecimal("100.00"), PaymentMethod.CASH, null)),
                 "Removed exemption, patient pays full"
-            ))
+            , null, null))
         );
 
         assertEditSuccess(visitBillingService.editBillVisit(editInput, auth(fx.actor())));

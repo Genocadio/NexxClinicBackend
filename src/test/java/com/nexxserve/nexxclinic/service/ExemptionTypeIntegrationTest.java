@@ -170,7 +170,7 @@ class ExemptionTypeIntegrationTest {
                     CoverageType.PRIVATE, null, exemptionType, null)),
                 payments,
                 "Test billing"
-            ))
+            , null, null))
         );
     }
 
@@ -184,7 +184,7 @@ class ExemptionTypeIntegrationTest {
                     CoverageType.PRIVATE, null, exemptionType, null)),
                 List.of(),
                 "Test billing"
-            ))
+            , null, null))
         );
     }
 
@@ -198,7 +198,7 @@ class ExemptionTypeIntegrationTest {
                     CoverageType.PRIVATE, null, exemptionType, null)),
                 List.of(),
                 null
-            ))
+            , null, null))
         );
     }
 
@@ -290,7 +290,7 @@ class ExemptionTypeIntegrationTest {
                     null, ExemptionType.FULL, null)),
                 List.of(),
                 "Changed to full exemption"
-            ))
+            , null, null))
         );
 
         ApiResponse<?> response = visitBillingService.editBillVisit(input, auth(fx.actor()));
@@ -331,7 +331,7 @@ class ExemptionTypeIntegrationTest {
                     null, ExemptionType.PATIENT_SHARE, null)),
                 List.of(),
                 "Changed to patient share exemption"
-            ))
+            , null, null))
         );
 
         ApiResponse<?> response = visitBillingService.editBillVisit(input, auth(fx.actor()));
@@ -369,7 +369,7 @@ class ExemptionTypeIntegrationTest {
                     null, ExemptionType.PATIENT_SHARE, null)),
                 List.of(),
                 "Changed from full to patient share"
-            ))
+            , null, null))
         );
 
         ApiResponse<?> response = visitBillingService.editBillVisit(input, auth(fx.actor()));

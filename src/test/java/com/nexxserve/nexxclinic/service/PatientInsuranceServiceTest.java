@@ -121,7 +121,7 @@ class PatientInsuranceServiceTest {
                 null,
                 from,
                 until
-        , null);
+        , null, null);
     }
 
     private PatientInsuranceDto createInsurance(
@@ -259,7 +259,7 @@ class PatientInsuranceServiceTest {
                 second.id(),
                 new UpdatePatientInsuranceInput(
                         null, null, "CARD-ONE", null, null, null, null, null, null
-                , null)
+                , null, null)
         );
         assertEquals(ResponseStatus.ERROR, response.status());
         assertEquals(
@@ -293,7 +293,7 @@ class PatientInsuranceServiceTest {
                 created.id(),
                 new UpdatePatientInsuranceInput(
                         patientB.getId(), null, null, null, null, null, null, null, null
-                , null)
+                , null, null)
         );
         assertEquals(ResponseStatus.ERROR, response.status());
         assertEquals(

@@ -169,7 +169,7 @@ class FlushSoftDeletedVisitProductsIntegrationTest {
                 List.of(new BillVisitInput.BillingPaymentInput(
                     new BigDecimal("50.00"), PaymentMethod.CASH, null)),
                 "Soft delete product"
-            ))
+            , null, null))
         );
         ApiResponse<?> response = visitBillingService.editBillVisit(input, auth(fx.actor()));
         assertEquals(ResponseStatus.SUCCESS, response.status(),
@@ -221,7 +221,7 @@ class FlushSoftDeletedVisitProductsIntegrationTest {
                 List.of(new BillVisitInput.BillingPaymentInput(
                     new BigDecimal("150.00"), PaymentMethod.CASH, null)),
                 "Bill before soft-delete"
-            ))
+            , null, null))
         );
         assertEquals(ResponseStatus.SUCCESS,
             visitBillingService.billVisit(billInput, auth(fx.actor())).status());
