@@ -10,8 +10,8 @@ COPY src/ src/
 
 RUN gradle build --no-daemon -x test
 
-# ── Runtime: Debian-based (required for Playwright/Chromium — Alpine uses musl) ──
-FROM eclipse-temurin:21-jre-noble
+# ── Runtime: Debian bookworm (well-tested with Playwright/Chromium) ──
+FROM eclipse-temurin:21-jre-jammy
 
 # Install system dependencies required by Playwright Chromium + curl for healthcheck
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -34,14 +34,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2 \
     libatspi2.0-0 \
     libwayland-client0 \
+    libxshmfence1 \
     # Fonts for proper text rendering (especially non-Latin characters)
     fonts-dejavu-core \
     fonts-liberation \
+    fonts-noto-color-emoji \
     # Utilities
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js for Playwright driver (required by Java Playwright to manage browsers)
+# Install Node.js 20.x for Playwright driver
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
