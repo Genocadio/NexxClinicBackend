@@ -26,4 +26,18 @@ public interface ConsultationAnswerRepository extends JpaRepository<Consultation
             UUID visitId,
             UUID departmentId
     );
+
+    /**
+     * Find the latest (most recently updated) consultation answer for a given
+     * visit + department combination.
+     */
+    Optional<ConsultationAnswer> findTopByVisitIdAndDepartmentIdOrderByUpdatedAtDesc(
+            UUID visitId,
+            UUID departmentId
+    );
+
+    /**
+     * Find the latest consultation answer for a given visit (across all departments).
+     */
+    List<ConsultationAnswer> findByVisitIdOrderByUpdatedAtDesc(UUID visitId);
 }

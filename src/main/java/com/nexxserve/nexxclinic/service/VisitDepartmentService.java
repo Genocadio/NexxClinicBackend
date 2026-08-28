@@ -36,6 +36,9 @@ import com.nexxserve.nexxclinic.repository.ProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentDiagnosisRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentMedicationRepository;
 import com.nexxserve.nexxclinic.repository.VisitBillingItemRepository;
+import com.nexxserve.nexxclinic.model.AnswerStatus;
+import com.nexxserve.nexxclinic.entity.ConsultationAnswer;
+import com.nexxserve.nexxclinic.repository.ConsultationAnswerRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
 import com.nexxserve.nexxclinic.repository.VisitInsuranceRepository;
@@ -58,6 +61,7 @@ public class VisitDepartmentService {
     private final VisitRepository visitRepository;
     private final VisitDepartmentRepository visitDepartmentRepository;
     private final VisitDepartmentProductRepository visitDepartmentProductRepository;
+    private final ConsultationAnswerRepository consultationAnswerRepository;
     private final VisitDepartmentDiagnosisRepository visitDepartmentDiagnosisRepository;
     private final VisitDepartmentMedicationRepository visitDepartmentMedicationRepository;
     private final com.nexxserve.nexxclinic.repository.VisitPreInstructionRepository visitPreInstructionRepository;
@@ -83,6 +87,7 @@ public class VisitDepartmentService {
             VisitRepository visitRepository,
             VisitDepartmentRepository visitDepartmentRepository,
             VisitDepartmentProductRepository visitDepartmentProductRepository,
+            ConsultationAnswerRepository consultationAnswerRepository,
             VisitDepartmentDiagnosisRepository visitDepartmentDiagnosisRepository,
             VisitDepartmentMedicationRepository visitDepartmentMedicationRepository,
             com.nexxserve.nexxclinic.repository.VisitPreInstructionRepository visitPreInstructionRepository,
@@ -104,6 +109,7 @@ public class VisitDepartmentService {
         this.visitRepository = visitRepository;
         this.visitDepartmentRepository = visitDepartmentRepository;
         this.visitDepartmentProductRepository = visitDepartmentProductRepository;
+        this.consultationAnswerRepository = consultationAnswerRepository;
         this.visitDepartmentDiagnosisRepository = visitDepartmentDiagnosisRepository;
         this.visitDepartmentMedicationRepository = visitDepartmentMedicationRepository;
         this.visitPreInstructionRepository = visitPreInstructionRepository;
@@ -1402,6 +1408,9 @@ public class VisitDepartmentService {
         }
 
         if (visitedDepartmentIds.contains(visitDepartment.getId())) {
+            // Cycle guard: limited data, but still compute finalization readiness
+            boolean hasFinalizedAnswersCycleGuard = resolveHasFinalizedConsultationAnswers(visitDepartment);
+            boolean hasBillableCycleGuard = resolveHasBillableProducts(visitDepartment.getId());
             return new VisitDepartmentDto(
                     visitDepartment.getId(),
                     departmentMapper.toDto(visitDepartment.getDepartment()),
@@ -1417,6 +1426,8 @@ public class VisitDepartmentService {
                     List.of(),
                     visitDepartmentNoteService.buildNotesSummary(visitDepartment.getId(), authUser),
                     visitDepartment.getAnswerId(),
+                    hasFinalizedAnswersCycleGuard,
+                    hasBillableCycleGuard,
                     visitDepartment.getCreatedAt(),
                     visitDepartment.getUpdatedAt()
             );
@@ -1468,8 +1479,31 @@ public class VisitDepartmentService {
                 childVisitDepartments,
                 visitDepartmentNoteService.buildNotesSummary(visitDepartment.getId(), authUser),
                 visitDepartment.getAnswerId(),
+                resolveHasFinalizedConsultationAnswers(visitDepartment),
+                resolveHasBillableProducts(visitDepartment.getId()),
                 visitDepartment.getCreatedAt(),
                 visitDepartment.getUpdatedAt()
+        );
+    }
+
+    private boolean resolveHasFinalizedConsultationAnswers(VisitDepartment visitDepartment) {
+        if (visitDepartment.getAnswerId() == null) {
+            return false; // no answers submitted yet
+        }
+        Optional<ConsultationAnswer> answerOpt = consultationAnswerRepository.findById(visitDepartment.getAnswerId());
+        if (answerOpt.isEmpty()) {
+            return false;
+        }
+        AnswerStatus status = answerOpt.get().getStatus();
+        return status == AnswerStatus.FINAL || status == AnswerStatus.SUBMITTED;
+    }
+
+    private boolean resolveHasBillableProducts(UUID visitDepartmentId) {
+        List<VisitDepartmentProduct> products = visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartmentId);
+        return products.stream().anyMatch(p ->
+                p.getStatus() == VisitProductStatus.PENDING
+                || p.getStatus() == VisitProductStatus.UNPAID
+                || p.getStatus() == VisitProductStatus.CORRECTION_PENDING
         );
     }
 

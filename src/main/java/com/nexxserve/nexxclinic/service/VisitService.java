@@ -31,6 +31,8 @@ import com.nexxserve.nexxclinic.repository.PatientInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.PatientRepository;
 import com.nexxserve.nexxclinic.repository.ProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitBillingRepository;
+import com.nexxserve.nexxclinic.entity.ConsultationAnswer;
+import com.nexxserve.nexxclinic.repository.ConsultationAnswerRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentNoteRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
@@ -84,6 +86,7 @@ public class VisitService {
     private final com.nexxserve.nexxclinic.service.billing.InvoiceGenerator invoiceGenerator;
     private final MeilisearchIndexService meilisearchIndexService;
     private final VisitPriceEstimateService visitPriceEstimateService;
+    private final ConsultationAnswerRepository consultationAnswerRepository;
 
     public VisitService(
             VisitRepository visitRepository,
@@ -107,7 +110,8 @@ public class VisitService {
             com.nexxserve.nexxclinic.repository.DepartmentInsuranceBillingRepository departmentInsuranceBillingRepository,
             com.nexxserve.nexxclinic.service.billing.InvoiceGenerator invoiceGenerator,
             MeilisearchIndexService meilisearchIndexService,
-            @Lazy VisitPriceEstimateService visitPriceEstimateService
+            @Lazy VisitPriceEstimateService visitPriceEstimateService,
+            ConsultationAnswerRepository consultationAnswerRepository
     ) {
         this.visitRepository = visitRepository;
         this.visitInsuranceRepository = visitInsuranceRepository;
@@ -131,6 +135,7 @@ public class VisitService {
         this.invoiceGenerator = invoiceGenerator;
         this.meilisearchIndexService = meilisearchIndexService;
         this.visitPriceEstimateService = visitPriceEstimateService;
+        this.consultationAnswerRepository = consultationAnswerRepository;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -739,6 +744,39 @@ public class VisitService {
         }
 
         List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(visitId);
+
+        // Pre-check: all COMPLETED departments must have finalised consultation
+        // answers and no unbilled products before the visit can be finalised.
+        for (VisitDepartment dept : departments) {
+            if (dept.getStatus() == VisitDepartmentStatus.COMPLETED) {
+                // Check consultation answers
+                if (dept.getAnswerId() != null) {
+                    Optional<ConsultationAnswer> answerOpt = consultationAnswerRepository.findById(dept.getAnswerId());
+                    if (answerOpt.isPresent()) {
+                        AnswerStatus answerStatus = answerOpt.get().getStatus();
+                        if (answerStatus != AnswerStatus.FINAL && answerStatus != AnswerStatus.SUBMITTED) {
+                            return ApiResponse.error("Cannot finalise: department '" + dept.getDepartment().getName() + "' has draft consultation answers.");
+                        }
+                    } else {
+                        return ApiResponse.error("Cannot finalise: department '" + dept.getDepartment().getName() + "' has a missing consultation answer record.");
+                    }
+                } else {
+                    return ApiResponse.error("Cannot finalise: department '" + dept.getDepartment().getName() + "' has no consultation answers.");
+                }
+
+                // Check unbilled products
+                List<VisitDepartmentProduct> products = visitDepartmentProductRepository.findByVisitDepartmentId(dept.getId());
+                boolean hasUnbilled = products.stream().anyMatch(p ->
+                        p.getStatus() == VisitProductStatus.PENDING
+                        || p.getStatus() == VisitProductStatus.UNPAID
+                        || p.getStatus() == VisitProductStatus.CORRECTION_PENDING
+                );
+                if (hasUnbilled) {
+                    return ApiResponse.error("Cannot finalise: department '" + dept.getDepartment().getName() + "' has unbilled products. All products must be billed first.");
+                }
+            }
+        }
+
         boolean allFinalised = true;
         for (VisitDepartment dept : departments) {
             if (dept.getStatus() == VisitDepartmentStatus.COMPLETED) {
@@ -751,9 +789,6 @@ public class VisitService {
         }
 
         if (!allFinalised && !departments.isEmpty()) {
-            // Some departments are not in a finalisable state — warn but proceed
-            // with finalising the ones that can be. The visit becomes FINALISED
-            // only when every non-cancelled department is FINALISED.
             boolean canFinaliseVisit = true;
             for (VisitDepartment dept : departments) {
                 if (dept.getStatus() != VisitDepartmentStatus.FINALISED && dept.getStatus() != VisitDepartmentStatus.CANCELLED) {

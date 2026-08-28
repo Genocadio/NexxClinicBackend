@@ -602,6 +602,8 @@ type VisitDepartment {
   childVisitDepartments: [VisitDepartment!]!
   products: [VisitDepartmentProduct!]!
   diagnostics: [VisitDepartmentDiagnosis!]
+  hasFinalizedConsultationAnswers: Boolean
+  hasBillableProducts: Boolean
   medications: [VisitDepartmentMedication!]
   preInstructions: [VisitPreInstruction!]!
   notes: VisitDepartmentNotesSummary!

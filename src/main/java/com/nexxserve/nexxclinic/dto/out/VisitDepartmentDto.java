@@ -21,6 +21,8 @@ public record VisitDepartmentDto(
         List<VisitDepartmentDto> childVisitDepartments,
         VisitDepartmentNotesSummaryDto notes,
         UUID answerId,
+        Boolean hasFinalizedConsultationAnswers,
+        Boolean hasBillableProducts,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {}
