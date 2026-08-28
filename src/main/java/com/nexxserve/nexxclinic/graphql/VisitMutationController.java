@@ -110,7 +110,7 @@ public class VisitMutationController {
         return visitDepartmentService.removeChildVisitDepartment(visitDepartmentId, authUser);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.MANAGER, RoleName.FINANCE, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
     @MutationMapping
     public ApiResponse removeVisitDepartment(
             @Argument UUID visitDepartmentId,

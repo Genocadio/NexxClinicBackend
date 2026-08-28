@@ -668,33 +668,105 @@ public class VisitDepartmentService {
             return ApiResponse.error("Use removeChildVisitDepartment for child departments.");
         }
 
-        // Only allowed when the department has 0 products
-        List<VisitDepartmentProduct> products = visitDepartmentProductRepository
-                .findByVisitDepartmentIdIncludingDeleted(vd.getId());
-        if (!products.isEmpty()) {
-            return ApiResponse.error("Cannot remove a department that has products. Remove all products first.");
-        }
-
-        // FK guard: cannot remove if it has clinical/financial dependents
-        if (!visitDepartmentDiagnosisRepository.findByVisitDepartmentId(vd.getId()).isEmpty()
-                || !visitDepartmentMedicationRepository.findByVisitDepartmentId(vd.getId()).isEmpty()
-                || !visitPreInstructionRepository.findByVisitDepartmentIdOrderByCreatedAtAsc(vd.getId()).isEmpty()
-                || visitDepartmentNoteServiceHasNotes(vd.getId())
-                || visitDepartmentBillingRepository.existsByVisitDepartmentId(vd.getId())) {
-            return ApiResponse.error("Cannot remove a department that has notes, diagnoses, medications, pre-instructions or billing history.");
-        }
-
         Visit visit = vd.getVisit();
-        if (visit.getStatus() == VisitStatus.COMPLETED || visit.getStatus() == VisitStatus.CANCELLED) {
-            return ApiResponse.error("Cannot remove departments from a completed or cancelled visit.");
-        }
-        if (visit.getStatus() == VisitStatus.BILL_EDITING) {
-            return ApiResponse.error("Cannot remove departments while the bill is being edited.");
-        }
+        boolean isManagerOrAbove = isManagerOrAboveRole(authUser);
 
-        visitDepartmentRepository.delete(vd);
+        if (isManagerOrAbove) {
+            // Manager/Admin can remove any department at any time.
+            // Hard-delete: cascade all dependents (products, diagnoses, medications,
+            // pre-instructions, notes, billing, processors, estimates) so the
+            // department row can be removed without FK violations.
+            hardDeleteVisitDepartment(vd);
+        } else {
+            // Reception/Nurse/Clinician/Staff: only allowed when the department
+            // is still IN_PROGRESS (pending) and has no products added yet.
+            if (vd.getStatus() != VisitDepartmentStatus.PENDING && vd.getStatus() != VisitDepartmentStatus.ACTIVE) {
+                return ApiResponse.error("Cannot remove a department that is not pending or active. Only departments with no products can be removed.");
+            }
+
+            List<VisitDepartmentProduct> products = visitDepartmentProductRepository
+                    .findByVisitDepartmentIdIncludingDeleted(vd.getId());
+            if (!products.isEmpty()) {
+                return ApiResponse.error("Cannot remove a department that has products. Remove all products first.");
+            }
+
+            // FK guard: cannot remove if it has clinical dependents
+            if (!visitDepartmentDiagnosisRepository.findByVisitDepartmentId(vd.getId()).isEmpty()
+                    || !visitDepartmentMedicationRepository.findByVisitDepartmentId(vd.getId()).isEmpty()
+                    || !visitPreInstructionRepository.findByVisitDepartmentIdOrderByCreatedAtAsc(vd.getId()).isEmpty()
+                    || visitDepartmentNoteServiceHasNotes(vd.getId())) {
+                return ApiResponse.error("Cannot remove a department that has notes, diagnoses, medications or pre-instructions.");
+            }
+
+            visitDepartmentRepository.delete(vd);
+        }
 
         return ApiResponse.success("Department removed from visit.", visitService.visitToDto(visit, null, authUser));
+    }
+
+    /**
+     * Hard-delete a visit department and all its dependents. Used by managers/admins
+     * who can remove departments regardless of status or billing history.
+     */
+    private void hardDeleteVisitDepartment(VisitDepartment vd) {
+        UUID deptId = vd.getId();
+
+        // Delete child visit departments first (depth-first)
+        List<VisitDepartment> children = visitDepartmentRepository.findByParentVisitDepartmentId(deptId);
+        for (VisitDepartment child : children) {
+            hardDeleteVisitDepartment(child);
+        }
+
+        // Delete products
+        visitDepartmentProductRepository.findByVisitDepartmentIdIncludingDeleted(deptId)
+                .forEach(visitDepartmentProductRepository::delete);
+
+        // Delete diagnoses
+        visitDepartmentDiagnosisRepository.findByVisitDepartmentId(deptId)
+                .forEach(visitDepartmentDiagnosisRepository::delete);
+
+        // Delete medications
+        visitDepartmentMedicationRepository.findByVisitDepartmentId(deptId)
+                .forEach(visitDepartmentMedicationRepository::delete);
+
+        // Delete pre-instructions
+        visitPreInstructionRepository.findByVisitDepartmentIdOrderByCreatedAtAsc(deptId)
+                .forEach(visitPreInstructionRepository::delete);
+
+        // Delete billing items and billing records for this department
+        try {
+            visitDepartmentNoteService.deleteAllNotesForDepartment(deptId);
+        } catch (Exception e) {
+            log.warn("Could not delete notes for department {}: {}", deptId, e.getMessage());
+        }
+
+        // Delete billing (cascade deletes insurance billings, items, payments)
+        try {
+            visitDepartmentBillingRepository.findByVisitDepartmentId(deptId)
+                    .forEach(visitDepartmentBillingRepository::delete);
+        } catch (Exception e) {
+            log.warn("Could not delete billing for department {}: {}", deptId, e.getMessage());
+        }
+
+        // Delete price estimates for this department's products
+        try {
+            visitPriceEstimateService.deleteEstimatesByVisitDepartmentId(deptId);
+        } catch (Exception e) {
+            log.warn("Could not delete price estimates for department {}: {}", deptId, e.getMessage());
+        }
+
+        // Finally delete the department itself
+        visitDepartmentRepository.delete(vd);
+    }
+
+    private boolean isManagerOrAboveRole(AuthenticatedUser authUser) {
+        if (authUser == null || authUser.roles() == null) {
+            return false;
+        }
+        return authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.ADMIN)
+                || authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.CLINIC_ADMIN)
+                || authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.MANAGER)
+                || authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.FINANCE);
     }
 
     // ─────────────────────────────────────────────────────────────

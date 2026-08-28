@@ -12,4 +12,6 @@ public interface VisitDepartmentNoteViewerRepository extends JpaRepository<Visit
     Optional<VisitDepartmentNoteViewer> findByNoteIdAndViewerId(UUID noteId, UUID viewerId);
 
     boolean existsByNoteIdAndViewerId(UUID noteId, UUID viewerId);
+
+    void deleteByNote(com.nexxserve.nexxclinic.entity.VisitDepartmentNote note);
 }

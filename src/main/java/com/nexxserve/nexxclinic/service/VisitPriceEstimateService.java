@@ -193,6 +193,11 @@ public class VisitPriceEstimateService {
         }
     }
 
+    @Transactional
+    public void deleteEstimatesByVisitDepartmentId(UUID visitDepartmentId) {
+        visitPriceEstimateRepository.deleteByVisitDepartmentId(visitDepartmentId);
+    }
+
     /**
      * Fetch all pre-billing price estimates for a visit.
      */

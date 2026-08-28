@@ -1868,6 +1868,16 @@ public class VisitBillingService {
             return ApiResponse.error("Cannot update billing date for a cancelled visit.");
         }
 
+        // Validate: billing date must be at least 5 minutes after visit date
+        if (visit.getVisitDate() != null && input.billingDate() != null) {
+            long visitTimeMs = visit.getVisitDate().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+            long billingTimeMs = input.billingDate().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+            long fiveMinutesMs = 5 * 60 * 1000;
+            if (billingTimeMs < visitTimeMs + fiveMinutesMs) {
+                return ApiResponse.error("Billing date must be at least 5 minutes after the visit date.");
+            }
+        }
+
         billing.setBillingDate(input.billingDate());
         // Invalidate existing invoice so a fresh PDF is generated.
         billing.setInvoiceUrl(null);

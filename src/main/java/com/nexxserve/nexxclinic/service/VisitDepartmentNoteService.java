@@ -380,6 +380,17 @@ public class VisitDepartmentNoteService {
         return visitDepartmentNoteRepository.countByVisitDepartmentId(visitDepartmentId) > 0;
     }
 
+    @Transactional
+    public void deleteAllNotesForDepartment(UUID visitDepartmentId) {
+        List<com.nexxserve.nexxclinic.entity.VisitDepartmentNote> notes =
+                visitDepartmentNoteRepository.findByVisitDepartmentId(visitDepartmentId);
+        for (com.nexxserve.nexxclinic.entity.VisitDepartmentNote note : notes) {
+            // Delete viewers first (FK constraint)
+            visitDepartmentNoteViewerRepository.deleteByNote(note);
+        }
+        visitDepartmentNoteRepository.deleteByVisitDepartmentId(visitDepartmentId);
+    }
+
     public VisitDepartmentNotesSummaryDto buildNotesSummary(UUID visitDepartmentId, AuthenticatedUser authUser) {
         long totalNotes = visitDepartmentNoteRepository.countByVisitDepartmentId(visitDepartmentId);
         int newNotes = 0;
