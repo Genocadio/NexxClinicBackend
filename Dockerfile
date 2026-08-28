@@ -55,8 +55,12 @@ RUN groupadd -g 1001 spring && \
 # Pre-install Playwright Chromium at build time (avoids runtime download).
 # Install into a shared location accessible by the spring user.
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
-RUN mkdir -p /opt/playwright-browsers && chown -R spring:spring /opt/playwright-browsers && \
-    su -s /bin/bash spring -c "npx -y playwright@1.44.0 install --with-deps chromium" || true
+RUN mkdir -p /opt/playwright-browsers && chown -R spring:spring /opt/playwright-browsers
+RUN su -s /bin/bash -c "PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers npx -y playwright@1.44.0 install chromium"
+# Verify the Chromium binary was actually downloaded
+RUN ls /opt/playwright-browsers/chromium-*/chrome-linux/chrome >/dev/null 2>&1 || \
+    ls /opt/playwright-browsers/chromium-*/chrome-linux/chromium >/dev/null 2>&1 || \
+    (echo 'ERROR: Playwright Chromium binary not found after install' && exit 1)
 
 WORKDIR /app
 

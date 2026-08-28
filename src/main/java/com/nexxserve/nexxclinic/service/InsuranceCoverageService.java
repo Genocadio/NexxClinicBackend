@@ -61,19 +61,6 @@ public class InsuranceCoverageService {
             department = deptOpt.get();
         }
 
-        // Check for duplicate rule
-        Optional<InsuranceCoverage> existing = ruleRepository
-            .findByInsuranceProviderIdAndDepartmentIdAndEncounterType(
-                input.insuranceProviderId(),
-                input.departmentId(),
-                input.encounterType()
-            );
-        if (existing.isPresent()) {
-            return ApiResponse.error(
-                "A rule already exists for this insurance provider, department, and encounter type combination. Use update instead."
-            );
-        }
-
         InsuranceCoverage rule = new InsuranceCoverage();
         rule.setInsuranceProvider(providerOpt.get());
         rule.setDepartment(department);

@@ -108,6 +108,8 @@ public class BillingDataMapper {
                 .map(this::visitBillingItemToMap)
                 .toList()
         );
+        data.put("invoiceUrl", billing.getInvoiceUrl());
+        data.put("billingDate", billing.getBillingDate());
         data.put("createdAt", billing.getCreatedAt());
         data.put("updatedAt", billing.getUpdatedAt());
         return data;

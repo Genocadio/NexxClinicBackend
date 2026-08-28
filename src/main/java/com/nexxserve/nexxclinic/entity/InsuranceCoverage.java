@@ -43,12 +43,6 @@ import java.util.UUID;
 @Entity
 @Table(
     name = "insurance_coverage",
-    uniqueConstraints = {
-        @UniqueConstraint(
-            name = "uk_coverage",
-            columnNames = {"insurance_provider_id", "department_id", "encounter_type"}
-        )
-    },
     indexes = {
         @Index(name = "idx_coverage_provider", columnList = "insurance_provider_id"),
         @Index(name = "idx_coverage_dept", columnList = "department_id")

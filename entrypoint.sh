@@ -11,5 +11,8 @@ if [ -d "$STORAGE_DIR" ]; then
   fi
 fi
 
+# Ensure Playwright can find its pre-installed browsers
+export PLAYWRIGHT_BROWSERS_PATH="/opt/playwright-browsers"
+
 # Drop from root → spring and exec the JVM
-exec runuser -u spring -- java -jar app.jar
+exec runuser -u spring -- env "PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH" java -jar app.jar

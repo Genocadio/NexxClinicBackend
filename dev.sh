@@ -30,6 +30,23 @@ export JWT_SECRET="${JWT_SECRET:-nexxclinic-local-dev-jwt-secret-change-in-produ
 export JWT_EXPIRATION_MINUTES="${JWT_EXPIRATION_MINUTES:-480}"
 export JWT_REFRESH_EXPIRATION_DAYS="${JWT_REFRESH_EXPIRATION_DAYS:-30}"
 
+ensure_playwright() {
+  # Use a project-local path so we don't need sudo.
+  export PLAYWRIGHT_BROWSERS_PATH="$HOME/.cache/ms-playwright"
+  mkdir -p "$PLAYWRIGHT_BROWSERS_PATH"
+
+  # Check if any Chromium binary already exists
+  if ls "$PLAYWRIGHT_BROWSERS_PATH/chromium-"*/chrome-linux/chrome >/dev/null 2>&1 || \
+     ls "$PLAYWRIGHT_BROWSERS_PATH/chromium-"*/chrome-linux/chromium >/dev/null 2>&1; then
+    echo "✅ Playwright Chromium already present"
+  else
+    echo "Installing Playwright Chromium (~85 MiB, one-time)..."
+    # Use Node.js playwright CLI to install just chromium (not Firefox/WebKit)
+    npx -y playwright@1.44.0 install chromium 2>&1 | tail -5
+    echo "✅ Playwright Chromium installed"
+  fi
+}
+
 stop_backend() {
   # Kill by port first
   local pids
@@ -59,7 +76,10 @@ build() {
 
 start() {
   echo "Starting NexxClinic backend in screen session '$SESSION'..."
+  # Pass the Playwright browsers path to the JVM
+  export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}"
   screen -dmS "$SESSION" bash -c "
+    export PLAYWRIGHT_BROWSERS_PATH='$PLAYWRIGHT_BROWSERS_PATH'
     java -jar $JAR_FILE > $LOG_FILE 2>&1
     echo 'Java process exited. Press Enter to close.' >> $LOG_FILE
   "
@@ -89,6 +109,7 @@ case "${1:-restart}" in
     ;;
   restart|"")
     stop_backend
+    ensure_playwright
     build
     start
     ;;
