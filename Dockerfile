@@ -43,7 +43,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js 20.x for Playwright driver
+# Install Node.js 20.x for Playwright driver (fallback if system Chromium unavailable)
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
@@ -52,15 +52,33 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 RUN groupadd -g 1001 spring && \
     useradd -u 1001 -g spring -s /bin/bash -m spring
 
-# Pre-install Playwright Chromium at build time (avoids runtime download).
-# Install into a shared location accessible by the spring user.
+# Playwright browser + driver cache directories.
+# The Java Playwright SDK needs a writable cache for its driver JAR and
+# browser binaries. The pre-installed browsers are at PLAYWRIGHT_BROWSERS_PATH,
+# but the SDK also writes driver metadata to ~/.cache/ms-playwright/.
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
-RUN mkdir -p /opt/playwright-browsers && chown -R spring:spring /opt/playwright-browsers
+RUN mkdir -p /opt/playwright-browsers \
+    && mkdir -p /home/spring/.cache/ms-playwright \
+    && chown -R spring:spring /opt/playwright-browsers /home/spring/.cache/ms-playwright
+
+# Pre-install Playwright Chromium at build time (avoids runtime download).
+# The Java SDK 1.44.0 bundles a Node.js driver that also needs pre-cached
+# browsers to avoid a network download on first use.
 RUN su -s /bin/bash -c "PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers npx -y playwright@1.44.0 install chromium"
 # Verify the Chromium binary was actually downloaded
 RUN ls /opt/playwright-browsers/chromium-*/chrome-linux/chrome >/dev/null 2>&1 || \
     ls /opt/playwright-browsers/chromium-*/chrome-linux/chromium >/dev/null 2>&1 || \
     (echo 'ERROR: Playwright Chromium binary not found after install' && exit 1)
+
+# Symlink Playwright-installed Chromium to a system path so InvoicePdfRenderer
+# can find it via `which chromium` without triggering Playwright's driver install.
+RUN ln -sf "$(ls -d /opt/playwright-browsers/chromium-*/chrome-linux/chrome)" /usr/local/bin/chromium
+
+# Also pre-cache the Playwright driver's Node.js dependencies so the Java SDK's
+# Playwright.create() doesn't try to download anything at runtime.
+# The Java SDK extracts its own driver to ~/.cache/ms-playwright/ and runs
+# `node install.js`. By pre-populating the driver cache, we skip this step.
+RUN su -s /bin/bash -c "PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers npx -y playwright@1.44.0 install-deps chromium 2>/dev/null || true"
 
 WORKDIR /app
 

@@ -13,6 +13,7 @@ import com.nexxserve.nexxclinic.entity.VisitDepartmentMedication;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
 import com.nexxserve.nexxclinic.entity.VisitInsurance;
 import com.nexxserve.nexxclinic.entity.VisitPreInstruction;
+import com.nexxserve.nexxclinic.entity.billing.VisitDepartmentProductSnapshot;
 import com.nexxserve.nexxclinic.entity.VisitPreInstructionMedication;
 import com.nexxserve.nexxclinic.entity.VisitPreInstructionProductRequest;
 import com.nexxserve.nexxclinic.entity.Worker;
@@ -82,6 +83,8 @@ public class VisitDepartmentService {
     private final VisitDepartmentNoteService visitDepartmentNoteService;
     private final VisitService visitService;
     private final com.nexxserve.nexxclinic.service.VisitPriceEstimateService visitPriceEstimateService;
+    private final MeilisearchIndexService meilisearchIndexService;
+    private final com.nexxserve.nexxclinic.repository.VisitDepartmentProductSnapshotRepository visitDepartmentProductSnapshotRepository;
 
     public VisitDepartmentService(
             VisitRepository visitRepository,
@@ -104,7 +107,9 @@ public class VisitDepartmentService {
             ProductMapper productMapper,
             @Lazy VisitDepartmentNoteService visitDepartmentNoteService,
             @Lazy VisitService visitService,
-            @Lazy com.nexxserve.nexxclinic.service.VisitPriceEstimateService visitPriceEstimateService
+            @Lazy com.nexxserve.nexxclinic.service.VisitPriceEstimateService visitPriceEstimateService,
+            MeilisearchIndexService meilisearchIndexService,
+            com.nexxserve.nexxclinic.repository.VisitDepartmentProductSnapshotRepository visitDepartmentProductSnapshotRepository
     ) {
         this.visitRepository = visitRepository;
         this.visitDepartmentRepository = visitDepartmentRepository;
@@ -127,6 +132,8 @@ public class VisitDepartmentService {
         this.visitDepartmentNoteService = visitDepartmentNoteService;
         this.visitService = visitService;
         this.visitPriceEstimateService = visitPriceEstimateService;
+        this.meilisearchIndexService = meilisearchIndexService;
+        this.visitDepartmentProductSnapshotRepository = visitDepartmentProductSnapshotRepository;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -684,7 +691,10 @@ public class VisitDepartmentService {
             // Hard-delete: cascade all dependents (products, diagnoses, medications,
             // pre-instructions, notes, billing, processors, estimates) so the
             // department row can be removed without FK violations.
-            hardDeleteVisitDepartment(vd);
+            List<String> warnings = hardDeleteVisitDepartment(vd);
+            if (!warnings.isEmpty()) {
+                log.warn("Department {} deleted with {} warnings: {}", vd.getId(), warnings.size(), warnings);
+            }
         } else {
             // Reception/Nurse/Clinician/Staff: only allowed when the department
             // is still IN_PROGRESS (pending) and has no products added yet.
@@ -698,73 +708,118 @@ public class VisitDepartmentService {
                 return ApiResponse.error("Cannot remove a department that has products. Remove all products first.");
             }
 
-            // FK guard: cannot remove if it has clinical dependents
+            // FK guard: cannot remove if it has clinical dependents or billing history
             if (!visitDepartmentDiagnosisRepository.findByVisitDepartmentId(vd.getId()).isEmpty()
                     || !visitDepartmentMedicationRepository.findByVisitDepartmentId(vd.getId()).isEmpty()
                     || !visitPreInstructionRepository.findByVisitDepartmentIdOrderByCreatedAtAsc(vd.getId()).isEmpty()
-                    || visitDepartmentNoteServiceHasNotes(vd.getId())) {
-                return ApiResponse.error("Cannot remove a department that has notes, diagnoses, medications or pre-instructions.");
+                    || visitDepartmentNoteServiceHasNotes(vd.getId())
+                    || visitDepartmentBillingRepository.existsByVisitDepartmentId(vd.getId())) {
+                return ApiResponse.error("Cannot remove a department that has notes, diagnoses, medications, pre-instructions or billing history.");
             }
 
             visitDepartmentRepository.delete(vd);
         }
 
-        return ApiResponse.success("Department removed from visit.", visitService.visitToDto(visit, null, authUser));
+        // Re-index the visit in Meilisearch so search results reflect the removed department.
+        try {
+            meilisearchIndexService.indexVisit(visit);
+        } catch (Exception e) {
+            log.warn("Could not re-index visit {} after department removal: {}", visit.getId(), e.getMessage());
+        }
+
+        String message = "Department removed from visit.";
+        return ApiResponse.success(message, visitService.visitToDto(visit, null, authUser));
     }
 
     /**
      * Hard-delete a visit department and all its dependents. Used by managers/admins
      * who can remove departments regardless of status or billing history.
+     *
+     * @return warning messages about cleanup steps that failed (empty = clean delete)
      */
-    private void hardDeleteVisitDepartment(VisitDepartment vd) {
+    private List<String> hardDeleteVisitDepartment(VisitDepartment vd) {
         UUID deptId = vd.getId();
+        List<String> warnings = new ArrayList<>();
 
         // Delete child visit departments first (depth-first)
         List<VisitDepartment> children = visitDepartmentRepository.findByParentVisitDepartmentId(deptId);
         for (VisitDepartment child : children) {
-            hardDeleteVisitDepartment(child);
+            warnings.addAll(hardDeleteVisitDepartment(child));
         }
 
-        // Delete products
-        visitDepartmentProductRepository.findByVisitDepartmentIdIncludingDeleted(deptId)
-                .forEach(visitDepartmentProductRepository::delete);
-
-        // Delete diagnoses
-        visitDepartmentDiagnosisRepository.findByVisitDepartmentId(deptId)
-                .forEach(visitDepartmentDiagnosisRepository::delete);
-
-        // Delete medications
-        visitDepartmentMedicationRepository.findByVisitDepartmentId(deptId)
-                .forEach(visitDepartmentMedicationRepository::delete);
-
-        // Delete pre-instructions
-        visitPreInstructionRepository.findByVisitDepartmentIdOrderByCreatedAtAsc(deptId)
-                .forEach(visitPreInstructionRepository::delete);
-
-        // Delete billing items and billing records for this department
+        // Delete notes + viewers (the service handles viewer FK cleanup
+        // before deleting notes, avoiding FK violations).
         try {
             visitDepartmentNoteService.deleteAllNotesForDepartment(deptId);
         } catch (Exception e) {
             log.warn("Could not delete notes for department {}: {}", deptId, e.getMessage());
+            warnings.add("Could not delete notes: " + e.getMessage());
+        }
+
+        // Delete product snapshots (immutable billing history rows with FK to this
+        // department). Must happen before deleting the department itself.
+        try {
+            List<VisitDepartmentProductSnapshot> snapshots =
+                    visitDepartmentProductSnapshotRepository.findByVisitDepartmentId(deptId);
+            if (!snapshots.isEmpty()) {
+                visitDepartmentProductSnapshotRepository.deleteAllInBatch(snapshots);
+            }
+        } catch (Exception e) {
+            log.warn("Could not delete product snapshots for department {}: {}", deptId, e.getMessage());
+            warnings.add("Could not delete billing snapshots: " + e.getMessage());
+        }
+
+        // Batch-delete products
+        List<VisitDepartmentProduct> products =
+                visitDepartmentProductRepository.findByVisitDepartmentIdIncludingDeleted(deptId);
+        if (!products.isEmpty()) {
+            visitDepartmentProductRepository.deleteAllInBatch(products);
+        }
+
+        // Batch-delete diagnoses
+        List<VisitDepartmentDiagnosis> diagnoses =
+                visitDepartmentDiagnosisRepository.findByVisitDepartmentId(deptId);
+        if (!diagnoses.isEmpty()) {
+            visitDepartmentDiagnosisRepository.deleteAllInBatch(diagnoses);
+        }
+
+        // Batch-delete medications
+        List<VisitDepartmentMedication> meds =
+                visitDepartmentMedicationRepository.findByVisitDepartmentId(deptId);
+        if (!meds.isEmpty()) {
+            visitDepartmentMedicationRepository.deleteAllInBatch(meds);
+        }
+
+        // Batch-delete pre-instructions
+        List<VisitPreInstruction> preInstructions =
+                visitPreInstructionRepository.findByVisitDepartmentIdOrderByCreatedAtAsc(deptId);
+        if (!preInstructions.isEmpty()) {
+            visitPreInstructionRepository.deleteAllInBatch(preInstructions);
         }
 
         // Delete billing (cascade deletes insurance billings, items, payments)
         try {
-            visitDepartmentBillingRepository.findByVisitDepartmentId(deptId)
-                    .forEach(visitDepartmentBillingRepository::delete);
+            List<com.nexxserve.nexxclinic.entity.VisitDepartmentBilling> billings =
+                    visitDepartmentBillingRepository.findByVisitDepartmentId(deptId);
+            if (!billings.isEmpty()) {
+                visitDepartmentBillingRepository.deleteAllInBatch(billings);
+            }
         } catch (Exception e) {
             log.warn("Could not delete billing for department {}: {}", deptId, e.getMessage());
+            warnings.add("Could not delete billing records: " + e.getMessage());
         }
 
-        // Delete price estimates for this department's products
+        // Delete price estimates
         try {
             visitPriceEstimateService.deleteEstimatesByVisitDepartmentId(deptId);
         } catch (Exception e) {
             log.warn("Could not delete price estimates for department {}: {}", deptId, e.getMessage());
+            warnings.add("Could not delete price estimates: " + e.getMessage());
         }
 
         // Finally delete the department itself
         visitDepartmentRepository.delete(vd);
+        return warnings;
     }
 
     private boolean isManagerOrAboveRole(AuthenticatedUser authUser) {
@@ -1798,7 +1853,10 @@ public class VisitDepartmentService {
             return visitDepartment;
         }
 
-        List<VisitDepartmentProduct> remainingProducts = visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartment.getId());
+        // Use IncludingDeleted: a soft-deleted product still has a FK row,
+        // so the department is not truly empty and must not be deleted.
+        List<VisitDepartmentProduct> remainingProducts = visitDepartmentProductRepository
+                .findByVisitDepartmentIdIncludingDeleted(visitDepartment.getId());
         if (!remainingProducts.isEmpty()) {
             return visitDepartment;
         }

@@ -1,17 +1,14 @@
 package com.nexxserve.nexxclinic.service.invoice;
 
-import com.microsoft.playwright.Browser;
-import com.microsoft.playwright.BrowserType;
-import com.microsoft.playwright.Page;
-import com.microsoft.playwright.Playwright;
-import com.microsoft.playwright.PlaywrightException;
-import com.microsoft.playwright.options.Margin;
-import jakarta.annotation.PreDestroy;
 import java.io.Closeable;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -19,7 +16,12 @@ import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
 /**
- * Renders invoice PDFs from Thymeleaf templates using Playwright's headless Chromium.
+ * Renders invoice PDFs from Thymeleaf templates using Chromium's built-in
+ * {@code --print-to-pdf} capability via ProcessBuilder.
+ *
+ * <p>This approach avoids the Playwright Java SDK driver installation issues
+ * in Docker. Chromium is pre-installed in the Docker image at
+ * {@code /usr/local/bin/chromium} and launched directly.
  *
  * <p>Three paper layouts are supported via the same shared invoice fragment:
  * <ul>
@@ -27,10 +29,6 @@ import org.thymeleaf.context.Context;
  *   <li>{@code a4p} — A4 portrait, one invoice per sheet</li>
  *   <li>{@code a4l} — A4 landscape, two invoices per sheet (left/right halves)</li>
  * </ul>
- *
- * <p>The renderer lazily opens a single Chromium instance on first use and
- * reuses it across calls. Callers should invoke {@link #close()} (or rely on
- * the {@link PreDestroy} hook) to release the browser process.
  */
 @Service
 public class InvoicePdfRenderer implements Closeable {
@@ -38,8 +36,9 @@ public class InvoicePdfRenderer implements Closeable {
     private static final Logger log = LoggerFactory.getLogger(InvoicePdfRenderer.class);
 
     private final TemplateEngine templateEngine;
-    private Playwright playwright;
-    private Browser browser;
+
+    /** Resolved path to the system Chromium binary (lazily detected). */
+    private String chromiumPath;
 
     public InvoicePdfRenderer(TemplateEngine templateEngine) {
         this.templateEngine = templateEngine;
@@ -59,18 +58,15 @@ public class InvoicePdfRenderer implements Closeable {
     public byte[] renderSingle(InvoiceView billing, String paperSize) {
         String template = switch (paperSize) {
             case "pos" -> "invoice/pos";
-            case "a4l" -> "invoice/a4l"; // a4l with a single-item list falls back to left-half only
+            case "a4l" -> "invoice/a4l";
             default    -> "invoice/a4p";
         };
 
-        // a4l needs a list; pos/a4p need a single billing
         Map<String, Object> model = switch (paperSize) {
             case "a4l" -> Map.of("billings", List.of(billing));
             default    -> Map.of("billing", billing);
         };
 
-        // POS uses the invoicePos fragment (slim layout), which is
-        // embedded inside pos.html — no separate template needed.
         String html = templateEngine.process(template, new Context(java.util.Locale.getDefault(), model));
         return renderHtmlToPdf(html, paperSize);
     }
@@ -78,7 +74,7 @@ public class InvoicePdfRenderer implements Closeable {
     /**
      * Render a multi-invoice A4 landscape layout (two invoices per sheet).
      *
-     * @param billings  list of invoice view models (paired into left/right halves)
+     * @param billings  list of invoice view models
      * @return the rendered PDF bytes
      */
     public byte[] renderA4L(List<InvoiceView> billings) {
@@ -88,146 +84,149 @@ public class InvoicePdfRenderer implements Closeable {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    //  INTERNAL — Playwright rendering
+    //  INTERNAL — Chromium --print-to-pdf rendering
     // ═══════════════════════════════════════════════════════════════════════════
 
     private byte[] renderHtmlToPdf(String html, String paperSize) {
+        Path tempHtml = null;
+        Path tempPdf = null;
         try {
-            return renderHtmlToPdfInternal(html, paperSize);
-        } catch (PlaywrightException e) {
-            // Browser may have crashed — force relaunch on next call, then retry once
-            log.warn("First render attempt failed for paper={}: {}", paperSize, e.getMessage());
-            close();
-            try {
-                return renderHtmlToPdfInternal(html, paperSize);
-            } catch (PlaywrightException retry) {
-                log.error("Retry render also failed for paper={}: {}", paperSize, retry.getMessage(), retry);
-                throw new RuntimeException("Invoice PDF rendering failed: " + retry.getMessage(), retry);
+            // Write HTML to a temp file
+            tempHtml = Files.createTempFile("invoice-", ".html");
+            Files.writeString(tempHtml, html, StandardCharsets.UTF_8);
+
+            // Determine output PDF path
+            tempPdf = Files.createTempFile("invoice-", ".pdf");
+
+            // Build Chromium arguments
+            List<String> command = new ArrayList<>();
+            command.add(resolveChromiumPath());
+            command.add("--headless");
+            command.add("--no-sandbox");
+            command.add("--disable-setuid-sandbox");
+            command.add("--disable-dev-shm-usage");
+            command.add("--disable-gpu");
+            command.add("--run-all-compositor-stages-before-draw");
+            command.add("--print-to-pdf=" + tempPdf.toAbsolutePath());
+
+            // Paper size arguments
+            switch (paperSize) {
+                case "pos" -> {
+                    command.add("--print-to-pdf-no-header");
+                    // 80mm width in pixels at 96dpi ≈ 302px; Chromium uses --paper-width
+                    command.add("--paper-width=3.15");   // ~80mm in inches
+                    command.add("--paper-height=11.69");  // auto (A4 height as max)
+                }
+                case "a4l" -> {
+                    command.add("--print-to-pdf-no-header");
+                    // A4 landscape: 297mm x 210mm
+                    command.add("--paper-width=11.69");   // 297mm in inches
+                    command.add("--paper-height=8.27");   // 210mm in inches
+                }
+                default -> {
+                    // A4 portrait: 210mm x 297mm (Chromium default)
+                    command.add("--print-to-pdf-no-header");
+                }
             }
-        }
-    }
 
-    private byte[] renderHtmlToPdfInternal(String html, String paperSize) {
-        ensureBrowser();
-        try (Page page = browser.newPage()) {
-            page.setContent(html, new Page.SetContentOptions().setWaitUntil(
-                    com.microsoft.playwright.options.WaitUntilState.DOMCONTENTLOADED));
+            // Add the HTML file URL
+            command.add(tempHtml.toUri().toString());
 
-            // Build PDF options matching the template's @page CSS
-            Page.PdfOptions pdfOptions = buildPdfOptions(paperSize);
+            log.debug("Running Chromium for PDF rendering: paper={}", paperSize);
 
-            byte[] pdfBytes = page.pdf(pdfOptions);
+            ProcessBuilder pb = new ProcessBuilder(command);
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+
+            // Read output for debugging
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            boolean finished = process.waitFor(30, TimeUnit.SECONDS);
+
+            if (!finished) {
+                process.destroyForcibly();
+                throw new RuntimeException("Chromium PDF rendering timed out after 30s");
+            }
+
+            int exitCode = process.exitValue();
+            if (exitCode != 0) {
+                log.error("Chromium exited with code {} for paper={}: {}", exitCode, paperSize, output);
+                throw new RuntimeException("Chromium PDF rendering failed with exit code " + exitCode);
+            }
+
+            byte[] pdfBytes = Files.readAllBytes(tempPdf);
             log.debug("Rendered invoice PDF: {} bytes (paper={})", pdfBytes.length, paperSize);
             return pdfBytes;
-        } catch (PlaywrightException e) {
-            // Mark browser as potentially dead so next ensureBrowser() relaunches
-            log.error("Playwright PDF rendering failed for paper={}: {}", paperSize, e.getMessage());
-            close();
-            throw e;
+
+        } catch (Exception e) {
+            log.error("Invoice PDF rendering failed for paper={}: {}", paperSize, e.getMessage(), e);
+            throw new RuntimeException("Invoice PDF rendering failed: " + e.getMessage(), e);
+        } finally {
+            // Clean up temp files
+            safeDelete(tempHtml);
+            safeDelete(tempPdf);
         }
     }
 
-    private Page.PdfOptions buildPdfOptions(String paperSize) {
-        Page.PdfOptions opts = new Page.PdfOptions();
-        opts.setPrintBackground(true);  // render backgrounds (colored headers, alternating rows)
-
-        switch (paperSize) {
-            case "pos" -> {
-                // 80mm thermal roll — auto height, narrow width
-                opts.setWidth("80mm");
-                // height is omitted → Playwright auto-sizes to content
-                opts.setMargin(new Margin()
-                    .setTop("4mm").setRight("4mm").setBottom("4mm").setLeft("4mm"));
-            }
-            case "a4l" -> {
-                // A4 landscape — two invoices side by side
-                opts.setLandscape(true);
-                opts.setFormat("A4");
-                opts.setMargin(new Margin()
-                    .setTop("10mm").setRight("10mm").setBottom("10mm").setLeft("10mm"));
-            }
-            default -> {
-                // A4 portrait (default)
-                opts.setFormat("A4");
-                opts.setMargin(new Margin()
-                    .setTop("14mm").setRight("14mm").setBottom("14mm").setLeft("14mm"));
-            }
-        }
-
-        return opts;
-    }
-
     // ═══════════════════════════════════════════════════════════════════════════
-    //  BROWSER LIFECYCLE
+    //  CHROMIUM PATH DETECTION
     // ═══════════════════════════════════════════════════════════════════════════
 
-    private synchronized void ensureBrowser() {
-        if (browser != null && browser.isConnected()) return;
+    private synchronized String resolveChromiumPath() {
+        if (chromiumPath != null) return chromiumPath;
 
-        // Try system-installed Chromium first (via Dockerfile pre-installation)
-        String[] chromiumPaths = {
-            "/usr/bin/chromium",
+        String[] candidates = {
+            "/usr/local/bin/chromium",
             "/usr/bin/chromium-browser",
+            "/usr/bin/chromium",
             "/usr/bin/google-chrome",
             "/usr/bin/google-chrome-stable",
-            "chromium",
-            "chromium-browser"
         };
 
-        try {
-            playwright = Playwright.create();
-
-            BrowserType.LaunchOptions launchOpts = new BrowserType.LaunchOptions()
-                .setHeadless(true)
-                .setArgs(List.of(
-                    "--no-sandbox",
-                    "--disable-setuid-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-gpu"
-                ));
-
-            // Check for system-installed Chromium
-            boolean foundSystem = false;
-            for (String path : chromiumPaths) {
-                try {
-                    var process = Runtime.getRuntime().exec(new String[]{"which", path});
-                    int exitCode = process.waitFor();
-                    if (exitCode == 0) {
-                        String resolved = new String(process.getInputStream().readAllBytes()).trim();
-                        if (!resolved.isEmpty()) {
-                            log.info("Using system Chromium at: {}", resolved);
-                            launchOpts.setExecutablePath(Path.of(resolved));
-                            foundSystem = true;
-                            break;
-                        }
-                    }
-                } catch (Exception ignored) {}
+        for (String candidate : candidates) {
+            Path path = Path.of(candidate);
+            if (Files.isExecutable(path)) {
+                chromiumPath = candidate;
+                log.info("Using system Chromium at: {}", candidate);
+                return chromiumPath;
             }
+        }
 
-            browser = playwright.chromium().launch(launchOpts);
-            log.info("Playwright Chromium launched for invoice rendering{}",
-                    foundSystem ? " (system binary)" : " (Playwright-managed)");
-        } catch (Exception e) {
-            close(); // clean up partial state
-            log.error("Failed to launch Playwright Chromium: {}", e.getMessage(), e);
-            throw new RuntimeException(
-                "Cannot start headless browser for invoice rendering. " +
-                "Ensure Chromium is installed in the Docker image or Playwright drivers are available.",
-                e);
+        // Fallback: try `which` command
+        for (String name : new String[]{"chromium", "chromium-browser", "google-chrome"}) {
+            try {
+                Process p = Runtime.getRuntime().exec(new String[]{"which", name});
+                int exit = p.waitFor();
+                if (exit == 0) {
+                    String resolved = new String(p.getInputStream().readAllBytes()).trim();
+                    if (!resolved.isEmpty() && Files.isExecutable(Path.of(resolved))) {
+                        chromiumPath = resolved;
+                        log.info("Resolved Chromium via 'which {}': {}", name, resolved);
+                        return chromiumPath;
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+
+        throw new RuntimeException(
+            "No Chromium binary found. Ensure Chromium is installed in the Docker image " +
+            "(check /usr/local/bin/chromium or install via apt-get)."
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  CLEANUP
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    private void safeDelete(Path path) {
+        if (path != null) {
+            try { Files.deleteIfExists(path); } catch (Exception ignored) {}
         }
     }
 
-    @PreDestroy
     @Override
     public void close() {
-        if (browser != null) {
-            try { browser.close(); } catch (Exception ignored) {}
-            browser = null;
-        }
-        if (playwright != null) {
-            try { playwright.close(); } catch (Exception ignored) {}
-            playwright = null;
-        }
-        log.info("Playwright Chromium closed");
+        // No persistent browser process to clean up — each render spawns
+        // a fresh Chromium process that exits on its own.
+        log.info("InvoicePdfRenderer closed (no persistent resources)");
     }
 }

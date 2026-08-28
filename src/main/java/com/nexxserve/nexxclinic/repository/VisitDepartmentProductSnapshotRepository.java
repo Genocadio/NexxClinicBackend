@@ -15,4 +15,6 @@ public interface VisitDepartmentProductSnapshotRepository extends JpaRepository<
      * leaves no immutable-history writes behind.
      */
     List<VisitDepartmentProductSnapshot> findByVisitDepartmentProductId(UUID visitDepartmentProductId);
+
+    List<VisitDepartmentProductSnapshot> findByVisitDepartmentId(UUID visitDepartmentId);
 }

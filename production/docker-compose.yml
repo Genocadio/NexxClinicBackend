@@ -40,6 +40,9 @@ services:
 
       JWT_SECRET: HCl3BC5fRRwwX5XKtHzSZ3OQ92ckOkURufljZSpJ  # From igisubizo .env
 
+      # Playwright (invoice PDF rendering)
+      PLAYWRIGHT_BROWSERS_PATH: /opt/playwright-browsers
+
       # CORS - Allow frontend domains
       CORS_ALLOWED_ORIGINS: http://frontend:3000,http://localhost:3000,https://igisubizo.med.rw
 

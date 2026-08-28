@@ -1,9 +1,7 @@
 package com.nexxserve.nexxclinic.config;
 
-import com.microsoft.playwright.Browser;
-import com.microsoft.playwright.BrowserType;
-import com.microsoft.playwright.Playwright;
-import java.util.concurrent.CompletableFuture;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -12,63 +10,57 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /**
- * Eagerly downloads Playwright Chromium on application startup so that the
- * first invoice generation call doesn't block while downloading ~85 MiB of
- * browser binaries.
+ * Verifies that a system Chromium binary is available for invoice PDF rendering
+ * at application startup. Logs a clear warning if not found so operators can
+ * fix the Docker image before the first invoice request.
  *
- * <p>The download runs asynchronously so it doesn't delay application startup.
- * If the download is already complete (e.g. in Docker where the Dockerfile
- * pre-installs Chromium), this is a no-op that completes instantly.
- *
- * <p>The {@code PLAYWRIGHT_BROWSERS_PATH} environment variable must be set
- * (by {@code dev.sh} or the Dockerfile) so Playwright knows where to find
- * / install browser binaries.
+ * <p>This replaced the previous Playwright-based pre-download which failed
+ * because the Java Playwright SDK's driver installation couldn't complete
+ * in Docker. InvoicePdfRenderer now uses Chromium directly via
+ * {@code --print-to-pdf}.
  */
 @Component
-@Order(50) // after SupabaseConfigValidator (order 10) but before MeilisearchStartupSync
+@Order(50)
 public class PlaywrightStartupInitializer implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(PlaywrightStartupInitializer.class);
 
     @Override
     public void run(ApplicationArguments args) {
-        String browsersPath = System.getenv("PLAYWRIGHT_BROWSERS_PATH");
-        log.info("Playwright browsers path: {}", browsersPath != null ? browsersPath : "(not set — using default)");
+        String[] candidates = {
+            "/usr/local/bin/chromium",
+            "/usr/bin/chromium-browser",
+            "/usr/bin/chromium",
+            "/usr/bin/google-chrome",
+            "/usr/bin/google-chrome-stable",
+        };
 
-        CompletableFuture.runAsync(this::ensurePlaywrightReady);
-    }
-
-    private void ensurePlaywrightReady() {
-        long start = System.currentTimeMillis();
-        try {
-            log.info("Pre-downloading Playwright Chromium (async)...");
-
-            try (Playwright playwright = Playwright.create()) {
-                BrowserType chromium = playwright.chromium();
-                try (Browser browser = chromium.launch(
-                    new BrowserType.LaunchOptions()
-                        .setHeadless(true)
-                        .setArgs(java.util.List.of(
-                            "--no-sandbox",
-                            "--disable-setuid-sandbox",
-                            "--disable-dev-shm-usage",
-                            "--disable-gpu"
-                        ))
-                )) {
-                    log.info("Playwright Chromium launched successfully during pre-download.");
-                }
+        for (String candidate : candidates) {
+            if (Files.isExecutable(Path.of(candidate))) {
+                log.info("Invoice PDF rendering: system Chromium found at {}", candidate);
+                return;
             }
-
-            long elapsed = System.currentTimeMillis() - start;
-            log.info("Playwright Chromium ready (took {}ms)", elapsed);
-        } catch (Exception e) {
-            long elapsed = System.currentTimeMillis() - start;
-            log.warn(
-                "Playwright Chromium pre-download failed after {}ms: {}. " +
-                "Invoice generation will attempt to download on first use.",
-                elapsed, e.getMessage()
-            );
-            // Don't throw — the application must still start.
         }
+
+        // Try `which` as fallback
+        for (String name : new String[]{"chromium", "chromium-browser", "google-chrome"}) {
+            try {
+                Process p = Runtime.getRuntime().exec(new String[]{"which", name});
+                int exit = p.waitFor();
+                if (exit == 0) {
+                    String resolved = new String(p.getInputStream().readAllBytes()).trim();
+                    if (!resolved.isEmpty()) {
+                        log.info("Invoice PDF rendering: Chromium resolved via 'which {}': {}", name, resolved);
+                        return;
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+
+        log.warn(
+            "No system Chromium binary found. Invoice PDF rendering will fail at runtime. " +
+            "Install Chromium in the Docker image (symlink Playwright's pre-installed binary to " +
+            "/usr/local/bin/chromium, or install via apt-get)."
+        );
     }
 }
