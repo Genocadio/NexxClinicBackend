@@ -191,8 +191,16 @@ public class VisitDepartmentService {
         visitDepartment.setVisit(visit);
         visitDepartment.setDepartment(department);
         visitDepartment.setProfile(profile);
-        if (encounterType != null) {
+
+        // When a profile is provided, derive encounterType from it.
+        // When no profile, encounterType must be provided explicitly.
+        if (profile != null && profile.getEncounterType() != null) {
+            visitDepartment.setEncounterType(profile.getEncounterType());
+        } else if (encounterType != null) {
             visitDepartment.setEncounterType(encounterType);
+        } else {
+            // No profile and no encounter type — default to OUTPATIENT
+            visitDepartment.setEncounterType(com.nexxserve.nexxclinic.model.EncounterType.OUTPATIENT);
         }
         visitDepartment.setStatus(VisitDepartmentStatus.PENDING);
 
@@ -1586,6 +1594,7 @@ public class VisitDepartmentService {
         return new DepartmentProfileDto(
                 profile.getId(),
                 profile.getName(),
+                profile.getEncounterType(),
                 profile.isDefault(),
                 departmentProfileProductRepository.findByProfileId(profile.getId())
                         .stream()

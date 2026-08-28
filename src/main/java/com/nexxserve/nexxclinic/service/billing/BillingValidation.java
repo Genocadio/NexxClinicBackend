@@ -139,13 +139,21 @@ public class BillingValidation {
                     );
                 }
                 if (effectiveIsEdit && carriedPaidByDepartment.containsKey(entry.getKey())) {
-                    // N2: the corrected bill is smaller than the amount already paid
-                    // (e.g. a paid product was erased). Surface this clearly instead of
-                    // silently dropping the patient's money.
-                    return "The corrected bill for " + deptName + " (" +
-                        entry.getValue().toPlainString() +
-                        ") is smaller than the amount already paid. Keep the paid product or " +
-                        "adjust the payments before correcting the billing.";
+                    // In edit mode, the corrected bill may be smaller than what was
+                    // already paid (e.g. a product was removed or insurance config changed).
+                    // This is a valid correction — the overpayment is treated as a credit
+                    // on the department billing record. Log it but do NOT reject.
+                    log.info(
+                        "[BILL-EDIT] visit={} dept={} ({}): corrected bill ({}) is less than carried paid ({}). " +
+                        "Overpayment treated as credit.",
+                        visitId, entry.getKey(), deptName,
+                        entry.getValue().toPlainString(),
+                        carriedPaidByDepartment.getOrDefault(entry.getKey(), MoneyUtils.ZERO)
+                    );
+                    // Zero out the remaining — the payment distribution already allocated
+                    // up to the patient payable; the excess stays as credit on the billing.
+                    entry.setValue(MoneyUtils.ZERO);
+                    continue;
                 }
                 return "Payment amount would exceed the patient payable amount for " + deptName + ".";
             }

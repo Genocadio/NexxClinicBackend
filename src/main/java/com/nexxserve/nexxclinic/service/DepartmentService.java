@@ -421,6 +421,12 @@ public class DepartmentService {
             }
 
             profile.setName(name);
+            if (input.encounterType() != null) {
+                profile.setEncounterType(input.encounterType());
+            } else if (profile.getEncounterType() == null) {
+                // New profile must have an encounter type
+                return profileError("Encounter type is required for profile '" + name + "'.");
+            }
 
             // Single-default enforcement. Clear any other default FIRST and flush, so
             // the partial unique index uk_department_profile_single_default
@@ -512,6 +518,7 @@ public class DepartmentService {
                 .map(profile -> new DepartmentProfileDto(
                         profile.getId(),
                         profile.getName(),
+                        profile.getEncounterType(),
                         profile.isDefault(),
                         departmentProfileProductRepository.findByProfileId(profile.getId())
                                 .stream()

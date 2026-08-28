@@ -807,6 +807,51 @@ public class VisitService {
         return ApiResponse.success("Visit finalised.", visitToDto(saved));
     }
 
+    /**
+     * Reopen a completed visit back to PENDING. This allows adding new departments
+     * but existing billed departments cannot be edited (they stay locked).
+     * Only ADMIN and MANAGER roles can do this.
+     */
+    @Transactional
+    public ApiResponse<VisitDto> reopenVisit(UUID visitId, AuthenticatedUser authUser) {
+        if (visitId == null) {
+            return ApiResponse.error("visitId is required.");
+        }
+
+        Optional<Visit> visitOptional = visitRepository.findById(visitId);
+        if (visitOptional.isEmpty()) {
+            return ApiResponse.error("Visit not found.");
+        }
+
+        Visit visit = visitOptional.get();
+
+        if (visit.getStatus() == VisitStatus.CANCELLED) {
+            return ApiResponse.error("Cannot reopen a cancelled visit.");
+        }
+
+        if (visit.getStatus() == VisitStatus.IN_PROGRESS) {
+            return ApiResponse.error("Visit is already in progress.");
+        }
+
+        // Only ADMIN and MANAGER can reopen
+        if (authUser == null || authUser.roles() == null) {
+            return ApiResponse.error("Authentication is required.");
+        }
+        boolean authorised = authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.ADMIN)
+                || authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.CLINIC_ADMIN)
+                || authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.MANAGER);
+        if (!authorised) {
+            return ApiResponse.error("Only admin or manager can reopen a visit.");
+        }
+
+        // Reopen: set visit to IN_PROGRESS, leave completed departments as-is
+        // (they stay locked — billing on them is immutable unless edit mode is entered)
+        visit.setStatus(VisitStatus.IN_PROGRESS);
+        Visit saved = visitRepository.save(visit);
+        meilisearchIndexService.indexVisit(saved);
+        return ApiResponse.success("Visit reopened. You can now add new departments.", visitToDto(saved));
+    }
+
     // ─────────────────────────────────────────────────────────────
     //  VISIT INSURANCE
     // ─────────────────────────────────────────────────────────────
@@ -1176,14 +1221,28 @@ public class VisitService {
                 .map(this::visitVitalSignsGroupToDto)
                 .toList();
 
-        // Compute quickBillEligible: ≤1 linked insurance AND 0 unread notes for the caller
+        // Compute quickBillEligible: ≤1 linked insurance AND 0 unread notes
+        // AND ≤1 unbilled department (so quick-bill is only for simple visits)
         boolean hasOneOrFewerInsurances = linkedInsurances.size() <= 1;
         boolean noUnreadNotes = true;
         if (authUser != null && authUser.userId() != null) {
             long unreadNotes = visitDepartmentNoteRepository.countUnreadNotesForVisit(visit.getId(), authUser.userId());
             noUnreadNotes = unreadNotes == 0;
         }
-        boolean quickBillEligible = hasOneOrFewerInsurances && noUnreadNotes
+        // Count departments that still have unbilled products
+        List<VisitDepartment> visitDepartments = visitDepartmentRepository.findByVisitId(visit.getId());
+        long unbilledDeptCount = 0;
+        for (VisitDepartment dept : visitDepartments) {
+            List<VisitDepartmentProduct> products = visitDepartmentProductRepository.findByVisitDepartmentId(dept.getId());
+            boolean hasUnbilled = products.stream().anyMatch(p ->
+                    p.getStatus() == VisitProductStatus.PENDING
+                    || p.getStatus() == VisitProductStatus.UNPAID
+                    || p.getStatus() == VisitProductStatus.CORRECTION_PENDING
+            );
+            if (hasUnbilled) unbilledDeptCount++;
+        }
+        boolean hasOneOrFewerUnbilledDepts = unbilledDeptCount <= 1;
+        boolean quickBillEligible = hasOneOrFewerInsurances && noUnreadNotes && hasOneOrFewerUnbilledDepts
                 && visit.getStatus() != VisitStatus.COMPLETED
                 && visit.getStatus() != VisitStatus.CANCELLED;
 

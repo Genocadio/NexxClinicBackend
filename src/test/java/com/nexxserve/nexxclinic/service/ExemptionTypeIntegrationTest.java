@@ -51,6 +51,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ExemptionTypeIntegrationTest {
 
     @Autowired private VisitBillingService visitBillingService;
+    @Autowired private BillEditingService billEditingService;
     @Autowired private WorkerRepository workerRepository;
     @Autowired private PatientRepository patientRepository;
     @Autowired private DepartmentRepository departmentRepository;
@@ -293,6 +294,7 @@ class ExemptionTypeIntegrationTest {
             , null, null))
         );
 
+        startEditing(fx.visit().getId(), auth(fx.actor()));
         ApiResponse<?> response = visitBillingService.editBillVisit(input, auth(fx.actor()));
         assertEquals(ResponseStatus.SUCCESS, response.status());
 
@@ -307,6 +309,12 @@ class ExemptionTypeIntegrationTest {
         VisitDepartmentProduct vdp = visitDepartmentProductRepository
             .findById(fx.product().getId()).orElseThrow();
         assertEquals(VisitProductStatus.EXEMPTED, vdp.getStatus());
+    }
+
+    private void startEditing(UUID visitId, AuthenticatedUser authUser) {
+        ApiResponse<?> result = billEditingService.startBillEditing(visitId, authUser);
+        assertEquals(ResponseStatus.SUCCESS, result.status(),
+            "startBillEditing failed: " + result.message());
     }
 
     // ─── 5. Edit: NONE → PATIENT_SHARE exemption ──────────────
@@ -334,6 +342,7 @@ class ExemptionTypeIntegrationTest {
             , null, null))
         );
 
+        startEditing(fx.visit().getId(), auth(fx.actor()));
         ApiResponse<?> response = visitBillingService.editBillVisit(input, auth(fx.actor()));
         assertEquals(ResponseStatus.SUCCESS, response.status());
 
@@ -372,6 +381,7 @@ class ExemptionTypeIntegrationTest {
             , null, null))
         );
 
+        startEditing(fx.visit().getId(), auth(fx.actor()));
         ApiResponse<?> response = visitBillingService.editBillVisit(input, auth(fx.actor()));
         assertEquals(ResponseStatus.SUCCESS, response.status());
 

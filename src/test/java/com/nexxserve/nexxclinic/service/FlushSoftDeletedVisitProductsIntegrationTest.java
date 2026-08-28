@@ -51,6 +51,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FlushSoftDeletedVisitProductsIntegrationTest {
 
     @Autowired private VisitBillingService visitBillingService;
+    @Autowired private BillEditingService billEditingService;
     @Autowired private WorkerRepository workerRepository;
     @Autowired private PatientRepository patientRepository;
     @Autowired private DepartmentRepository departmentRepository;
@@ -225,6 +226,9 @@ class FlushSoftDeletedVisitProductsIntegrationTest {
         );
         assertEquals(ResponseStatus.SUCCESS,
             visitBillingService.billVisit(billInput, auth(fx.actor())).status());
+
+        // Enter BILL_EDITING mode before soft-deleting
+        billEditingService.startBillEditing(fx.visit().getId(), auth(fx.actor()));
 
         // Now soft-delete via edit (remove only fx.product, keep keepProduct)
         softDeleteProduct(fx);

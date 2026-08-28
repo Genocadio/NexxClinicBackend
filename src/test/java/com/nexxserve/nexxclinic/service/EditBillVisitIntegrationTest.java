@@ -55,6 +55,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class EditBillVisitIntegrationTest {
 
     @Autowired private VisitBillingService visitBillingService;
+    @Autowired private BillEditingService billEditingService;
     @Autowired private WorkerRepository workerRepository;
     @Autowired private PatientRepository patientRepository;
     @Autowired private DepartmentRepository departmentRepository;
@@ -167,6 +168,13 @@ class EditBillVisitIntegrationTest {
         return visitBillingVersionRepository.findByVisitIdOrderByVersionDesc(visitId).size();
     }
 
+    /** Transition visit to BILL_EDITING so editBillVisit is allowed. */
+    private void startEditing(UUID visitId, AuthenticatedUser authUser) {
+        ApiResponse<?> result = billEditingService.startBillEditing(visitId, authUser);
+        assertEquals(ResponseStatus.SUCCESS, result.status(),
+            "startBillEditing failed: " + result.message());
+    }
+
     private void assertEditSuccess(ApiResponse<?> response) {
         if (response.status() == ResponseStatus.ERROR) {
             org.junit.jupiter.api.Assertions.fail("editBillVisit failed: " + response.message());
@@ -198,14 +206,14 @@ class EditBillVisitIntegrationTest {
                         newProduct.getId(), null, CoverageType.PRIVATE, new BigDecimal("3"), ExemptionType.NONE, null)),
                 null, "Added new product"
             , null, null))
-        );
-
+        );        startEditing(fx.visit().getId(), auth(fx.actor()));
         assertEditSuccess(visitBillingService.editBillVisit(input, auth(fx.actor())));
         assertEquals(2, billingVersionCount(fx.visit().getId()));
 
         VisitDepartmentProduct original = visitDepartmentProductRepository.findById(fx.product().getId()).orElseThrow();
         assertEquals(VisitProductStatus.BILLED, original.getStatus());
     }
+
 
     // ─── 2. Remove a product ───────────────────────────────────
 
@@ -258,6 +266,7 @@ class EditBillVisitIntegrationTest {
             , null, null))
         );
 
+        startEditing(fx.visit().getId(), auth(fx.actor()));
         assertEditSuccess(visitBillingService.editBillVisit(input, auth(fx.actor())));
         assertEquals(2, billingVersionCount(fx.visit().getId()));
 
@@ -291,6 +300,7 @@ class EditBillVisitIntegrationTest {
             , null, null))
         );
 
+        startEditing(fx.visit().getId(), auth(fx.actor()));
         assertEditSuccess(visitBillingService.editBillVisit(input, auth(fx.actor())));
 
         VisitDepartmentProduct reloaded = visitDepartmentProductRepository
@@ -322,6 +332,7 @@ class EditBillVisitIntegrationTest {
             , null, null))
         );
 
+        startEditing(fx.visit().getId(), auth(fx.actor()));
         assertEditSuccess(visitBillingService.editBillVisit(input, auth(fx.actor())));
 
         Visit afterEdit = visitRepository.findById(fx.visit().getId()).orElseThrow();
@@ -350,6 +361,7 @@ class EditBillVisitIntegrationTest {
             , null, null))
         );
 
+        startEditing(fx.visit().getId(), auth(fx.actor()));
         ApiResponse<?> response = visitBillingService.editBillVisit(input, auth(fx.actor()));
         assertEquals(ResponseStatus.ERROR, response.status());
         assertTrue(response.message().contains("Quantity mismatch"), response.message());
@@ -385,7 +397,7 @@ class EditBillVisitIntegrationTest {
 
         ApiResponse<?> response = visitBillingService.editBillVisit(input, auth(fx.actor()));
         assertEquals(ResponseStatus.ERROR, response.status());
-        assertTrue(response.message().contains("Cancelled"), response.message());
+        assertTrue(response.message().toLowerCase().contains("cancelled"), response.message());
     }
 
     // ─── 7. Non-existent visit rejected ────────────────────────
@@ -430,6 +442,7 @@ class EditBillVisitIntegrationTest {
             , null, null))
         );
 
+        startEditing(fx.visit().getId(), auth(fx.actor()));
         ApiResponse<?> response = visitBillingService.editBillVisit(input, auth(fx.actor()));
         assertEquals(ResponseStatus.ERROR, response.status());
 
@@ -450,6 +463,8 @@ class EditBillVisitIntegrationTest {
             visitBillingService.billVisit(billInput(fx), auth(fx.actor())).status());
         assertEquals(1, billingVersionCount(fx.visit().getId()));
 
+        startEditing(fx.visit().getId(), auth(fx.actor()));
+
         // Edit 1: qty 1→3
         assertEditSuccess(visitBillingService.editBillVisit(new EditBillVisitInput(
             fx.visit().getId(),
@@ -464,6 +479,9 @@ class EditBillVisitIntegrationTest {
             , null, null))
         ), auth(fx.actor())));
         assertEquals(2, billingVersionCount(fx.visit().getId()));
+
+        // After Edit 1, visit is re-COMPLETED — re-enter BILL_EDITING for Edit 2
+        startEditing(fx.visit().getId(), auth(fx.actor()));
 
         // Edit 2: qty 3→7
         assertEditSuccess(visitBillingService.editBillVisit(new EditBillVisitInput(
@@ -495,6 +513,7 @@ class EditBillVisitIntegrationTest {
         assertEquals(ResponseStatus.SUCCESS,
             visitBillingService.billVisit(billInput(fx), auth(fx.actor())).status());
 
+        startEditing(fx.visit().getId(), auth(fx.actor()));
         // Edit to qty=5
         assertEditSuccess(visitBillingService.editBillVisit(new EditBillVisitInput(
             fx.visit().getId(),
@@ -573,6 +592,8 @@ class EditBillVisitIntegrationTest {
         Fixture fx = createVisitWithProduct();
         assertEquals(ResponseStatus.SUCCESS,
             visitBillingService.billVisit(billInput(fx), auth(fx.actor())).status());
+
+        startEditing(fx.visit().getId(), auth(fx.actor()));
 
         int threadCount = 4;
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
@@ -660,6 +681,7 @@ class EditBillVisitIntegrationTest {
             , null, null))
         );
 
+        startEditing(fx.visit().getId(), auth(fx.actor()));
         assertEditSuccess(visitBillingService.editBillVisit(editInput, auth(fx.actor())));
         assertEquals(2, billingVersionCount(fx.visit().getId()));
 
@@ -705,6 +727,7 @@ class EditBillVisitIntegrationTest {
             , null, null))
         );
 
+        startEditing(fx.visit().getId(), auth(fx.actor()));
         assertEditSuccess(visitBillingService.editBillVisit(editInput, auth(fx.actor())));
         assertEquals(2, billingVersionCount(fx.visit().getId()));
 

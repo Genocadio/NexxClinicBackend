@@ -260,6 +260,15 @@ public class VisitMutationController {
         return visitService.finaliseVisit(visitId);
     }
 
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.MANAGER})
+    @MutationMapping
+    public ApiResponse reopenVisit(
+            @Argument UUID visitId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.reopenVisit(visitId, authUser);
+    }
+
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.FINANCE, RoleName.NURSE, RoleName.CLINICIAN})
     @MutationMapping
     public ApiResponse removeVisitDepartmentProduct(
