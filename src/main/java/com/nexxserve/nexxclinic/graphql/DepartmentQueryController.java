@@ -22,7 +22,7 @@ public class DepartmentQueryController {
         this.departmentService = departmentService;
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE, RoleName.CLINICIAN, RoleName.NURSE})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE, RoleName.CLINICIAN, RoleName.NURSE, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse department(
             @Argument UUID departmentId,
@@ -31,7 +31,7 @@ public class DepartmentQueryController {
         return departmentService.department(departmentId);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE, RoleName.NURSE, RoleName.CLINICIAN, RoleName.NURSE })
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE, RoleName.NURSE, RoleName.CLINICIAN, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse departments(
             @Argument @Valid SearchDepartmentsInput input,

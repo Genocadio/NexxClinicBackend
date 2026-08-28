@@ -13,6 +13,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -37,6 +38,27 @@ public class Visit {
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    /**
+     * Pre-billing estimated total (sum of all product line totals).
+     * Nullable: only set when at least one product exists on the visit.
+     */
+    @Column(name = "estimated_total", precision = 19, scale = 2)
+    private BigDecimal estimatedTotal;
+
+    /**
+     * Pre-billing estimated insurance-covered amount (sum of insurance shares).
+     * Nullable: only meaningful when at least one product is covered by insurance.
+     */
+    @Column(name = "estimated_insurance_pay", precision = 19, scale = 2)
+    private BigDecimal estimatedInsurancePay;
+
+    /**
+     * Pre-billing estimated patient-payable amount (sum of patient shares).
+     * Nullable: only set when at least one product exists on the visit.
+     */
+    @Column(name = "estimated_patient_pay", precision = 19, scale = 2)
+    private BigDecimal estimatedPatientPay;
 
     @Column(nullable = false)
     private LocalDateTime updatedAt;
@@ -108,5 +130,29 @@ public class Visit {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public BigDecimal getEstimatedTotal() {
+        return estimatedTotal;
+    }
+
+    public void setEstimatedTotal(BigDecimal estimatedTotal) {
+        this.estimatedTotal = estimatedTotal;
+    }
+
+    public BigDecimal getEstimatedInsurancePay() {
+        return estimatedInsurancePay;
+    }
+
+    public void setEstimatedInsurancePay(BigDecimal estimatedInsurancePay) {
+        this.estimatedInsurancePay = estimatedInsurancePay;
+    }
+
+    public BigDecimal getEstimatedPatientPay() {
+        return estimatedPatientPay;
+    }
+
+    public void setEstimatedPatientPay(BigDecimal estimatedPatientPay) {
+        this.estimatedPatientPay = estimatedPatientPay;
     }
 }

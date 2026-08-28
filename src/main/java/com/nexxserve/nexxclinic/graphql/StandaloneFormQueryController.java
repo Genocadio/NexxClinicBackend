@@ -26,7 +26,7 @@ public class StandaloneFormQueryController {
         this.mapper = mapper;
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse<List<StandaloneFormDto>> getStandaloneForms(
             @Argument Boolean isTemplate,
@@ -37,7 +37,7 @@ public class StandaloneFormQueryController {
         return formService.getForms(isTemplate, category, name);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse<DepartmentFormsResult> getDepartmentForms(
             @Argument UUID departmentId,
@@ -46,7 +46,7 @@ public class StandaloneFormQueryController {
         return formService.getDepartmentFormsWithDefault(departmentId);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse<StandaloneFormDto> getStandaloneForm(
             @Argument UUID id,
@@ -55,7 +55,7 @@ public class StandaloneFormQueryController {
         return formService.getForm(id);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.MANAGER})
     @QueryMapping
     public StandaloneFormVersionDto getStandaloneFormVersion(
             @Argument UUID versionId,
@@ -65,7 +65,7 @@ public class StandaloneFormQueryController {
         return version != null ? mapper.toDto(version) : null;
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse<List<StandaloneFormAnswerDto>> getStandaloneFormAnswers(
             @Argument UUID formId,
@@ -74,7 +74,7 @@ public class StandaloneFormQueryController {
         return formService.getStandaloneFormAnswers(formId);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse<StandaloneFormAnswerDto> getStandaloneAnswer(
             @Argument UUID id,

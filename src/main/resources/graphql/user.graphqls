@@ -105,6 +105,7 @@ enum VisitStatus {
   CANCELLED
   COMPLETED
   BILL_EDITING
+  FINALISED
 }
 
 enum VisitProductStatus {
@@ -533,6 +534,10 @@ type Visit {
   linkedInsurances: [PatientInsurance!]!
   departments: [VisitDepartment!]!
   vitalSigns: [VisitVitalSignsGroup!]!
+  estimatedTotal: Float
+  estimatedInsurancePay: Float
+  estimatedPatientPay: Float
+  quickBillEligible: Boolean
 }
 
 type VisitVitalSignsGroup {
@@ -548,6 +553,26 @@ type VitalMeasurement {
   value: String!
   unit: String!
   createdAt: String!
+}
+
+type VisitPriceEstimate {
+  id: ID!
+  visitDepartmentProduct: VisitDepartmentProduct!
+  appliedPatientInsurance: PatientInsurance
+  resolvedPatientSharePct: Int!
+  patientShareSource: String
+  unitPrice: Float!
+  quantity: Float!
+  lineTotal: Float!
+  insuranceCoveredAmount: Float!
+  patientPayableAmount: Float!
+  createdAt: String!
+}
+
+type VisitPriceEstimatesListResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: [VisitPriceEstimate!]
 }
 
 type LastDepartmentVisitInfo {
@@ -732,6 +757,8 @@ type DepartmentInsuranceBilling {
   outstandingType: String
   outstandingReason: String
   items: [VisitBillingItem!]!
+  """The date/time displayed on the invoice. Defaults to createdAt but can be overridden by admin/manager."""
+  billingDate: String
   createdAt: String!
   updatedAt: String!
 }
@@ -778,6 +805,12 @@ type VisitBillingResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
     data: VisitBilling
+}
+
+type DepartmentInsuranceBillingResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: DepartmentInsuranceBilling
 }
 
 type BillEditingResponse implements ApiResponse {
@@ -1474,6 +1507,16 @@ input RecordVisitBillingPaymentInput {
   note: String
 }
 
+"""
+Update the billing date shown on an invoice.
+Only ADMIN and MANAGER roles are permitted.
+Changing the date invalidates the current invoice so a fresh one is generated on next access.
+"""
+input UpdateBillingDateInput {
+  departmentInsuranceBillingId: ID!
+  billingDate: String!
+}
+
 enum PaymentMethod {
   CASH
   MOBILE_MONEY
@@ -1690,6 +1733,7 @@ type Query {
   getPatientHistory(patientId: ID!, input: SearchPatientHistoryInput): PaginatedVisitResponse!
   visitDepartmentNotes(visitId: ID!, visitDepartmentId: ID): VisitDepartmentNotesListResponse!
   visitBilling(visitId: ID!): VisitBillingResponse!
+  visitPriceEstimates(visitId: ID!): VisitPriceEstimatesListResponse!
   clinicProfile: ClinicProfileResponse!
   lastPatientDepartmentVisit(visitId: ID!, departmentId: ID!): LastPatientDepartmentVisitResponse!
   insuranceCoverage(ruleId: ID!): InsuranceCoverageResponse!
@@ -1782,11 +1826,24 @@ type Mutation {
   completeVisit(visitId: ID!): VisitResponse!
   removeVisitDepartmentProduct(visitDepartmentProductId: ID!): VisitDepartmentResponse!
   billVisit(input: BillVisitInput!): VisitBillingResponse!
+  quickBill(visitId: ID!): ApiResponse!
   editBillVisit(input: EditBillVisitInput!): VisitBillingResponse!
   recordVisitBillingPayment(input: RecordVisitBillingPaymentInput!): VisitBillingResponse!
+  """
+  Update the billing date shown on an invoice. Only ADMIN and MANAGER.
+  Invalidates the existing invoice so a fresh PDF is generated on next access.
+  """
+  updateBillingDate(input: UpdateBillingDateInput!): DepartmentInsuranceBillingResponse!
   generateInvoice(departmentInsuranceBillingId: ID!): InvoiceResponse!
   flushSoftDeletedVisitProducts(visitId: ID!): BooleanResponse!
   cancelVisit(visitId: ID!): VisitResponse!
+  """
+  Finalise a visit: sets all COMPLETED departments to FINALISED and the visit
+  itself to FINALISED. Only allowed on COMPLETED visits.
+  """
+  finaliseVisit(visitId: ID!): VisitResponse!
+  """Permanently delete an unbilled visit and all its data. Only ADMIN and MANAGER."""
+  deleteVisit(visitId: ID!): BooleanResponse!
 
   # ── Bill Editing Mode ────────────────────────────────────────────────────
   """Enter BILL_EDITING mode on a COMPLETED visit to allow billing corrections."""

@@ -10,5 +10,10 @@ public enum VisitStatus {
      * Product/insurance/billing mutations are allowed only in this mode.
      * Transitions back to COMPLETED via completeBillEditing or cancelBillEditing.
      */
-    BILL_EDITING
+    BILL_EDITING,
+    /**
+     * Terminal status: all departments are FINALISED and no further edits are
+     * allowed unless an ADMIN re-opens the visit.
+     */
+    FINALISED
 }

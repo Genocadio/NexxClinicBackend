@@ -20,14 +20,19 @@ public class VisitQueryController {
 
     private final VisitService visitService;
     private final VisitDepartmentNoteService noteService;
+    private final com.nexxserve.nexxclinic.service.VisitPriceEstimateService visitPriceEstimateService;
 
-    public VisitQueryController(VisitService visitService, VisitDepartmentNoteService noteService) {
-
+    public VisitQueryController(
+        VisitService visitService,
+        VisitDepartmentNoteService noteService,
+        com.nexxserve.nexxclinic.service.VisitPriceEstimateService visitPriceEstimateService
+    ) {
         this.visitService = visitService;
         this.noteService = noteService;
+        this.visitPriceEstimateService = visitPriceEstimateService;
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse visit(
             @Argument UUID visitId,
@@ -36,7 +41,7 @@ public class VisitQueryController {
         return visitService.visit(visitId, authUser);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse visitDepartmentNotes(
             @Argument UUID visitId,
@@ -46,7 +51,7 @@ public class VisitQueryController {
         return noteService.visitDepartmentNotes(visitId, visitDepartmentId, authUser);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse visits(
             @Argument @Valid SearchVisitsInput input,
@@ -55,7 +60,7 @@ public class VisitQueryController {
         return visitService.visits(input, authUser);
     }
 
-        @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
+        @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse lastPatientDepartmentVisit(
             @Argument UUID visitId,
@@ -63,10 +68,7 @@ public class VisitQueryController {
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         return visitService.lastPatientDepartmentVisit(visitId, departmentId, authUser);
-    }
-
-
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
+    }        @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse getPatientHistory(
             @Argument UUID patientId,
@@ -74,5 +76,13 @@ public class VisitQueryController {
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         return visitService.getPatientHistory(patientId, input, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE, RoleName.MANAGER})
+    @QueryMapping
+    public ApiResponse visitPriceEstimates(
+            @Argument UUID visitId
+    ) {
+        return visitPriceEstimateService.getEstimatesForVisit(visitId);
     }
 }

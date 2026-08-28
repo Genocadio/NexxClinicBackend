@@ -21,7 +21,7 @@ public class InsuranceCoverageQueryController {
         this.ruleService = ruleService;
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse insuranceCoverage(
         @Argument UUID ruleId,
@@ -30,7 +30,7 @@ public class InsuranceCoverageQueryController {
         return ruleService.getRule(ruleId);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse insuranceCoverages(
         @Argument SearchInsuranceCoveragesInput input,

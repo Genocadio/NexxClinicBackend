@@ -50,13 +50,13 @@ public class VisitMutationController {
         return visitService.createVisit(input, authUser);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.MANAGER})
     @MutationMapping
     public ApiResponse changeVisitDate(
             @Argument @Valid ChangeVisitDateInput input,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.changeVisitDate(input);
+        return visitService.changeVisitDate(input, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
@@ -233,13 +233,31 @@ public class VisitMutationController {
         return visitService.completeVisit(visitId, authUser);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.MANAGER})
     @MutationMapping
     public ApiResponse cancelVisit(
             @Argument UUID visitId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         return visitService.cancelVisit(visitId);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.MANAGER})
+    @MutationMapping
+    public ApiResponse deleteVisit(
+            @Argument UUID visitId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.deleteVisit(visitId);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.MANAGER})
+    @MutationMapping
+    public ApiResponse finaliseVisit(
+            @Argument UUID visitId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.finaliseVisit(visitId);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.FINANCE, RoleName.NURSE, RoleName.CLINICIAN})

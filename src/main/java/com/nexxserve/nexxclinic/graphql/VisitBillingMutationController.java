@@ -4,6 +4,7 @@ import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
 import com.nexxserve.nexxclinic.graphql.input.BillVisitInput;
 import com.nexxserve.nexxclinic.graphql.input.EditBillVisitInput;
 import com.nexxserve.nexxclinic.graphql.input.RecordVisitBillingPaymentInput;
+import com.nexxserve.nexxclinic.graphql.input.UpdateBillingDateInput;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.security.HasRole;
@@ -39,6 +40,15 @@ public class VisitBillingMutationController {
         return visitBillingService.billVisit(input, authUser);
     }
 
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
+    @MutationMapping
+    public ApiResponse quickBill(
+            @Argument UUID visitId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitBillingService.quickBill(visitId, authUser);
+    }
+
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.FINANCE})
     @MutationMapping
     public ApiResponse editBillVisit(
@@ -64,6 +74,15 @@ public class VisitBillingMutationController {
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         return invoiceGenerator.generateInvoice(departmentInsuranceBillingId, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.MANAGER})
+    @MutationMapping
+    public ApiResponse updateBillingDate(
+            @Argument @Valid UpdateBillingDateInput input,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitBillingService.updateBillingDate(input, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.FINANCE})

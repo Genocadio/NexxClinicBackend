@@ -26,6 +26,7 @@ import java.util.List;
  * @param paidAmount              formatted
  * @param outstandingAmount       formatted
  * @param hasOutstanding          true if outstanding > 0
+ * @param hasInsurance            true if insurance is involved in this invoice
  */
 public record InvoiceView(
     ClinicInfo clinic,
@@ -44,7 +45,8 @@ public record InvoiceView(
     String patientPayableAmount,
     String paidAmount,
     String outstandingAmount,
-    boolean hasOutstanding
+    boolean hasOutstanding,
+    boolean hasInsurance
 ) {
 
     /** Clinic header data — also a flat record for the template. */

@@ -51,6 +51,9 @@ public class InvoiceViewMapper {
         VisitDepartment vd = billing.getVisitDepartmentBilling() == null
                 ? null : billing.getVisitDepartmentBilling().getVisitDepartment();
 
+        String insuranceLine = buildInsuranceLine(billing.getPatientInsurance());
+        boolean hasInsurance = insuranceLine != null || hasNonZeroInsuranceCovered(billing.getInsuranceCoveredAmount());
+
         return new InvoiceView(
             mapClinic(clinicProfile),
             formatPatientName(pat),
@@ -59,7 +62,7 @@ public class InvoiceViewMapper {
                     ? DATE_FMT.format(visit.getVisitDate()) : null,
             vd != null && vd.getDepartment() != null
                     ? vd.getDepartment().getName() : null,
-            buildInsuranceLine(billing.getPatientInsurance()),
+            insuranceLine,
             abbrevId(billing.getId()),
             resolveInvoiceDate(billing),
             billing.getStatus() != null ? billing.getStatus().name() : "UNKNOWN",
@@ -70,7 +73,8 @@ public class InvoiceViewMapper {
             fmtMoney(billing.getPatientPayableAmount()),
             fmtMoney(billing.getPaidAmount()),
             fmtMoney(billing.getOutstandingAmount()),
-            hasOutstanding(billing.getOutstandingAmount())
+            hasOutstanding(billing.getOutstandingAmount()),
+            hasInsurance
         );
     }
 
@@ -157,9 +161,13 @@ public class InvoiceViewMapper {
     // ─────────────────────────────────────────────────────────────────────────
 
     private String resolveInvoiceDate(DepartmentInsuranceBilling billing) {
-        if (billing.getVisitDepartmentBilling() == null
-                || billing.getVisitDepartmentBilling().getVisitBilling() == null) return null;
-        LocalDateTime dt = billing.getVisitDepartmentBilling().getVisitBilling().getCreatedAt();
+        // Use the explicit billingDate if set (admin/manager override),
+        // otherwise fall back to the VisitBilling creation timestamp.
+        LocalDateTime dt = billing.getBillingDate();
+        if (dt == null && billing.getVisitDepartmentBilling() != null
+                && billing.getVisitDepartmentBilling().getVisitBilling() != null) {
+            dt = billing.getVisitDepartmentBilling().getVisitBilling().getCreatedAt();
+        }
         return dt != null ? DT_FMT.format(dt) : null;
     }
 
@@ -216,6 +224,10 @@ public class InvoiceViewMapper {
 
     private boolean hasOutstanding(BigDecimal outstanding) {
         return outstanding != null && outstanding.compareTo(BigDecimal.ZERO) > 0;
+    }
+
+    private boolean hasNonZeroInsuranceCovered(BigDecimal amount) {
+        return amount != null && amount.compareTo(BigDecimal.ZERO) > 0;
     }
 
     private String str(Object o) {

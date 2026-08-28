@@ -20,7 +20,7 @@ public class DepartmentFormQueryController {
         this.departmentFormService = departmentFormService;
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse getForms(
             @Argument UUID departmentId,
@@ -29,7 +29,7 @@ public class DepartmentFormQueryController {
         return departmentFormService.getForms(departmentId);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse getForm(
             @Argument UUID departmentId,
@@ -39,7 +39,7 @@ public class DepartmentFormQueryController {
         return departmentFormService.getForm(departmentId, formId);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse getLatestForm(
             @Argument UUID departmentId,
@@ -48,7 +48,7 @@ public class DepartmentFormQueryController {
         return departmentFormService.getLatestForm(departmentId);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse getFormVersionHistory(
             @Argument UUID departmentId,
@@ -58,7 +58,7 @@ public class DepartmentFormQueryController {
         return departmentFormService.getFormVersionHistory(departmentId, formId);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse getFormVersion(
             @Argument UUID departmentId,
@@ -69,7 +69,7 @@ public class DepartmentFormQueryController {
         return departmentFormService.getFormVersion(departmentId, formId, versionNumber);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse getConsultationAnswers(
             @Argument UUID visitDepartmentId,

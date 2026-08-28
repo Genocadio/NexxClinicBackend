@@ -79,6 +79,14 @@ class InvoiceViewMapperTest {
             VisitBilling vb, VisitDepartment vd, PatientInsurance pi,
             VisitBillingStatus status, String total, String ins, String patient, String paid, String outstanding
     ) {
+        return billing(vb, vd, pi, status, total, ins, patient, paid, outstanding, null);
+    }
+
+    private DepartmentInsuranceBilling billing(
+            VisitBilling vb, VisitDepartment vd, PatientInsurance pi,
+            VisitBillingStatus status, String total, String ins, String patient, String paid, String outstanding,
+            java.time.LocalDateTime billingDate
+    ) {
         VisitDepartmentBilling vdb = new VisitDepartmentBilling();
         vdb.setId(UUID.randomUUID());
         vdb.setVisitBilling(vb);
@@ -94,6 +102,9 @@ class InvoiceViewMapperTest {
         b.setPatientPayableAmount(new BigDecimal(patient));
         b.setPaidAmount(new BigDecimal(paid));
         b.setOutstandingAmount(new BigDecimal(outstanding));
+        if (billingDate != null) {
+            b.setBillingDate(billingDate);
+        }
         return b;
     }
 
@@ -375,5 +386,88 @@ class InvoiceViewMapperTest {
     @Test
     void fmtMoneyHandlesInteger() {
         assertEquals("50", InvoiceViewMapper.fmtMoney(50));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // hasInsurance flag
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    @Test
+    void hasInsurance_true_whenInsuranceLinePresent() {
+        InsuranceProvider prov = new InsuranceProvider();
+        prov.setInsuranceName("Santé Plus");
+        PatientInsurance pi = new PatientInsurance();
+        pi.setInsuranceProvider(prov);
+        pi.setInsuranceCardNumber("SPR-12345");
+
+        Patient p = patient("Jane", null, "Doe", "Jane Doe", null);
+        Visit v = visit(p, LocalDateTime.now());
+        VisitBilling vb = visitBilling(v, LocalDateTime.now());
+        VisitDepartment vd = visitDepartment("Radiology");
+        DepartmentInsuranceBilling b = billing(vb, vd, pi, VisitBillingStatus.PAID, "100", "80", "20", "20", "0");
+
+        InvoiceView view = mapper.map(b, List.of(), null);
+
+        assertTrue(view.hasInsurance());
+    }
+
+    @Test
+    void hasInsurance_true_whenNonZeroInsuranceCovered() {
+        Patient p = patient("Jane", null, "Doe", "Jane Doe", null);
+        Visit v = visit(p, LocalDateTime.now());
+        VisitBilling vb = visitBilling(v, LocalDateTime.now());
+        VisitDepartment vd = visitDepartment("Radiology");
+        DepartmentInsuranceBilling b = billing(vb, vd, null, VisitBillingStatus.PAID, "100", "50", "50", "50", "0");
+
+        InvoiceView view = mapper.map(b, List.of(), null);
+
+        assertTrue(view.hasInsurance());
+    }
+
+    @Test
+    void hasInsurance_false_whenNoInsurance() {
+        Patient p = patient("Jane", null, "Doe", "Jane Doe", null);
+        Visit v = visit(p, LocalDateTime.now());
+        VisitBilling vb = visitBilling(v, LocalDateTime.now());
+        VisitDepartment vd = visitDepartment("Radiology");
+        DepartmentInsuranceBilling b = billing(vb, vd, null, VisitBillingStatus.PAID, "100", "0", "100", "100", "0");
+
+        InvoiceView view = mapper.map(b, List.of(), null);
+
+        assertFalse(view.hasInsurance());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Invoice date / billing date
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    @Test
+    void invoiceDate_fallsBackToVisitBillingCreatedAt_whenBillingDateNull() {
+        LocalDateTime createdAt = LocalDateTime.of(2026, 3, 15, 9, 30);
+        Patient p = patient("Jane", null, "Doe", "Jane Doe", null);
+        Visit v = visit(p, LocalDateTime.now());
+        VisitBilling vb = visitBilling(v, createdAt);
+        VisitDepartment vd = visitDepartment("Radiology");
+        DepartmentInsuranceBilling b = billing(vb, vd, null, VisitBillingStatus.PAID, "100", "0", "100", "100", "0");
+
+        InvoiceView view = mapper.map(b, List.of(), null);
+
+        assertEquals("15 Mar 2026  09:30", view.invoiceDate());
+    }
+
+    @Test
+    void invoiceDate_usesBillingDate_whenExplicitlySet() {
+        LocalDateTime createdAt = LocalDateTime.of(2026, 3, 15, 9, 30);
+        LocalDateTime billingOverride = LocalDateTime.of(2026, 8, 20, 14, 15);
+        Patient p = patient("Jane", null, "Doe", "Jane Doe", null);
+        Visit v = visit(p, LocalDateTime.now());
+        VisitBilling vb = visitBilling(v, createdAt);
+        VisitDepartment vd = visitDepartment("Radiology");
+        DepartmentInsuranceBilling b = billing(vb, vd, null, VisitBillingStatus.PAID,
+            "100", "0", "100", "100", "0", billingOverride);
+
+        InvoiceView view = mapper.map(b, List.of(), null);
+
+        assertEquals("20 Aug 2026  14:15", view.invoiceDate());
     }
 }

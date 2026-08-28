@@ -109,5 +109,18 @@ public interface DepartmentInsuranceBillingRepository extends JpaRepository<Depa
             @Param("visitId") UUID visitId,
             @Param("patientInsuranceId") UUID patientInsuranceId
     );
+
+    /**
+     * Returns all billing rows for a visit that have an existing invoice URL.
+     * Used to invalidate invoices when the visit date or billing date changes.
+     */
+    @Query("""
+            SELECT b FROM DepartmentInsuranceBilling b
+            WHERE b.visitDepartmentBilling.visitBilling.visit.id = :visitId
+              AND b.invoiceUrl IS NOT NULL
+            """)
+    List<DepartmentInsuranceBilling> findAllByVisitIdWithInvoiceUrl(
+            @Param("visitId") UUID visitId
+    );
 }
 

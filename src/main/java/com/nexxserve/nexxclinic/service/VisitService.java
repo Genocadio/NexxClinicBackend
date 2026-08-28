@@ -51,6 +51,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -80,6 +81,9 @@ public class VisitService {
     private final VisitDepartmentService visitDepartmentService;
 
     private final com.nexxserve.nexxclinic.repository.DepartmentInsuranceBillingRepository departmentInsuranceBillingRepository;
+    private final com.nexxserve.nexxclinic.service.billing.InvoiceGenerator invoiceGenerator;
+    private final MeilisearchIndexService meilisearchIndexService;
+    private final VisitPriceEstimateService visitPriceEstimateService;
 
     public VisitService(
             VisitRepository visitRepository,
@@ -100,7 +104,10 @@ public class VisitService {
             PatientMapper patientMapper,
             PatientInsuranceMapper patientInsuranceMapper,
             VisitDepartmentService visitDepartmentService,
-            com.nexxserve.nexxclinic.repository.DepartmentInsuranceBillingRepository departmentInsuranceBillingRepository
+            com.nexxserve.nexxclinic.repository.DepartmentInsuranceBillingRepository departmentInsuranceBillingRepository,
+            com.nexxserve.nexxclinic.service.billing.InvoiceGenerator invoiceGenerator,
+            MeilisearchIndexService meilisearchIndexService,
+            @Lazy VisitPriceEstimateService visitPriceEstimateService
     ) {
         this.visitRepository = visitRepository;
         this.visitInsuranceRepository = visitInsuranceRepository;
@@ -121,6 +128,9 @@ public class VisitService {
         this.patientInsuranceMapper = patientInsuranceMapper;
         this.visitDepartmentService = visitDepartmentService;
         this.departmentInsuranceBillingRepository = departmentInsuranceBillingRepository;
+        this.invoiceGenerator = invoiceGenerator;
+        this.meilisearchIndexService = meilisearchIndexService;
+        this.visitPriceEstimateService = visitPriceEstimateService;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -189,11 +199,15 @@ public class VisitService {
         }
 
         Visit latest = visitRepository.findById(saved.getId()).orElse(saved);
+        meilisearchIndexService.indexVisit(latest);
         return ApiResponse.success("Visit created.", visitToDto(latest, null, authUser));
     }
 
     @Transactional
-    public ApiResponse<VisitDto> changeVisitDate(ChangeVisitDateInput input) {
+    public ApiResponse<VisitDto> changeVisitDate(
+            ChangeVisitDateInput input,
+            AuthenticatedUser authUser
+    ) {
         if (input == null || input.visitId() == null || input.visitDate() == null) {
             return ApiResponse.error("visitId and visitDate are required.");
         }
@@ -203,12 +217,63 @@ public class VisitService {
             return ApiResponse.error("Visit not found.");
         }
 
+        Visit existingVisit = visitOptional.get();
+        if (existingVisit.getStatus() == com.nexxserve.nexxclinic.model.VisitStatus.CANCELLED) {
+            return ApiResponse.error("Cannot change the date of a cancelled visit.");
+        }
+        if (existingVisit.getStatus() == com.nexxserve.nexxclinic.model.VisitStatus.BILL_EDITING) {
+            return ApiResponse.error("Cannot change the visit date while the visit is in billing edit mode.");
+        }
+
         int updatedRows = visitRepository.updateVisitDate(input.visitId(), input.visitDate());
         if (updatedRows == 0) {
             return ApiResponse.error("Visit date could not be updated.");
         }
 
-        Visit updatedVisit = visitRepository.findById(input.visitId()).orElse(visitOptional.get());
+        Visit updatedVisit = visitRepository.findById(input.visitId()).orElse(existingVisit);
+
+        // When the visit date changes after billing, invalidate existing invoices
+        // and regenerate them immediately so the new visit date appears on the PDF.
+        List<com.nexxserve.nexxclinic.entity.DepartmentInsuranceBilling> billingsToRegenerate =
+            departmentInsuranceBillingRepository.findAllByVisitIdWithInvoiceUrl(input.visitId());
+        if (!billingsToRegenerate.isEmpty()) {
+            for (com.nexxserve.nexxclinic.entity.DepartmentInsuranceBilling b : billingsToRegenerate) {
+                b.setInvoiceUrl(null);
+                departmentInsuranceBillingRepository.save(b);
+            }
+            // Regenerate invoices after the transaction commits so the expensive
+            // PDF render and upload do not hold the DB connection open.
+            List<UUID> billingIds = billingsToRegenerate.stream()
+                .map(com.nexxserve.nexxclinic.entity.DepartmentInsuranceBilling::getId)
+                .toList();
+            org.springframework.transaction.support.TransactionSynchronizationManager
+                .registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            for (UUID bid : billingIds) {
+                                try {
+                                    com.nexxserve.nexxclinic.dto.out.ApiResponse<?> result =
+                                        invoiceGenerator.generateInvoice(bid, authUser);
+                                    if (result.status() != com.nexxserve.nexxclinic.model.ResponseStatus.SUCCESS) {
+                                        log.warn(
+                                            "Invoice regeneration after visit date change for {} returned: {}",
+                                            bid, result.message()
+                                        );
+                                    }
+                                } catch (Exception e) {
+                                    log.error(
+                                        "Failed to regenerate invoice after visit date change for {}: {}",
+                                        bid, e.getMessage(), e
+                                    );
+                                }
+                            }
+                        }
+                    }
+                );
+        }
+
+        meilisearchIndexService.indexVisit(updatedVisit);
         return ApiResponse.success("Visit date changed.", visitToDto(updatedVisit));
     }
 
@@ -230,6 +295,31 @@ public class VisitService {
         int size = normalizeSize(input == null ? null : input.size());
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "visitDate").and(Sort.by(Sort.Direction.DESC, "createdAt")));
 
+        String patientName = input == null ? null : blankToNull(input.patientName());
+        com.nexxserve.nexxclinic.model.VisitStatus statusFilter = input == null ? null : input.status();
+        Long visitDateEpochDay = null;
+        if (input != null && input.visitDate() != null) {
+            visitDateEpochDay = input.visitDate().toLocalDate().atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+        }
+
+        // Meilisearch first (typo-tolerant, ranked); the DB spec below is the fallback.
+        // Only invoke Meilisearch when there's a patientName search param;
+        // plain status/date-only listing goes straight to the database.
+        boolean hasSearchParam = patientName != null;
+        if (hasSearchParam && meilisearchIndexService.isEnabled()) {
+            try {
+                MeilisearchIndexService.SearchHit hit = meilisearchIndexService.searchVisits(
+                        patientName, statusFilter, visitDateEpochDay, page, size
+                );
+                List<VisitDto> dtos = loadVisitsByHits(hit.ids(), authUser);
+                int totalPages = size == 0 ? 0 : (int) Math.ceil((double) hit.total() / size);
+                return ApiResponse.success("Visits fetched.", dtos,
+                        new PaginationDto(hit.total(), size, page, totalPages));
+            } catch (MeilisearchIndexService.SearchUnavailableException e) {
+                log.warn("Meilisearch unavailable for visits, falling back to DB: {}", e.getMessage());
+            }
+        }
+
         Specification<Visit> spec = (root, queryDef, builder) -> builder.conjunction();
 
         if (input != null && input.visitDate() != null) {
@@ -240,7 +330,6 @@ public class VisitService {
             spec = spec.and((root, queryDef, builder) -> builder.equal(root.get("status"), input.status()));
         }
 
-        String patientName = input == null ? null : blankToNull(input.patientName());
         if (patientName != null) {
             String normalized = patientName.toLowerCase();
             spec = spec.and((root, queryDef, builder) ->
@@ -557,7 +646,130 @@ public class VisitService {
 
         visit.setStatus(VisitStatus.CANCELLED);
         Visit saved = visitRepository.save(visit);
+        meilisearchIndexService.indexVisit(saved);
         return ApiResponse.success("Visit cancelled.", visitToDto(saved));
+    }
+
+    /**
+     * Permanently delete a visit and all its associated data.
+     * Only allowed for unbilled visits that are in CREATED or CANCELLED status.
+     * A billed visit cannot be deleted — it has a financial and audit trail.
+     */
+    @Transactional
+    public ApiResponse deleteVisit(UUID visitId) {
+        if (visitId == null) {
+            return ApiResponse.error("visitId is required.");
+        }
+
+        Optional<Visit> visitOptional = visitRepository.findById(visitId);
+        if (visitOptional.isEmpty()) {
+            return ApiResponse.error("Visit not found.");
+        }
+
+        Visit visit = visitOptional.get();
+
+        if (visit.getStatus() == VisitStatus.COMPLETED) {
+            return ApiResponse.error("Cannot delete a completed visit. Cancel it first.");
+        }
+
+        if (visit.getStatus() == VisitStatus.BILL_EDITING) {
+            return ApiResponse.error("Cannot delete a visit in billing edit mode. Cancel the edit first.");
+        }
+
+        // Billing guard: a billed visit cannot be deleted.
+        if (!visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId).isEmpty()) {
+            return ApiResponse.error("Cannot delete a billed visit. Use editBillVisit to correct the billing, or cancel the visit instead.");
+        }
+
+        // Delete all associated data in dependency order.
+        // VisitDepartmentProduct -> VisitDepartment -> VisitInsurance -> Visit
+        List<VisitDepartmentProduct> products = visitDepartmentProductRepository.findByVisitDepartmentVisitId(visitId);
+        for (VisitDepartmentProduct p : products) {
+            visitDepartmentProductRepository.delete(p);
+        }
+
+        List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(visitId);
+        for (VisitDepartment dept : departments) {
+            visitDepartmentRepository.delete(dept);
+        }
+
+        List<com.nexxserve.nexxclinic.entity.VisitInsurance> insurances =
+            visitInsuranceRepository.findByVisitId(visitId);
+        for (com.nexxserve.nexxclinic.entity.VisitInsurance vi : insurances) {
+            visitInsuranceRepository.delete(vi);
+        }
+
+        visitRepository.deleteById(visitId);
+        meilisearchIndexService.deleteVisit(visitId);
+        return ApiResponse.success("Visit deleted.", null);
+    }
+
+    /**
+     * Finalise a visit: set all COMPLETED departments to FINALISED and the
+     * visit itself to FINALISED. No further edits are allowed once finalised
+     * unless an ADMIN re-opens it.
+     */
+    @Transactional
+    public ApiResponse<VisitDto> finaliseVisit(UUID visitId) {
+        if (visitId == null) {
+            return ApiResponse.error("visitId is required.");
+        }
+
+        Optional<Visit> visitOptional = visitRepository.findById(visitId);
+        if (visitOptional.isEmpty()) {
+            return ApiResponse.error("Visit not found.");
+        }
+
+        Visit visit = visitOptional.get();
+
+        if (visit.getStatus() == VisitStatus.FINALISED) {
+            return ApiResponse.error("Visit is already finalised.");
+        }
+
+        if (visit.getStatus() == VisitStatus.CANCELLED) {
+            return ApiResponse.error("Cannot finalise a cancelled visit.");
+        }
+
+        if (visit.getStatus() == VisitStatus.BILL_EDITING) {
+            return ApiResponse.error("Cannot finalise a visit in billing edit mode.");
+        }
+
+        if (visit.getStatus() != VisitStatus.COMPLETED) {
+            return ApiResponse.error("Only completed visits can be finalised.");
+        }
+
+        List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(visitId);
+        boolean allFinalised = true;
+        for (VisitDepartment dept : departments) {
+            if (dept.getStatus() == VisitDepartmentStatus.COMPLETED) {
+                dept.setStatus(VisitDepartmentStatus.FINALISED);
+                visitDepartmentRepository.save(dept);
+            }
+            if (dept.getStatus() != VisitDepartmentStatus.FINALISED && dept.getStatus() != VisitDepartmentStatus.CANCELLED) {
+                allFinalised = false;
+            }
+        }
+
+        if (!allFinalised && !departments.isEmpty()) {
+            // Some departments are not in a finalisable state — warn but proceed
+            // with finalising the ones that can be. The visit becomes FINALISED
+            // only when every non-cancelled department is FINALISED.
+            boolean canFinaliseVisit = true;
+            for (VisitDepartment dept : departments) {
+                if (dept.getStatus() != VisitDepartmentStatus.FINALISED && dept.getStatus() != VisitDepartmentStatus.CANCELLED) {
+                    canFinaliseVisit = false;
+                    break;
+                }
+            }
+            if (!canFinaliseVisit) {
+                return ApiResponse.error("Some departments are not yet completed. Complete all departments before finalising the visit.");
+            }
+        }
+
+        visit.setStatus(VisitStatus.FINALISED);
+        Visit saved = visitRepository.save(visit);
+        meilisearchIndexService.indexVisit(saved);
+        return ApiResponse.success("Visit finalised.", visitToDto(saved));
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -611,6 +823,7 @@ public class VisitService {
         }
 
         visitInsuranceRepository.saveAll(links);
+        visitPriceEstimateService.recomputeEstimates(visitId);
         Visit refreshedVisit = visitRepository.findById(visitId).orElse(visit);
         return ApiResponse.success("Insurance linked to visit.", visitToDto(refreshedVisit));
     }
@@ -665,6 +878,7 @@ public class VisitService {
         }
 
         visitInsuranceRepository.deleteAll(linksToRemove);
+        visitPriceEstimateService.recomputeEstimates(visitId);
         Visit refreshedVisit = visitRepository.findById(visitId).orElse(visit);
         return ApiResponse.success("Insurance unlinked from visit.", visitToDto(refreshedVisit));
     }
@@ -927,6 +1141,17 @@ public class VisitService {
                 .map(this::visitVitalSignsGroupToDto)
                 .toList();
 
+        // Compute quickBillEligible: ≤1 linked insurance AND 0 unread notes for the caller
+        boolean hasOneOrFewerInsurances = linkedInsurances.size() <= 1;
+        boolean noUnreadNotes = true;
+        if (authUser != null && authUser.userId() != null) {
+            long unreadNotes = visitDepartmentNoteRepository.countUnreadNotesForVisit(visit.getId(), authUser.userId());
+            noUnreadNotes = unreadNotes == 0;
+        }
+        boolean quickBillEligible = hasOneOrFewerInsurances && noUnreadNotes
+                && visit.getStatus() != VisitStatus.COMPLETED
+                && visit.getStatus() != VisitStatus.CANCELLED;
+
         return new VisitDto(
                 visit.getId(),
                 patientMapper.toDto(visit.getPatient(), patientInsuranceRepository.findByPatientId(visit.getPatient().getId())),
@@ -934,7 +1159,11 @@ public class VisitService {
                 visit.getVisitDate(),
                 linkedInsurances,
                 departments,
-                vitalSigns
+                vitalSigns,
+                visit.getEstimatedTotal(),
+                visit.getEstimatedInsurancePay(),
+                visit.getEstimatedPatientPay(),
+                quickBillEligible
         );
     }
 
@@ -1047,6 +1276,23 @@ public class VisitService {
                     .ifPresent(visitDepartments::add);
         }
         return visitDepartments;
+    }
+
+    /** Hydrates full visit DTOs from Meilisearch hit ids, preserving hit order. */
+    private List<VisitDto> loadVisitsByHits(List<UUID> ids, AuthenticatedUser authUser) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, Visit> byId = new HashMap<>();
+        visitRepository.findAllById(ids).forEach(v -> byId.put(v.getId(), v));
+        List<VisitDto> ordered = new ArrayList<>();
+        for (UUID id : ids) {
+            Visit visit = byId.get(id);
+            if (visit != null) {
+                ordered.add(visitToDto(visit, Set.of(), authUser));
+            }
+        }
+        return ordered;
     }
 
     private int normalizePage(Integer page) {

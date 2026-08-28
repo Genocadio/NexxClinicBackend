@@ -77,6 +77,7 @@ public class VisitDepartmentService {
     // Lazy to break circular dependency with VisitService
     private final VisitDepartmentNoteService visitDepartmentNoteService;
     private final VisitService visitService;
+    private final com.nexxserve.nexxclinic.service.VisitPriceEstimateService visitPriceEstimateService;
 
     public VisitDepartmentService(
             VisitRepository visitRepository,
@@ -97,7 +98,8 @@ public class VisitDepartmentService {
             DepartmentMapper departmentMapper,
             ProductMapper productMapper,
             @Lazy VisitDepartmentNoteService visitDepartmentNoteService,
-            @Lazy VisitService visitService
+            @Lazy VisitService visitService,
+            @Lazy com.nexxserve.nexxclinic.service.VisitPriceEstimateService visitPriceEstimateService
     ) {
         this.visitRepository = visitRepository;
         this.visitDepartmentRepository = visitDepartmentRepository;
@@ -118,6 +120,7 @@ public class VisitDepartmentService {
         this.productMapper = productMapper;
         this.visitDepartmentNoteService = visitDepartmentNoteService;
         this.visitService = visitService;
+        this.visitPriceEstimateService = visitPriceEstimateService;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -309,6 +312,7 @@ public class VisitDepartmentService {
         // empty — children can never exist with zero products (same rule as the
         // product-removal paths). Map to the parent so the response stays valid.
         VisitDepartment mapped = deleteChildVisitDepartmentIfEmpty(saved);
+        visitPriceEstimateService.recomputeEstimates(saved.getVisit().getId());
         return ApiResponse.success(
             "Visit department profile changed.",
             visitDepartmentToDto(mapped == null ? saved : mapped)
@@ -591,6 +595,7 @@ public class VisitDepartmentService {
             return ApiResponse.error("Child department cannot be created with zero products.");
         }
 
+        visitPriceEstimateService.recomputeEstimates(visit.getId());
         return ApiResponse.success("Child visit department added.", visitDepartmentToDto(parent));
     }
 
@@ -806,6 +811,7 @@ public class VisitDepartmentService {
                 "Product already exists for this visit department."
             );
         }
+        visitPriceEstimateService.recomputeEstimates(input.visitId());
         return ApiResponse.success("Product added to visit department.", visitDepartmentToDto(visitDepartment));
     }
 
@@ -847,6 +853,7 @@ public class VisitDepartmentService {
 
         VisitDepartmentProduct saved = visitDepartmentProductRepository.save(item);
         deleteChildVisitDepartmentIfEmpty(saved.getVisitDepartment());
+        visitPriceEstimateService.recomputeEstimates(item.getVisitDepartment().getVisit().getId());
         return ApiResponse.success("Visit department product status updated.", visitDepartmentToDto(saved.getVisitDepartment()));
     }
 
@@ -892,6 +899,7 @@ public class VisitDepartmentService {
             VisitDepartment affectedDepartment = item.getVisitDepartment();
             visitDepartmentProductRepository.delete(item);
             reopenVisitIfCompleted(visit);
+            visitPriceEstimateService.recomputeEstimates(visit.getId());
             VisitDepartment mappedDepartment = deleteChildVisitDepartmentIfEmpty(affectedDepartment);
             return ApiResponse.success("Visit department product removed.", visitDepartmentToDto(mappedDepartment == null ? affectedDepartment : mappedDepartment));
         }
@@ -900,6 +908,7 @@ public class VisitDepartmentService {
 
         VisitDepartmentProduct saved = visitDepartmentProductRepository.save(item);
         deleteChildVisitDepartmentIfEmpty(saved.getVisitDepartment());
+        visitPriceEstimateService.recomputeEstimates(visit.getId());
         return ApiResponse.success("Visit department product quantity updated.", visitDepartmentToDto(saved.getVisitDepartment()));
     }
 
@@ -936,14 +945,14 @@ public class VisitDepartmentService {
         List<VisitBillingItem> billingItems = visitBillingItemRepository.findByVisitDepartmentProductId(item.getId());
         if (!billingItems.isEmpty()) {
             return ApiResponse.error("Cannot remove a product that has billing history. Use editBillVisit to correct the billing instead.");
-        }
-
-        visitDepartmentProductRepository.delete(item);
+        }        visitDepartmentProductRepository.delete(item);
         reopenVisitIfCompleted(visit);
+        visitPriceEstimateService.recomputeEstimates(visit.getId());
 
         VisitDepartment mappedDepartment = deleteChildVisitDepartmentIfEmpty(affectedDepartment);
         return ApiResponse.success("Visit department product removed.", visitDepartmentToDto(mappedDepartment == null ? affectedDepartment : mappedDepartment));
     }
+
 
     // ─────────────────────────────────────────────────────────────
     //  STATUS / PROCESSOR / ENCOUNTER TYPE

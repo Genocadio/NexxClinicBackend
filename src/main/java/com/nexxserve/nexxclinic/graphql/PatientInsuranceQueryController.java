@@ -29,7 +29,7 @@ public class PatientInsuranceQueryController {
         this.patientService = patientService;
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse insuranceProvider(
             @Argument UUID insuranceProviderId,
@@ -38,7 +38,7 @@ public class PatientInsuranceQueryController {
         return insuranceProviderService.insuranceProvider(insuranceProviderId);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse insuranceProviders(
             @Argument @Valid SearchInsuranceProvidersInput input,
@@ -47,7 +47,7 @@ public class PatientInsuranceQueryController {
         return insuranceProviderService.insuranceProviders(input);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse patient(
             @Argument UUID patientId,
@@ -56,7 +56,7 @@ public class PatientInsuranceQueryController {
         return patientService.patient(patientId);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse patients(
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
@@ -64,7 +64,7 @@ public class PatientInsuranceQueryController {
         return patientService.patients();
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse patientInsurances(
             @Argument UUID patientId,
@@ -73,7 +73,7 @@ public class PatientInsuranceQueryController {
         return patientService.patientInsurances(patientId);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse searchPatients(
             @Argument @Valid SearchPatientsInput input,

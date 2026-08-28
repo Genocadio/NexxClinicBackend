@@ -14,13 +14,16 @@ import com.meilisearch.sdk.model.TaskInfo;
 import com.nexxserve.nexxclinic.config.MeilisearchProperties;
 import com.nexxserve.nexxclinic.entity.Patient;
 import com.nexxserve.nexxclinic.entity.Product;
+import com.nexxserve.nexxclinic.entity.Visit;
 import com.nexxserve.nexxclinic.entity.Worker;
+import com.nexxserve.nexxclinic.model.VisitStatus;
 import com.nexxserve.nexxclinic.model.ProductType;
 import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.entity.PatientInsurance;
 import com.nexxserve.nexxclinic.repository.PatientInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.PatientRepository;
 import com.nexxserve.nexxclinic.repository.ProductRepository;
+import com.nexxserve.nexxclinic.repository.VisitRepository;
 import com.nexxserve.nexxclinic.repository.WorkerRepository;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -52,6 +55,7 @@ public class MeilisearchIndexService {
     public static final String PRODUCTS_INDEX = "products";
     public static final String PATIENTS_INDEX = "patients";
     public static final String WORKERS_INDEX = "workers";
+    public static final String VISITS_INDEX = "visits";
 
     private static final int SYNC_BATCH_SIZE = 1000;
     /** Hard Meilisearch per-request limit; worker search has no pagination, so cap at the max. */
@@ -63,6 +67,7 @@ public class MeilisearchIndexService {
     private final PatientRepository patientRepository;
     private final PatientInsuranceRepository patientInsuranceRepository;
     private final WorkerRepository workerRepository;
+    private final VisitRepository visitRepository;
 
     private volatile Client client;
 
@@ -71,13 +76,15 @@ public class MeilisearchIndexService {
             ProductRepository productRepository,
             PatientRepository patientRepository,
             PatientInsuranceRepository patientInsuranceRepository,
-            WorkerRepository workerRepository
+            WorkerRepository workerRepository,
+            VisitRepository visitRepository
     ) {
         this.props = props;
         this.productRepository = productRepository;
         this.patientRepository = patientRepository;
         this.patientInsuranceRepository = patientInsuranceRepository;
         this.workerRepository = workerRepository;
+        this.visitRepository = visitRepository;
     }
 
     public boolean isEnabled() {
@@ -119,6 +126,9 @@ public class MeilisearchIndexService {
             ensureIndex(WORKERS_INDEX,
                     new String[]{"firstName", "lastName", "username", "email", "phoneNumber"},
                     new String[]{"roles", "active", "accountStatus", "departmentIds", "createdAt"});
+            ensureIndex(VISITS_INDEX,
+                    new String[]{"patientFullName", "patientFirstName", "patientLastName", "patientIdentifier", "patientPhone", "id"},
+                    new String[]{"status", "visitDateEpochDay", "patientId"});
         } catch (Exception e) {
             log.warn("Meilisearch index bootstrap failed: {}", e.getMessage());
         }
@@ -169,6 +179,20 @@ public class MeilisearchIndexService {
     // ─────────────────────────────────────────────────────────────
 
     public record SearchHit(List<UUID> ids, long total) {
+    }
+
+    public SearchHit searchVisits(String patientName, VisitStatus status, Long visitDateEpochDay, int page, int size) {
+        List<String> filters = new ArrayList<>();
+
+        String q = patientName;
+        if (status != null) {
+            filters.add("status = \"" + status.name() + "\"");
+        }
+        if (visitDateEpochDay != null) {
+            filters.add("visitDateEpochDay = " + visitDateEpochDay);
+        }
+
+        return search(VISITS_INDEX, q, filters, page, size);
     }
 
     public SearchHit searchProducts(String query, ProductType type, int page, int size) {
@@ -343,6 +367,22 @@ public class MeilisearchIndexService {
         upsert(WORKERS_INDEX, doc);
     }
 
+    public void indexVisit(Visit visit) {
+        if (visit == null) {
+            return;
+        }
+        Map<String, Object> doc = visitDocument(visit);
+        upsert(VISITS_INDEX, doc);
+    }
+
+    public void indexVisit(UUID visitId) {
+        visitRepository.findById(visitId).ifPresent(this::indexVisit);
+    }
+
+    public void deleteVisit(UUID id) {
+        deleteById(VISITS_INDEX, id);
+    }
+
     public void deletePatient(UUID id) {
         deleteById(PATIENTS_INDEX, id);
     }
@@ -409,6 +449,24 @@ public class MeilisearchIndexService {
         return doc;
     }
 
+    private Map<String, Object> visitDocument(Visit visit) {
+        Map<String, Object> doc = new LinkedHashMap<>();
+        doc.put("id", visit.getId().toString());
+        doc.put("status", visit.getStatus() == null ? null : visit.getStatus().name());
+        doc.put("visitDateEpochDay", visit.getVisitDate() == null ? null : toEpochDay(visit.getVisitDate().toLocalDate()));
+        doc.put("patientId", visit.getPatient() == null ? null : visit.getPatient().getId().toString());
+
+        Patient patient = visit.getPatient();
+        if (patient != null) {
+            doc.put("patientFullName", patient.getFullName());
+            doc.put("patientFirstName", patient.getFirstName());
+            doc.put("patientLastName", patient.getLastName());
+            doc.put("patientIdentifier", patient.getPatientIdentifier());
+            doc.put("patientPhone", patient.getPrimaryPhoneNumber());
+        }
+        return doc;
+    }
+
     private void upsert(String uid, Map<String, Object> doc) {
         if (!isEnabled()) {
             return;
@@ -458,6 +516,9 @@ public class MeilisearchIndexService {
             if (uid == null || WORKERS_INDEX.equals(uid)) {
                 reindexWorkers();
             }
+            if (uid == null || VISITS_INDEX.equals(uid)) {
+                reindexVisits();
+            }
         } catch (Exception e) {
             log.warn("Meilisearch reindex failed: {}", e.getMessage());
         }
@@ -494,6 +555,15 @@ public class MeilisearchIndexService {
         List<Map<String, Object>> docs = new ArrayList<>();
         for (Worker worker : workerRepository.findAll()) {
             docs.add(workerDocument(worker));
+        }
+        replaceAll(index, docs);
+    }
+
+    private void reindexVisits() throws Exception {
+        Index index = client().index(VISITS_INDEX);
+        List<Map<String, Object>> docs = new ArrayList<>();
+        for (Visit visit : visitRepository.findAll()) {
+            docs.add(visitDocument(visit));
         }
         replaceAll(index, docs);
     }
@@ -556,6 +626,8 @@ public class MeilisearchIndexService {
                 return patientRepository.count();
             } else if (WORKERS_INDEX.equals(uid)) {
                 return workerRepository.count();
+            } else if (VISITS_INDEX.equals(uid)) {
+                return visitRepository.count();
             }
         } catch (Exception e) {
             log.warn("DB count for {} failed: {}", uid, e.getMessage());

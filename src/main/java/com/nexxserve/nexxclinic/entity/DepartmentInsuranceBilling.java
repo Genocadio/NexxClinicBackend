@@ -74,6 +74,13 @@ public class DepartmentInsuranceBilling {
     @Column
     private String invoiceUrl;
 
+    /**
+     * The date/time shown on the invoice. Defaults to the record creation time
+     * but can be overridden by an admin or manager. When changed, the existing
+     * invoice PDF is invalidated so a fresh one is generated on next access.
+     */
+    private LocalDateTime billingDate;
+
     @OneToMany(mappedBy = "departmentInsuranceBilling", cascade = jakarta.persistence.CascadeType.ALL, orphanRemoval = true)
     private List<VisitBillingItem> items = new ArrayList<>();
 
@@ -88,6 +95,9 @@ public class DepartmentInsuranceBilling {
         LocalDateTime now = LocalDateTime.now();
         this.createdAt = now;
         this.updatedAt = now;
+        if (this.billingDate == null) {
+            this.billingDate = now;
+        }
         if (this.status == null) {
             this.status = VisitBillingStatus.UNPAID;
         }
@@ -233,6 +243,14 @@ public class DepartmentInsuranceBilling {
 
     public void setOutstandingReason(String outstandingReason) {
         this.outstandingReason = outstandingReason;
+    }
+
+    public LocalDateTime getBillingDate() {
+        return billingDate;
+    }
+
+    public void setBillingDate(LocalDateTime billingDate) {
+        this.billingDate = billingDate;
     }
 
     public List<VisitBillingItem> getItems() {

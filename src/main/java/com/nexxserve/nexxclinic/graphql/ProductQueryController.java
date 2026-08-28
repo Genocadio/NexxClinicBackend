@@ -21,7 +21,7 @@ public class ProductQueryController {
         this.productService = productService;
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINICIAN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE})
+    @HasRole({RoleName.ADMIN, RoleName.CLINICIAN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse product(
             @Argument UUID productId,
@@ -31,7 +31,7 @@ public class ProductQueryController {
         return productService.product(productId, insuranceId);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINICIAN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE})
+    @HasRole({RoleName.ADMIN, RoleName.CLINICIAN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse products(
             @Argument(name = "input") SearchProductsInput input,
@@ -40,7 +40,7 @@ public class ProductQueryController {
         return productService.products(input);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse productInsuranceCoverage(
             @Argument UUID productInsuranceCoverageId,

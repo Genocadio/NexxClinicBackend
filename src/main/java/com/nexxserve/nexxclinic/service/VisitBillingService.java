@@ -37,11 +37,13 @@ import com.nexxserve.nexxclinic.repository.VisitDepartmentNoteRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentProductSnapshotRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
+import com.nexxserve.nexxclinic.repository.VisitInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.VisitRepository;
 import com.nexxserve.nexxclinic.repository.WorkerRepository;
 import com.nexxserve.nexxclinic.service.billing.BillingCarryForwardService;
 import com.nexxserve.nexxclinic.service.billing.BillingCorrectionService;
 import com.nexxserve.nexxclinic.service.billing.BillingDataMapper;
+import com.nexxserve.nexxclinic.service.billing.InvoiceGenerator;
 import com.nexxserve.nexxclinic.service.billing.BillingPaymentDistributor;
 import com.nexxserve.nexxclinic.service.billing.BillingPaymentService;
 import com.nexxserve.nexxclinic.service.billing.BillingPricingCalculator;
@@ -68,6 +70,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -95,6 +98,10 @@ public class VisitBillingService {
     private final BillingCarryForwardService billingCarryForwardService;
     private final BillingPaymentService billingPaymentService;
     private final BillingQueryService billingQueryService;
+    private final InvoiceGenerator invoiceGenerator;
+    private final VisitPriceEstimateService visitPriceEstimateService;
+    private final VisitInsuranceRepository visitInsuranceRepository;
+    private final com.nexxserve.nexxclinic.repository.VisitPriceEstimateRepository visitPriceEstimateRepository;
 
     private static final Logger log = LoggerFactory.getLogger(VisitBillingService.class);
 
@@ -118,7 +125,11 @@ public class VisitBillingService {
         BillingDataMapper billingDataMapper,        BillingCorrectionService billingCorrectionService,
         BillingCarryForwardService billingCarryForwardService,
         BillingPaymentService billingPaymentService,
-        BillingQueryService billingQueryService
+        BillingQueryService billingQueryService,
+        InvoiceGenerator invoiceGenerator,
+        @Lazy VisitPriceEstimateService visitPriceEstimateService,
+        VisitInsuranceRepository visitInsuranceRepository,
+        com.nexxserve.nexxclinic.repository.VisitPriceEstimateRepository visitPriceEstimateRepository
     ) {
         this.visitRepository = visitRepository;
         this.visitDepartmentRepository = visitDepartmentRepository;
@@ -143,6 +154,10 @@ public class VisitBillingService {
         this.billingCarryForwardService = billingCarryForwardService;
         this.billingPaymentService = billingPaymentService;
         this.billingQueryService = billingQueryService;
+        this.invoiceGenerator = invoiceGenerator;
+        this.visitPriceEstimateService = visitPriceEstimateService;
+        this.visitInsuranceRepository = visitInsuranceRepository;
+        this.visitPriceEstimateRepository = visitPriceEstimateRepository;
     }
 
     @Transactional
@@ -1445,6 +1460,9 @@ public class VisitBillingService {
             }
         }
 
+        // Delete pre-billing price estimates now that real billing has been persisted
+        visitPriceEstimateService.deleteEstimates(visit.getId());
+
         return ApiResponse.success(
             successMessage,
             billingDataMapper.visitBillingToMap(savedVisitBilling)
@@ -1460,6 +1478,123 @@ public class VisitBillingService {
     @Transactional(readOnly = true)
     public ApiResponse visitBilling(UUID visitId) {
         return billingQueryService.visitBilling(visitId);
+    }
+
+    @Transactional
+    public ApiResponse quickBill(UUID visitId, AuthenticatedUser authUser) {
+        if (visitId == null) {
+            return ApiResponse.error("visitId is required.");
+        }
+
+        Worker actingUser = resolveWorker(authUser);
+        if (actingUser == null) {
+            return ApiResponse.error("Authentication is required to quick-bill a visit.");
+        }
+
+        Optional<Visit> visitOpt = visitRepository.findById(visitId);
+        if (visitOpt.isEmpty()) {
+            return ApiResponse.error("Visit not found.");
+        }
+        Visit visit = visitOpt.get();
+
+        if (visit.getStatus() == VisitStatus.COMPLETED) {
+            return ApiResponse.error("Visit is already completed.");
+        }
+        if (visit.getStatus() == VisitStatus.CANCELLED) {
+            return ApiResponse.error("Cannot bill a cancelled visit.");
+        }
+
+        // Eligibility: ≤1 linked insurance
+        List<VisitInsurance> visitInsurances = visitInsuranceRepository.findByVisitId(visitId);
+        if (visitInsurances.size() > 1) {
+            return ApiResponse.error("Visit has more than 1 linked insurance. Use the full billing flow instead.");
+        }
+
+        // Eligibility: 0 unread notes
+        long unreadNotes = billingValidation.countUnreadNotesForVisit(visitId, actingUser);
+        if (unreadNotes > 0) {
+            return ApiResponse.error("You have unread notes. Please read them before billing.");
+        }
+
+        // Load pre-calculated estimates
+        List<com.nexxserve.nexxclinic.entity.VisitPriceEstimate> estimates =
+            visitPriceEstimateRepository.findByVisitId(visitId);
+        if (estimates.isEmpty()) {
+            return ApiResponse.error("No products to bill. Add products to the visit first.");
+        }
+
+        // Build BillVisitInput from estimates
+        BillVisitInput input = buildQuickBillInput(visit, visitInsurances, estimates);
+        if (input == null) {
+            return ApiResponse.error("Could not build billing input from pre-calculations.");
+        }
+
+        return billVisit(input, authUser);
+    }
+
+    /**
+     * Builds a BillVisitInput from the pre-calculated price estimates.
+     * Groups products by their root visit department, auto-determines
+     * coverage type based on whether the estimate has an applied insurance.
+     */
+    private BillVisitInput buildQuickBillInput(
+        Visit visit,
+        List<VisitInsurance> visitInsurances,
+        List<com.nexxserve.nexxclinic.entity.VisitPriceEstimate> estimates
+    ) {
+        // Build a map of patientInsuranceId -> VisitInsurance for quick lookup
+        Map<UUID, VisitInsurance> visitInsuranceByPiId = new HashMap<>();
+        for (VisitInsurance vi : visitInsurances) {
+            visitInsuranceByPiId.put(vi.getPatientInsurance().getId(), vi);
+        }
+
+        // Group estimates by root visit department
+        Map<UUID, List<com.nexxserve.nexxclinic.entity.VisitPriceEstimate>> estimatesByRootDept = new LinkedHashMap<>();
+        for (com.nexxserve.nexxclinic.entity.VisitPriceEstimate est : estimates) {
+            UUID rootDeptId = resolveRootVisitDepartmentId(est.getVisitDepartmentProduct().getVisitDepartment());
+            estimatesByRootDept.computeIfAbsent(rootDeptId, k -> new ArrayList<>()).add(est);
+        }
+
+        List<BillVisitInput.BillVisitDepartmentInput> departments = new ArrayList<>();
+        for (Map.Entry<UUID, List<com.nexxserve.nexxclinic.entity.VisitPriceEstimate>> entry : estimatesByRootDept.entrySet()) {
+            UUID rootDeptId = entry.getKey();
+            List<com.nexxserve.nexxclinic.entity.VisitPriceEstimate> deptEstimates = entry.getValue();
+
+            List<BillVisitInput.BillVisitDepartmentProductInput> products = new ArrayList<>();
+            for (com.nexxserve.nexxclinic.entity.VisitPriceEstimate est : deptEstimates) {
+                UUID vdpId = est.getVisitDepartmentProduct().getId();
+                com.nexxserve.nexxclinic.model.CoverageType coverageType;
+                UUID patientInsuranceId = null;
+
+                if (est.getAppliedPatientInsurance() != null && est.getResolvedPatientSharePct() < 100) {
+                    coverageType = com.nexxserve.nexxclinic.model.CoverageType.INSURANCE;
+                    patientInsuranceId = est.getAppliedPatientInsurance().getId();
+                } else {
+                    coverageType = com.nexxserve.nexxclinic.model.CoverageType.PRIVATE;
+                }
+
+                products.add(new BillVisitInput.BillVisitDepartmentProductInput(
+                    vdpId,
+                    null, // parentVisitDepartmentId — root resolves automatically
+                    est.getQuantity(),
+                    coverageType,
+                    patientInsuranceId,
+                    null, // exemptionType
+                    null  // patientSharePercentageOverride
+                ));
+            }
+
+            departments.add(new BillVisitInput.BillVisitDepartmentInput(
+                rootDeptId,
+                products,
+                null,  // payments — no payment at quick-bill time
+                null,  // note
+                null,  // outstandingType
+                null   // outstandingReason
+            ));
+        }
+
+        return new BillVisitInput(visit.getId(), departments);
     }
 
     private boolean hasText(String value) {
@@ -1630,6 +1765,17 @@ public class VisitBillingService {
         return workerRepository.findById(authUser.userId()).orElse(null);
     }
 
+    /**
+     * Null-safe navigation from an insurance billing row to its owning visit.
+     */
+    private Visit resolveVisitFromBilling(DepartmentInsuranceBilling billing) {
+        if (billing == null || billing.getVisitDepartmentBilling() == null
+                || billing.getVisitDepartmentBilling().getVisitBilling() == null) {
+            return null;
+        }
+        return billing.getVisitDepartmentBilling().getVisitBilling().getVisit();
+    }
+
     @Transactional
     public ApiResponse flushSoftDeletedVisitProducts(UUID visitId, AuthenticatedUser authUser) {
         if (visitId == null) {
@@ -1668,6 +1814,99 @@ public class VisitBillingService {
         return ApiResponse.success(
             "Soft-deleted products flushed successfully.",
             Map.of("deletedCount", deletedCount, "skippedCount", skippedCount)
+        );
+    }
+
+    /**
+     * Update the billing date shown on an invoice. Only ADMIN and MANAGER roles
+     * are permitted. Changing the date invalidates the current invoice PDF so a
+     * fresh one is generated on next access.
+     */
+    @Transactional
+    public ApiResponse updateBillingDate(
+        com.nexxserve.nexxclinic.graphql.input.UpdateBillingDateInput input,
+        AuthenticatedUser authUser
+    ) {
+        if (input == null || input.departmentInsuranceBillingId() == null) {
+            return ApiResponse.error("departmentInsuranceBillingId is required.");
+        }
+        if (input.billingDate() == null) {
+            return ApiResponse.error("billingDate is required.");
+        }
+
+        Worker actingUser = resolveWorker(authUser);
+        if (actingUser == null) {
+            return ApiResponse.error("Authentication is required.");
+        }
+
+        // Only ADMIN and MANAGER may change the billing date.
+        boolean authorised = actingUser.getRoles().contains(com.nexxserve.nexxclinic.model.RoleName.ADMIN)
+            || actingUser.getRoles().contains(com.nexxserve.nexxclinic.model.RoleName.MANAGER);
+        if (!authorised) {
+            return ApiResponse.error("Only admin or manager can update the billing date.");
+        }
+
+        Optional<DepartmentInsuranceBilling> billingOpt =
+            departmentInsuranceBillingRepository.findByIdWithDepartmentBillingAndVisit(
+                input.departmentInsuranceBillingId()
+            );
+        if (billingOpt.isEmpty()) {
+            return ApiResponse.error("Department insurance billing not found.");
+        }
+
+        DepartmentInsuranceBilling billing = billingOpt.get();
+
+        // Validate: visit must not be in BILL_EDITING or CANCELLED state.
+        Visit visit = billing.getVisitDepartmentBilling().getVisitBilling().getVisit();
+        if (visit == null) {
+            return ApiResponse.error("Visit not found for this billing.");
+        }
+        if (visit.getStatus() == com.nexxserve.nexxclinic.model.VisitStatus.BILL_EDITING) {
+            return ApiResponse.error("Cannot update billing date while the visit is in billing edit mode.");
+        }
+        if (visit.getStatus() == com.nexxserve.nexxclinic.model.VisitStatus.CANCELLED) {
+            return ApiResponse.error("Cannot update billing date for a cancelled visit.");
+        }
+
+        billing.setBillingDate(input.billingDate());
+        // Invalidate existing invoice so a fresh PDF is generated.
+        billing.setInvoiceUrl(null);
+        departmentInsuranceBillingRepository.save(billing);
+
+        // Regenerate the invoice immediately after the transaction commits.
+        // InvoiceGenerator uses its own TransactionTemplate internally, so it must
+        // NOT run inside this @Transactional method (the expensive PDF render and
+        // upload should not hold the DB connection open).
+        UUID billingId = billing.getId();
+        org.springframework.transaction.support.TransactionSynchronizationManager
+            .registerSynchronization(
+                new org.springframework.transaction.support.TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        try {
+                            ApiResponse<?> result = invoiceGenerator.generateInvoice(billingId, authUser);
+                            if (result.status() != com.nexxserve.nexxclinic.model.ResponseStatus.SUCCESS) {
+                                log.warn(
+                                    "Invoice regeneration after billing date update for {} returned: {}",
+                                    billingId, result.message()
+                                );
+                            }
+                        } catch (Exception e) {
+                            log.error(
+                                "Failed to regenerate invoice after billing date update for {}: {}",
+                                billingId, e.getMessage(), e
+                            );
+                        }
+                    }
+                }
+            );
+
+        return ApiResponse.success(
+            "Billing date updated successfully.",
+            Map.of(
+                "id", billing.getId(),
+                "billingDate", billing.getBillingDate()
+            )
         );
     }
 }
