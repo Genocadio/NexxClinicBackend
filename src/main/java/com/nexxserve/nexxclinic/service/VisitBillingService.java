@@ -987,6 +987,19 @@ public class VisitBillingService {
             insuranceBilling.setPatientPayableAmount(ZERO);
             insuranceBilling.setPaidAmount(ZERO);
             insuranceBilling.setOutstandingAmount(ZERO);
+            // If the current billing time would fall before the visit date (e.g. the
+            // visit date was edited forward for an unbilled visit), do not backdate
+            // billing before the visit. Clamp the billing date to at least 5 minutes
+            // after the visit date, matching the admin billing-date validation rule.
+            // Otherwise leave it null so the @PrePersist hook stamps LocalDateTime.now().
+            java.time.LocalDateTime visitDateNow = visit.getVisitDate();
+            if (visitDateNow != null) {
+                java.time.LocalDateTime minBillingDate = visitDateNow.plusMinutes(5);
+                java.time.LocalDateTime billingNow = java.time.LocalDateTime.now();
+                if (billingNow.isBefore(minBillingDate)) {
+                    insuranceBilling.setBillingDate(minBillingDate);
+                }
+            }
             departmentBilling.getInsuranceBillings().add(insuranceBilling);
 
             BigDecimal total = ZERO;

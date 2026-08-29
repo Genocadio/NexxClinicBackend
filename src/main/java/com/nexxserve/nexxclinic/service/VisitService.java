@@ -41,6 +41,7 @@ import com.nexxserve.nexxclinic.repository.VisitRepository;
 import com.nexxserve.nexxclinic.repository.VisitVitalSignsGroupRepository;
 import com.nexxserve.nexxclinic.repository.VitalMeasurementRepository;
 import com.nexxserve.nexxclinic.repository.WorkerRepository;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
@@ -223,6 +224,8 @@ public class VisitService {
         }
 
         Visit existingVisit = visitOptional.get();
+        LocalDateTime oldVisitDate = existingVisit.getVisitDate();
+        LocalDateTime newVisitDate = input.visitDate();
         if (existingVisit.getStatus() == com.nexxserve.nexxclinic.model.VisitStatus.CANCELLED) {
             return ApiResponse.error("Cannot change the date of a cancelled visit.");
         }
@@ -237,12 +240,22 @@ public class VisitService {
 
         Visit updatedVisit = visitRepository.findById(input.visitId()).orElse(existingVisit);
 
-        // When the visit date changes after billing, invalidate existing invoices
-        // and regenerate them immediately so the new visit date appears on the PDF.
+        // When the visit date changes after billing, recalculate each billing's
+        // billing date by applying the same shift as the visit date moved, then
+        // clamp so the billing date is never before the (new) visit date.
         List<com.nexxserve.nexxclinic.entity.DepartmentInsuranceBilling> billingsToRegenerate =
-            departmentInsuranceBillingRepository.findAllByVisitIdWithInvoiceUrl(input.visitId());
+            departmentInsuranceBillingRepository.findAllByVisitId(input.visitId());
         if (!billingsToRegenerate.isEmpty()) {
             for (com.nexxserve.nexxclinic.entity.DepartmentInsuranceBilling b : billingsToRegenerate) {
+                if (oldVisitDate != null && b.getBillingDate() != null) {
+                    Duration visitDelta = Duration.between(oldVisitDate, newVisitDate);
+                    java.time.LocalDateTime shiftedBillingDate = b.getBillingDate().plus(visitDelta);
+                    java.time.LocalDateTime minBilling = newVisitDate.plusMinutes(5);
+                    if (shiftedBillingDate.isBefore(minBilling)) {
+                        shiftedBillingDate = minBilling;
+                    }
+                    b.setBillingDate(shiftedBillingDate);
+                }
                 b.setInvoiceUrl(null);
                 departmentInsuranceBillingRepository.save(b);
             }
@@ -280,6 +293,78 @@ public class VisitService {
 
         meilisearchIndexService.indexVisit(updatedVisit);
         return ApiResponse.success("Visit date changed.", visitToDto(updatedVisit));
+    }
+
+    /**
+     * Read-only preview of how each billing row's billing date will change if the
+     * visit date is moved to {@code newVisitDate}. Applies the exact same shift +
+     * clamp (never before newVisitDate + 5 minutes) that changeVisitDate performs,
+     * but does NOT persist anything. Used by the manager-facing change-visit-date
+     * flow to show proposed billing dates before the change is confirmed.
+     */
+    @Transactional(readOnly = true)
+    public ApiResponse<java.util.List<VisitBillingDatePreviewDto>> previewChangeVisitDate(
+            UUID visitId,
+            LocalDateTime newVisitDate
+    ) {
+        if (visitId == null || newVisitDate == null) {
+            return ApiResponse.error("visitId and newVisitDate are required.");
+        }
+
+        Optional<Visit> visitOptional = visitRepository.findById(visitId);
+        if (visitOptional.isEmpty()) {
+            return ApiResponse.error("Visit not found.");
+        }
+
+        Visit existingVisit = visitOptional.get();
+        if (existingVisit.getStatus() == com.nexxserve.nexxclinic.model.VisitStatus.CANCELLED) {
+            return ApiResponse.error("Cannot change the date of a cancelled visit.");
+        }
+        if (existingVisit.getStatus() == com.nexxserve.nexxclinic.model.VisitStatus.BILL_EDITING) {
+            return ApiResponse.error("Cannot change the visit date while the visit is in billing edit mode.");
+        }
+
+        LocalDateTime oldVisitDate = existingVisit.getVisitDate();
+        Duration visitDelta = oldVisitDate == null
+            ? Duration.ZERO
+            : Duration.between(oldVisitDate, newVisitDate);
+        LocalDateTime minBilling = newVisitDate.plusMinutes(5);
+
+        List<VisitBillingDatePreviewDto> previews = new ArrayList<>();
+        for (com.nexxserve.nexxclinic.entity.DepartmentInsuranceBilling b
+                : departmentInsuranceBillingRepository.findAllByVisitId(visitId)) {
+            LocalDateTime current = b.getBillingDate();
+            LocalDateTime proposed = current == null ? null : current.plus(visitDelta);
+            if (proposed != null && proposed.isBefore(minBilling)) {
+                proposed = minBilling;
+            }
+
+            String departmentName = null;
+            String insuranceLabel = "Private";
+            if (b.getVisitDepartmentBilling() != null
+                    && b.getVisitDepartmentBilling().getVisitDepartment() != null
+                    && b.getVisitDepartmentBilling().getVisitDepartment().getDepartment() != null) {
+                departmentName = b.getVisitDepartmentBilling()
+                    .getVisitDepartment().getDepartment().getName();
+            }
+            if (b.getPatientInsurance() != null
+                    && b.getPatientInsurance().getInsuranceProvider() != null
+                    && b.getPatientInsurance().getInsuranceProvider().getInsuranceName() != null) {
+                insuranceLabel = b.getPatientInsurance()
+                    .getInsuranceProvider().getInsuranceName();
+            }
+
+            previews.add(new VisitBillingDatePreviewDto(
+                b.getId(),
+                departmentName,
+                insuranceLabel,
+                current,
+                proposed,
+                b.getInvoiceUrl()
+            ));
+        }
+
+        return ApiResponse.success("Preview computed.", previews);
     }
 
     @Transactional(readOnly = true)
@@ -1211,9 +1296,14 @@ public class VisitService {
                 .map(link -> patientInsuranceMapper.toDto(link.getPatientInsurance()))
                 .toList();
 
-        List<VisitDepartmentDto> departments = resolveVisitDepartmentsForResponse(visit.getId(), departmentIds)
+        List<VisitDepartment> resolvedVds = resolveVisitDepartmentsForResponse(visit.getId(), departmentIds);
+        java.util.Map<UUID, com.nexxserve.nexxclinic.dto.out.DepartmentDto> preloadedDeptDtos =
+                visitDepartmentService.loadDepartmentDtosWithProfiles(
+                        resolvedVds.stream().map(VisitDepartment::getDepartment).toList());
+
+        List<VisitDepartmentDto> departments = resolvedVds
                 .stream()
-                .map(vd -> visitDepartmentService.visitDepartmentToDto(vd, visitInsuranceProviderIds, authUser))
+                .map(vd -> visitDepartmentService.visitDepartmentToDto(vd, visitInsuranceProviderIds, new java.util.LinkedHashSet<>(), authUser, preloadedDeptDtos))
                 .toList();
 
         List<VisitVitalSignsGroupDto> vitalSigns = visitVitalSignsGroupRepository.findByVisitIdOrderByCreatedAtAsc(visit.getId())

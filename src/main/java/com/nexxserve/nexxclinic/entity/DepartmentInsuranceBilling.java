@@ -113,9 +113,7 @@ public class DepartmentInsuranceBilling {
         if (this.paidAmount == null) {
             this.paidAmount = BigDecimal.ZERO;
         }
-        if (this.outstandingAmount == null) {
-            this.outstandingAmount = BigDecimal.ZERO;
-        }
+        deriveOutstanding();
     }
 
     @PreUpdate
@@ -136,9 +134,24 @@ public class DepartmentInsuranceBilling {
         if (this.paidAmount == null) {
             this.paidAmount = BigDecimal.ZERO;
         }
-        if (this.outstandingAmount == null) {
-            this.outstandingAmount = BigDecimal.ZERO;
-        }
+        deriveOutstanding();
+    }
+
+    /**
+     * Outstanding is always the authoritative residual of what the patient still
+     * owes for this bucket: patient payable minus what has been paid. Deriving it
+     * here on every persist/update guarantees the value can never go stale across
+     * any billing, edit, or payment path.
+     */
+    private void deriveOutstanding() {
+        BigDecimal payable = this.patientPayableAmount == null
+            ? BigDecimal.ZERO
+            : this.patientPayableAmount;
+        BigDecimal paid = this.paidAmount == null
+            ? BigDecimal.ZERO
+            : this.paidAmount;
+        BigDecimal residual = payable.subtract(paid);
+        this.outstandingAmount = residual.max(BigDecimal.ZERO);
     }
 
     public UUID getId() {

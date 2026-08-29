@@ -122,5 +122,18 @@ public interface DepartmentInsuranceBillingRepository extends JpaRepository<Depa
     List<DepartmentInsuranceBilling> findAllByVisitIdWithInvoiceUrl(
             @Param("visitId") UUID visitId
     );
+
+    /**
+     * Returns every {@link DepartmentInsuranceBilling} row for a visit (all billing
+     * versions), regardless of whether an invoice has been generated. Used to
+     * recalculate billing dates when the visit date changes after billing.
+     */
+    @Query("""
+            SELECT b FROM DepartmentInsuranceBilling b
+            WHERE b.visitDepartmentBilling.visitBilling.visit.id = :visitId
+            """)
+    List<DepartmentInsuranceBilling> findAllByVisitId(
+            @Param("visitId") UUID visitId
+    );
 }
 

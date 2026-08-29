@@ -87,6 +87,15 @@ public class VisitPriceEstimateService {
      */
     @Transactional
     public void recomputeEstimates(UUID visitId) {
+        try {
+        recomputeEstimatesInternal(visitId);
+        } catch (Exception ex) {
+            log.error("Price estimate recomputation failed for visit {}: {}", visitId, ex.getMessage(), ex);
+        }
+    }
+
+    @Transactional
+    void recomputeEstimatesInternal(UUID visitId) {
         Optional<Visit> visitOpt = visitRepository.findById(visitId);
         if (visitOpt.isEmpty()) {
             log.warn("recomputeEstimates called for non-existent visit {}", visitId);

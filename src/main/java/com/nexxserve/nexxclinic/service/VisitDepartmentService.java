@@ -276,10 +276,11 @@ public class VisitDepartmentService {
         if (visitDepartment.getStatus() == VisitDepartmentStatus.CANCELLED) {
             return ApiResponse.error("Cannot change the profile on a cancelled department.");
         }
-        // D2-style guard: a department that has been billed is frozen for finance.
-        if (visitDepartment.getStatus() == VisitDepartmentStatus.BILLING
-                && visitDepartmentBillingRepository.existsByVisitDepartmentId(visitDepartment.getId())) {
-            return ApiResponse.error("Cannot change the profile of a billed department. Use editBillVisit to correct the billing.");
+        // Billing guard: profiles can only be changed BEFORE billing is done.
+        // Once any billing record exists for this department, profile changes are
+        // locked to prevent desynchronizing clinical data from the bill.
+        if (visitDepartmentBillingRepository.existsByVisitDepartmentId(visitDepartment.getId())) {
+            return ApiResponse.error("Cannot change the profile after billing has been created. Profile changes are only allowed before billing.");
         }
 
         UUID departmentId = visitDepartment.getDepartment() == null ? null : visitDepartment.getDepartment().getId();
@@ -952,7 +953,12 @@ public class VisitDepartmentService {
                 "Product already exists for this visit department."
             );
         }
-        visitPriceEstimateService.recomputeEstimates(input.visitId());
+        try {
+            visitPriceEstimateService.recomputeEstimates(input.visitId());
+        } catch (Exception ex) {
+            log.warn("Failed to recompute price estimates after adding product {} to visit {}: {}",
+                input.productId(), input.visitId(), ex.getMessage());
+        }
         return ApiResponse.success("Product added to visit department.", visitDepartmentToDto(visitDepartment));
     }
 
@@ -1538,8 +1544,32 @@ public class VisitDepartmentService {
             Set<UUID> visitedDepartmentIds,
             AuthenticatedUser authUser
     ) {
+        return visitDepartmentToDto(visitDepartment, visitInsuranceProviderIds, visitedDepartmentIds, authUser, null);
+    }
+
+    /**
+     * Overload that accepts pre-loaded department DTOs to avoid N+1 queries
+     * when building DTOs for multiple departments (e.g. visitToDto).
+     * Pass {@code null} to fall back to per-department loading.
+     */
+    public VisitDepartmentDto visitDepartmentToDto(
+            VisitDepartment visitDepartment,
+            Set<UUID> visitInsuranceProviderIds,
+            Set<UUID> visitedDepartmentIds,
+            AuthenticatedUser authUser,
+            java.util.Map<UUID, DepartmentDto> preloadedDepartmentDtos
+    ) {
         if (visitDepartment == null) {
             return null;
+        }
+
+        // Resolve department DTO: use pre-loaded map if available, else load individually
+        final DepartmentDto departmentDto;
+        if (preloadedDepartmentDtos != null
+                && preloadedDepartmentDtos.containsKey(visitDepartment.getDepartment().getId())) {
+            departmentDto = preloadedDepartmentDtos.get(visitDepartment.getDepartment().getId());
+        } else {
+            departmentDto = departmentToDtoWithProfiles(visitDepartment.getDepartment());
         }
 
         if (visitedDepartmentIds.contains(visitDepartment.getId())) {
@@ -1548,7 +1578,7 @@ public class VisitDepartmentService {
             boolean hasBillableCycleGuard = resolveHasBillableProducts(visitDepartment.getId());
             return new VisitDepartmentDto(
                     visitDepartment.getId(),
-                    departmentMapper.toDto(visitDepartment.getDepartment()),
+                    departmentDto,
                     visitDepartment.getStatus(),
                     visitDepartment.getEncounterType(),
                     departmentProfileToDto(visitDepartment.getProfile()),
@@ -1596,12 +1626,12 @@ public class VisitDepartmentService {
 
         List<VisitDepartmentDto> childVisitDepartments = visitDepartmentRepository.findByParentVisitDepartmentId(visitDepartment.getId())
                 .stream()
-                .map(child -> visitDepartmentToDto(child, visitInsuranceProviderIds, new LinkedHashSet<>(visitedDepartmentIds), authUser))
+                .map(child -> visitDepartmentToDto(child, visitInsuranceProviderIds, new LinkedHashSet<>(visitedDepartmentIds), authUser, preloadedDepartmentDtos))
                 .toList();
 
         return new VisitDepartmentDto(
                 visitDepartment.getId(),
-                departmentMapper.toDto(visitDepartment.getDepartment()),
+                departmentDto,
                 visitDepartment.getStatus(),
                 visitDepartment.getEncounterType(),
                 departmentProfileToDto(visitDepartment.getProfile()),
@@ -1618,6 +1648,99 @@ public class VisitDepartmentService {
                 resolveHasBillableProducts(visitDepartment.getId()),
                 visitDepartment.getCreatedAt(),
                 visitDepartment.getUpdatedAt()
+        );
+    }
+
+    /**
+     * Batch-load DepartmentDto (with profiles) for multiple departments in just
+     * two queries instead of N×2.  Used by {@link VisitService#visitToDto} to
+     * avoid the N+1 problem when a visit has many departments.
+     *
+     * @return map of department ID → fully-populated DepartmentDto
+     */
+    public java.util.Map<UUID, DepartmentDto> loadDepartmentDtosWithProfiles(
+            java.util.Collection<Department> departments) {
+        java.util.Set<UUID> deptIds = departments.stream()
+                .map(Department::getId)
+                .collect(java.util.stream.Collectors.toSet());
+        if (deptIds.isEmpty()) {
+            return java.util.Map.of();
+        }
+
+        // 1 query: all profiles for these departments
+        java.util.Map<UUID, java.util.List<DepartmentProfile>> profilesByDept =
+                departmentProfileRepository.findByDepartmentIdIn(deptIds)
+                        .stream()
+                        .collect(java.util.stream.Collectors.groupingBy(
+                                p -> p.getDepartment().getId()));
+
+        // Collect all profile IDs, then 1 query: all product links
+        java.util.Set<UUID> profileIds = profilesByDept.values().stream()
+                .flatMap(java.util.List::stream)
+                .map(DepartmentProfile::getId)
+                .collect(java.util.stream.Collectors.toSet());
+
+        java.util.Map<UUID, java.util.List<DepartmentProfileProduct>> productsByProfile;
+        if (profileIds.isEmpty()) {
+            productsByProfile = java.util.Map.of();
+        } else {
+            productsByProfile = departmentProfileProductRepository.findByProfileIdIn(profileIds)
+                    .stream()
+                    .collect(java.util.stream.Collectors.groupingBy(
+                            link -> link.getProfile().getId()));
+        }
+
+        // Build DTOs
+        java.util.Map<UUID, DepartmentDto> result = new java.util.HashMap<>();
+        for (Department dept : departments) {
+            java.util.List<DepartmentProfileDto> profileDtos = profilesByDept
+                    .getOrDefault(dept.getId(), java.util.List.of())
+                    .stream()
+                    .map(profile -> new DepartmentProfileDto(
+                            profile.getId(),
+                            profile.getName(),
+                            profile.getEncounterType(),
+                            profile.isDefault(),
+                            productsByProfile.getOrDefault(profile.getId(), java.util.List.of())
+                                    .stream()
+                                    .map(link -> productMapper.toDto(link.getProduct()))
+                                    .toList(),
+                            profile.getCreatedAt(),
+                            profile.getUpdatedAt()
+                    ))
+                    .toList();
+            result.put(dept.getId(), departmentMapper.toDtoWithDetails(
+                    dept, java.util.List.of(), profileDtos, java.util.List.of(), null));
+        }
+        return result;
+    }
+
+    /**
+     * Map a Department entity to DepartmentDto, including profiles.
+     * The simple {@code departmentMapper.toDto()} ignores profiles (MapStruct
+     * {@code @Mapping(ignore=true)}), which causes a GraphQL
+     * NullValueInNonNullableField error because the schema declares
+     * {@code profiles: [DepartmentProfile!]!}.
+     */
+    private DepartmentDto departmentToDtoWithProfiles(Department department) {
+        List<DepartmentProfileDto> profiles = departmentProfileRepository
+                .findByDepartmentId(department.getId())
+                .stream()
+                .map(profile -> new DepartmentProfileDto(
+                        profile.getId(),
+                        profile.getName(),
+                        profile.getEncounterType(),
+                        profile.isDefault(),
+                        departmentProfileProductRepository.findByProfileId(profile.getId())
+                                .stream()
+                                .map(link -> productMapper.toDto(link.getProduct()))
+                                .toList(),
+                        profile.getCreatedAt(),
+                        profile.getUpdatedAt()
+                ))
+                .toList();
+        return departmentMapper.toDtoWithDetails(
+                department, List.of(), profiles, List.of(), null
         );
     }
 
