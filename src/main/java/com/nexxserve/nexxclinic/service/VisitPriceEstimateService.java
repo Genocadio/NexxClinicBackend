@@ -148,7 +148,11 @@ public class VisitPriceEstimateService {
         // Batch prefetch patient share coverages
         Map<UUID, Map<UUID, List<InsuranceCoverage>>> patientShareCoverages = prefetchPatientShareCoverages(providerIds);
 
-        // Delete existing estimates for this visit
+        // Delete existing estimates for this visit.
+        // @Modifying(clearAutomatically=true) clears the persistence context
+        // after the bulk delete so Hibernate doesn't re-insert stale managed
+        // entities when saveAll() creates new ones — the
+        // uk_visit_price_estimate_product unique constraint would otherwise fire.
         visitPriceEstimateRepository.deleteByVisitId(visitId);
 
         // Compute estimates for each active product

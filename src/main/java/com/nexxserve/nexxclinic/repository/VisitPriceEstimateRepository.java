@@ -17,10 +17,10 @@ public interface VisitPriceEstimateRepository extends JpaRepository<VisitPriceEs
     Optional<VisitPriceEstimate> findByVisitDepartmentProductId(UUID visitDepartmentProductId);
 
     /** Delete all estimates for a visit (used when billing is created). */
-    @Modifying
+    @Modifying(clearAutomatically = true)
     void deleteByVisitId(UUID visitId);
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("DELETE FROM VisitPriceEstimate e WHERE e.visitDepartmentProduct.visitDepartment.id = :visitDepartmentId")
     void deleteByVisitDepartmentId(UUID visitDepartmentId);
 
