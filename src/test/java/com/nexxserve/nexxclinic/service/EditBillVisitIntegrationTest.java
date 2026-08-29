@@ -46,6 +46,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.transaction.annotation.Transactional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -734,5 +735,57 @@ class EditBillVisitIntegrationTest {
         VisitDepartmentProduct afterEdit = visitDepartmentProductRepository
             .findById(fx.product().getId()).orElseThrow();
         assertEquals(VisitProductStatus.BILLED, afterEdit.getStatus());
+    }
+
+    // ─── 14. Edit is fully independent: previously-collected payment never carries ──
+
+    @Test
+    @Transactional
+    void editBillVisit_doesNotCarryPreviousPaymentIntoExemptedEdit() {
+        Fixture fx = createVisitWithProduct();
+
+        // First bill: PRIVATE coverage, full patient payable (100), paid in full via CASH.
+        assertEquals(ResponseStatus.SUCCESS,
+            visitBillingService.billVisit(billInput(fx), auth(fx.actor())).status());
+
+        // Sanity: the initial billing recorded the 100 payment (1 payment row).
+        com.nexxserve.nexxclinic.entity.VisitBilling initialBilling = visitBillingRepository
+            .findByVisitIdOrderByCreatedAtDesc(fx.visit().getId()).get(0);
+        assertEquals(1,
+            initialBilling.getDepartments().stream()
+                .filter(db -> db.getVisitDepartment().getId().equals(fx.visitDepartment().getId()))
+                .findFirst().orElseThrow().getPayments().size());
+
+        // Edit: change PRIVATE coverage to FULL exemption -> corrected patient share is 0.
+        // The previously-collected 100 must NOT carry into this new independent snapshot.
+        EditBillVisitInput editInput = new EditBillVisitInput(
+            fx.visit().getId(),
+            List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
+                fx.visitDepartment().getId(),
+                null, null, null,
+                List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
+                    fx.catalogProductId(), null, CoverageType.PRIVATE, null, ExemptionType.FULL, null)),
+                List.of(),
+                "Fully exempted, no payment to collect"
+            , null, null))
+        );
+
+        startEditing(fx.visit().getId(), auth(fx.actor()));
+        assertEditSuccess(visitBillingService.editBillVisit(editInput, auth(fx.actor())));
+        assertEquals(2, billingVersionCount(fx.visit().getId()));
+
+        // The new (latest) version is a fresh snapshot: it must NOT carry the 100 payment.
+        com.nexxserve.nexxclinic.entity.VisitBilling latest = visitBillingRepository
+            .findByVisitIdOrderByCreatedAtDesc(fx.visit().getId()).get(0);
+        com.nexxserve.nexxclinic.entity.VisitDepartmentBilling deptBilling =
+            latest.getDepartments().stream()
+                .filter(db -> db.getVisitDepartment().getId().equals(fx.visitDepartment().getId()))
+                .findFirst().orElseThrow();
+        assertEquals(0, deptBilling.getPayments().size(),
+            "edit revised a product and must not carry the previously-collected payment onto the new version");
+        assertEquals(0, deptBilling.getPaidAmount().compareTo(java.math.BigDecimal.ZERO),
+            "corrected (exempted) bill paid amount must be 0, not the carried 100");
+        assertEquals(0, deptBilling.getOutstandingAmount().compareTo(java.math.BigDecimal.ZERO),
+            "fully-exempted product leaves no outstanding patient share");
     }
 }

@@ -340,6 +340,13 @@ public class VisitBillingService {
         // without hitting a 'already billed' wall.
         boolean alreadyBilled = billingVersionBuilder.hasAnyExistingBilling(input.visitId());
         boolean effectiveIsEdit = isEdit || alreadyBilled;
+        // A true billing edit (editBillVisit) is a fully independent new snapshot: it
+        // recomputes totals from the current products/coverage and does NOT carry
+        // forward previously-collected payments, apply credits, or compare against the
+        // prior paid amount. Incremental billVisit re-bills (alreadyBilled, no explicit
+        // edit) still carry previous departments/payments so the authoritative latest
+        // version is never silently reset. This boolean gates every carry-forward step.
+        boolean carryForward = effectiveIsEdit && !isEdit;
 
         // Reset orphaned status products ONLY if we are truly doing a fresh first bill.
         // The status change is applied in-memory here; the actual flush to the DB is
@@ -372,7 +379,7 @@ public class VisitBillingService {
         Map<UUID, BigDecimal> carriedPaidByDepartment = new HashMap<>();
         boolean previousVersionFullyPaid = false;
         VisitBilling previousBilling = null;
-        if (effectiveIsEdit) {
+        if (carryForward) {
             // F2 fix: the "latest" billing is the one with the highest version number.
             List<VisitBilling> existingBillings = billingVersionBuilder.orderByVersionDesc(
                 visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visit.getId())
@@ -466,11 +473,11 @@ public class VisitBillingService {
                 rootVisitDepartment.getId(),
                 rootVisitDepartment
             );
-            // N2: carry the previous version's payments for this department unless the
-            // client explicitly supplies new ones (applies to both edit and incremental
-            // billVisit, so payments are never silently reset to zero).
+            // N2: on incremental re-bills, carry the previous version's payments for
+            // this department unless the client explicitly supplies new ones. True
+            // edits (carryForward == false) do NOT carry — they start fresh.
             List<BillVisitInput.BillingPaymentInput> paymentsForDepartment = departmentInput.payments();
-            if (effectiveIsEdit && (paymentsForDepartment == null || paymentsForDepartment.isEmpty())) {
+            if (carryForward && (paymentsForDepartment == null || paymentsForDepartment.isEmpty())) {
                 paymentsForDepartment = carriedPaymentsByDepartment.get(rootVisitDepartment.getId());
             }
             rootPaymentsByDepartment.put(
@@ -490,14 +497,15 @@ public class VisitBillingService {
                     totalPaid
                 );
             } else if (
-                effectiveIsEdit &&
+                carryForward &&
                 carriedPaymentsByDepartment.get(rootVisitDepartment.getId()) == null &&
                 carriedPaidByDepartment
                     .getOrDefault(rootVisitDepartment.getId(), ZERO)
                     .compareTo(ZERO) > 0
             ) {
-                // Legacy data: the previous version recorded a paid amount without
-                // payment rows. Honor the paid amount so the corrected bill doesn't
+                // Legacy data (incremental re-bill only): the previous version recorded
+                // a paid amount without payment rows. Honor the paid amount so the
+                // corrected bill doesn't
                 // silently reset it to zero.
                 remainingPaidByDepartment.put(
                     rootVisitDepartment.getId(),
@@ -584,7 +592,7 @@ public class VisitBillingService {
         // the fresh-balance note rule below (their notes were already recorded). Their
         // payments are also carried forward with their original method/reference.
         Set<UUID> carriedDepartmentIds = new HashSet<>();
-        if (effectiveIsEdit && previousBilling != null) {
+        if (carryForward && previousBilling != null) {
             BillingCarryForwardService.CarryForwardResult carryResult =
                 billingCarryForwardService.mergePreviousDepartments(
                     input,
@@ -1439,11 +1447,6 @@ public class VisitBillingService {
         // D2 fix: surface which products are still pending billing instead of a
         // generic success message that hides a partially-billed visit.
         String successMessage = "Visit billed successfully.";
-        if (isEdit && previousVersionFullyPaid) {
-            successMessage =
-                "Visit re-billed successfully. Note: the previous billing version was fully paid — " +
-                "verify the carried-forward payments.";
-        }
         if (!fullyBilled) {
             List<String> pendingProductNames = loadVisitDepartmentProducts(visit.getId())
                 .stream()
