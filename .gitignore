@@ -39,6 +39,7 @@ logs/
 /nbdist/
 /.nb-gradle/
 .freebuff
+backups/
 ### VS Code ###
 .vscode/
 .aider*
