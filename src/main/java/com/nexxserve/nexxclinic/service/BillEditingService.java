@@ -9,6 +9,7 @@ import com.nexxserve.nexxclinic.repository.VisitBillingRepository;
 import com.nexxserve.nexxclinic.repository.WorkerRepository;
 import com.nexxserve.nexxclinic.entity.Worker;
 import java.util.Map;
+import java.time.LocalDateTime;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class BillEditingService {
 
     private static final Logger log = LoggerFactory.getLogger(BillEditingService.class);
+    private static final long EDIT_SESSION_TIMEOUT_MINUTES = 30;
 
     private final VisitRepository visitRepository;
     private final VisitBillingRepository visitBillingRepository;
@@ -77,7 +79,17 @@ public class BillEditingService {
         }
 
         if (visit.getStatus() == VisitStatus.BILL_EDITING) {
-            return ApiResponse.error("Visit is already in billing edit mode.");
+            // A browser crash or lost connection must not leave financial work
+            // locked indefinitely. The visit's updatedAt is refreshed when the
+            // mode was entered; a later authorized user can safely reclaim an
+            // abandoned session after the timeout.
+            LocalDateTime timeout = LocalDateTime.now().minusMinutes(EDIT_SESSION_TIMEOUT_MINUTES);
+            if (visit.getUpdatedAt() != null && visit.getUpdatedAt().isBefore(timeout)) {
+                log.warn("Recovering abandoned billing edit session for visit {}", visitId);
+                visit.setStatus(VisitStatus.COMPLETED);
+            } else {
+                return ApiResponse.error("Visit is already in billing edit mode.");
+            }
         }
 
         if (visit.getStatus() == VisitStatus.CREATED) {

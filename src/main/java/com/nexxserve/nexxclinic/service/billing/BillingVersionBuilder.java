@@ -10,6 +10,7 @@ import com.nexxserve.nexxclinic.repository.VisitBillingVersionRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 
@@ -20,6 +21,12 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class BillingVersionBuilder {
+
+    public Optional<UUID> findLatestVersionId(UUID visitId) {
+        return visitBillingVersionRepository
+            .findFirstByVisitIdOrderByVersionDesc(visitId)
+            .map(VisitBillingVersion::getId);
+    }
 
     private final VisitBillingVersionRepository visitBillingVersionRepository;
     private final VisitBillingRepository visitBillingRepository;

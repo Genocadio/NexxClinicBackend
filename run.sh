@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+cd "$(dirname "$0")"
+export DB_URL="jdbc:postgresql://localhost:5432/nexxclinic"
+export DB_USER="nexxclinic_user"
+export DB_PASSWORD="nexxclinic_pass"
+export MEILI_URL="http://localhost:7700"
+export MEILI_MASTER_KEY="nexxclinic_meili_master_key"
+export MEILI_ENABLED="true"
+export STORAGE_TYPE="LOCAL"
+export LOCAL_STORAGE_PATH="./storage"
+export JWT_SECRET="nexxclinic-local-dev-jwt-secret-change-in-production-32b"
+export JWT_EXPIRATION_MINUTES="480"
+export JWT_REFRESH_EXPIRATION_DAYS="30"
+export PLAYWRIGHT_BROWSERS_PATH="$HOME/.cache/ms-playwright"
+java -jar build/libs/nexxclinic-0.0.1-SNAPSHOT.jar > /tmp/nexxclinic-backend.log 2>&1

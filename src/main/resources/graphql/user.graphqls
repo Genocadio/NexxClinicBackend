@@ -1472,6 +1472,8 @@ Edit billing (error correction):
 """
 input EditBillVisitInput {
   visitId: ID!
+  """Latest billing-version id observed when the edit session began."""
+  expectedBillingVersionId: ID!
   departments: [EditBillVisitDepartmentInput!]!
 }
 

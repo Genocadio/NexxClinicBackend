@@ -221,6 +221,18 @@ public class VisitBillingService {
             }
         }
 
+        // A lock stops concurrent writes, but cannot stop a finance user from
+        // submitting an old screen after another correction has completed.
+        // Reject that stale snapshot before applying any product mutations.
+        java.util.UUID latestVersionId = billingVersionBuilder
+            .findLatestVersionId(input.visitId())
+            .orElse(null);
+        if (latestVersionId == null || !latestVersionId.equals(input.expectedBillingVersionId())) {
+            return ApiResponse.error(
+                "Billing changed since this edit session began. Refresh the visit and review the latest bill."
+            );
+        }
+
         // Error-correction workflow:
         // 1) Synchronize visit department products (add/remove/update)
         // 2) Create a new immutable billing version from the corrected visit state
@@ -248,6 +260,12 @@ public class VisitBillingService {
                 org.springframework.transaction.interceptor.TransactionAspectSupport
                     .currentTransactionStatus()
                     .setRollbackOnly();
+            }
+            if (result.status() == com.nexxserve.nexxclinic.model.ResponseStatus.SUCCESS) {
+                // Saving a correction and unlocking the visit are one business
+                // operation. Doing this in the same transaction prevents a
+                // saved bill from leaving the visit stranded in BILL_EDITING.
+                visitCheck.ifPresent(v -> v.setStatus(VisitStatus.COMPLETED));
             }
             return result;
         } catch (IllegalArgumentException e) {
