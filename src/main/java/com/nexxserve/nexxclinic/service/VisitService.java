@@ -1222,20 +1222,26 @@ public class VisitService {
             }
 
             // SD1: if the product exists but was soft-deleted, restore it instead of
-            // creating a new row. This preserves historical IDs and avoids growing the
-            // database with redundant rows for the same product-department pair.
-            VisitDepartmentProduct item = visitDepartmentProductRepository
-                .findByVisitDepartmentIdAndProductIdIncludingDeleted(
+            // creating a new row. We query all rows (active + deleted) because a product
+            // can be added and removed multiple times, leaving multiple soft-deleted rows;
+            // using Optional here would throw NonUniqueResultException in that case.
+            java.util.List<VisitDepartmentProduct> allRows = visitDepartmentProductRepository
+                .findAllByVisitDepartmentIdAndProductIdIncludingDeleted(
                     visitDepartment.getId(),
                     productInput.productId()
-                )
-                .orElse(null);
+                );
 
-            if (item != null && !item.isDeleted()) {
+            if (allRows.stream().anyMatch(r -> !r.isDeleted())) {
                 // Should have been caught by findByVisitDepartmentIdAndProductId above,
                 // but handle it here for safety.
                 continue;
             }
+
+            // Pick the most-recent soft-deleted row to restore (list is ordered newest first).
+            VisitDepartmentProduct item = allRows.stream()
+                .filter(VisitDepartmentProduct::isDeleted)
+                .findFirst()
+                .orElse(null);
 
             if (item == null) {
                 item = new VisitDepartmentProduct();

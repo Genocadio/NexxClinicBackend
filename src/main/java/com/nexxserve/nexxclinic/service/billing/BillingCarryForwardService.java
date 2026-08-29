@@ -80,10 +80,7 @@ public class BillingCarryForwardService {
      */
     public VisitBilling resolvePreviousBilling(UUID visitId) {
         List<VisitBilling> existingBillings = visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId);
-        List<VisitBilling> ordered = visitBillingVersionRepository != null
-            ? existingBillings  // caller will use BillingVersionBuilder.orderByVersionDesc if needed
-            : existingBillings;
-        return ordered.isEmpty() ? null : ordered.get(0);
+        return existingBillings.isEmpty() ? null : existingBillings.get(0);
     }
 
     /**

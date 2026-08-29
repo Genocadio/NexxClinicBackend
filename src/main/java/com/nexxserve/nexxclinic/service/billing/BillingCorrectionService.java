@@ -159,8 +159,14 @@ public class BillingCorrectionService {
             if (dept.removedProductIds() != null) {
                 for (UUID productId : dept.removedProductIds()) {
                     if (productId == null) continue;
+                    // Query all rows (active + deleted): Optional is unsafe here because a
+                    // product removed multiple times produces multiple soft-deleted rows.
+                    // We want the currently active row to remove it.
                     VisitDepartmentProduct vdp = visitDepartmentProductRepository
-                        .findByVisitDepartmentIdAndProductIdIncludingDeleted(vd.getId(), productId)
+                        .findAllByVisitDepartmentIdAndProductIdIncludingDeleted(vd.getId(), productId)
+                        .stream()
+                        .filter(r -> !r.isDeleted())
+                        .findFirst()
                         .orElse(null);
                     if (vdp == null) {
                         return ApiResponse.error("Product to remove not found in the visit department.");
@@ -231,10 +237,18 @@ public class BillingCorrectionService {
                         return ApiResponse.error("Product not found.");
                     }
 
-                    // If already exists in department (including soft-deleted), treat as quantity update
-                    VisitDepartmentProduct existing = visitDepartmentProductRepository
-                        .findByVisitDepartmentIdAndProductIdIncludingDeleted(vd.getId(), product.getId())
-                        .orElse(null);
+                    // If already exists in department (including soft-deleted), treat as quantity update.
+                    // Query all rows: Optional is unsafe when multiple soft-deleted rows exist.
+                    // Prefer an active row; fall back to the most-recent soft-deleted one.
+                    java.util.List<VisitDepartmentProduct> existingRows = visitDepartmentProductRepository
+                        .findAllByVisitDepartmentIdAndProductIdIncludingDeleted(vd.getId(), product.getId());
+                    VisitDepartmentProduct existing = existingRows.stream()
+                        .filter(r -> !r.isDeleted())
+                        .findFirst()
+                        .orElseGet(() -> existingRows.stream()
+                            .filter(VisitDepartmentProduct::isDeleted)
+                            .findFirst()
+                            .orElse(null));
                     if (existing != null) {
                         // Un-delete + update: this product was billed in a previous
                         // version, so mark it CORRECTION_PENDING.
@@ -278,12 +292,15 @@ public class BillingCorrectionService {
             }
         }
 
-        // BILL_EDITING guard: billing corrections require the visit to be in BILL_EDITING mode.
-        // Use startBillEditing mutation to enter this mode on a COMPLETED visit.
+        // BILL_EDITING guard: billing corrections require the visit to be in
+        // BILL_EDITING mode. COMPLETED visits must call startBillEditing first.
+        // IN_PROGRESS visits are allowed (pre-completion corrections).
         if (visit.getStatus() != VisitStatus.BILL_EDITING
                 && visit.getStatus() != VisitStatus.IN_PROGRESS) {
-            // Allow edits on IN_PROGRESS visits (pre-completion corrections)
-            // but COMPLETED visits must use startBillEditing first.
+            return ApiResponse.error(
+                "Billing corrections require the visit to be in BILL_EDITING mode. " +
+                "Use startBillEditing before editing a completed visit."
+            );
         }
 
         return null; // success

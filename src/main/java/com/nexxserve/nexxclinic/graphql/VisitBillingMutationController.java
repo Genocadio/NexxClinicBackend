@@ -58,7 +58,7 @@ public class VisitBillingMutationController {
         return visitBillingService.editBillVisit(input, authUser);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.CLINICIAN, RoleName.FINANCE, RoleName.MANAGER})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.CLINICIAN, RoleName.FINANCE})
     @MutationMapping
     public ApiResponse recordVisitBillingPayment(
             @Argument @Valid RecordVisitBillingPaymentInput input,
@@ -67,7 +67,7 @@ public class VisitBillingMutationController {
         return visitBillingService.recordVisitBillingPayment(input, authUser);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.CLINICIAN, RoleName.FINANCE, RoleName.MANAGER})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.CLINICIAN, RoleName.FINANCE})
     @MutationMapping
     public ApiResponse generateInvoice(
             @Argument("departmentInsuranceBillingId") UUID departmentInsuranceBillingId,
@@ -76,7 +76,7 @@ public class VisitBillingMutationController {
         return invoiceGenerator.generateInvoice(departmentInsuranceBillingId, authUser);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.MANAGER})
+    @HasRole({RoleName.ADMIN})
     @MutationMapping
     public ApiResponse updateBillingDate(
             @Argument @Valid UpdateBillingDateInput input,

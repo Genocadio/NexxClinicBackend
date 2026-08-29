@@ -29,7 +29,6 @@ public class VisitBillingQueryController {
         RoleName.NURSE,
         RoleName.CLINICIAN,
         RoleName.FINANCE,
-        RoleName.MANAGER,
     })
     @QueryMapping
     public ApiResponse visitBilling(

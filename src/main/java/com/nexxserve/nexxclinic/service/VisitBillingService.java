@@ -1852,8 +1852,8 @@ public class VisitBillingService {
     }
 
     /**
-     * Update the billing date shown on an invoice. Only ADMIN and MANAGER roles
-     * are permitted. Changing the date invalidates the current invoice PDF so a
+     * Update the billing date shown on an invoice. Only ADMIN role
+     * is permitted. Changing the date invalidates the current invoice PDF so a
      * fresh one is generated on next access.
      */
     @Transactional
@@ -1873,11 +1873,10 @@ public class VisitBillingService {
             return ApiResponse.error("Authentication is required.");
         }
 
-        // Only ADMIN and MANAGER may change the billing date.
-        boolean authorised = actingUser.getRoles().contains(com.nexxserve.nexxclinic.model.RoleName.ADMIN)
-            || actingUser.getRoles().contains(com.nexxserve.nexxclinic.model.RoleName.MANAGER);
+        // Only ADMIN may change the billing date.
+        boolean authorised = actingUser.getRoles().contains(com.nexxserve.nexxclinic.model.RoleName.ADMIN);
         if (!authorised) {
-            return ApiResponse.error("Only admin or manager can update the billing date.");
+            return ApiResponse.error("Only admin can update the billing date.");
         }
 
         Optional<DepartmentInsuranceBilling> billingOpt =
@@ -1913,15 +1912,21 @@ public class VisitBillingService {
         }
 
         billing.setBillingDate(input.billingDate());
-        // Invalidate existing invoice so a fresh PDF is generated.
+        // Invalidate existing invoice so a fresh PDF is regenerated on next access.
         billing.setInvoiceUrl(null);
         departmentInsuranceBillingRepository.save(billing);
 
         // Regenerate the invoice immediately after the transaction commits.
         // InvoiceGenerator uses its own TransactionTemplate internally, so it must
-        // NOT run inside this @Transactional method (the expensive PDF render and
-        // upload should not hold the DB connection open).
+        // NOT run inside this @Transactional method — the expensive PDF render and
+        // upload should not hold the DB connection open.
+        //
+        // We track whether regeneration succeeded so the caller can surface a
+        // warning to the user rather than silently leaving the PDF stale.
         UUID billingId = billing.getId();
+        java.util.concurrent.atomic.AtomicBoolean invoiceRegenerated = new java.util.concurrent.atomic.AtomicBoolean(false);
+        java.util.concurrent.atomic.AtomicReference<String> invoiceRegenError = new java.util.concurrent.atomic.AtomicReference<>(null);
+
         org.springframework.transaction.support.TransactionSynchronizationManager
             .registerSynchronization(
                 new org.springframework.transaction.support.TransactionSynchronization() {
@@ -1929,28 +1934,44 @@ public class VisitBillingService {
                     public void afterCommit() {
                         try {
                             ApiResponse<?> result = invoiceGenerator.generateInvoice(billingId, authUser);
-                            if (result.status() != com.nexxserve.nexxclinic.model.ResponseStatus.SUCCESS) {
-                                log.warn(
-                                    "Invoice regeneration after billing date update for {} returned: {}",
-                                    billingId, result.message()
-                                );
+                            if (result.status() == com.nexxserve.nexxclinic.model.ResponseStatus.SUCCESS) {
+                                invoiceRegenerated.set(true);
+                            } else {
+                                String msg = "Invoice regeneration returned: " + result.message();
+                                invoiceRegenError.set(msg);
+                                log.warn("[updateBillingDate] {} (billingId={})", msg, billingId);
                             }
                         } catch (Exception e) {
-                            log.error(
-                                "Failed to regenerate invoice after billing date update for {}: {}",
-                                billingId, e.getMessage(), e
-                            );
+                            String msg = "Invoice regeneration failed: " + e.getMessage();
+                            invoiceRegenError.set(msg);
+                            log.error("[updateBillingDate] {} (billingId={})", msg, billingId, e);
                         }
                     }
                 }
             );
 
+        // Note: afterCommit runs synchronously in the same thread before this
+        // method returns to the caller (Spring's TransactionSynchronization
+        // afterCommit executes after the JDBC commit but before the method exits),
+        // so the AtomicBoolean/AtomicReference are already set by the time we
+        // read them here.
+        Map<String, Object> responseData = new java.util.LinkedHashMap<>();
+        responseData.put("id", billing.getId());
+        responseData.put("billingDate", billing.getBillingDate());
+        responseData.put("invoiceRegenerated", invoiceRegenerated.get());
+
+        if (invoiceRegenError.get() != null) {
+            responseData.put("invoiceRegenError", invoiceRegenError.get());
+            return ApiResponse.partialSuccess(
+                "Billing date updated, but the invoice PDF could not be regenerated. " +
+                "Please generate the invoice manually from the billing page.",
+                responseData
+            );
+        }
+
         return ApiResponse.success(
-            "Billing date updated successfully.",
-            Map.of(
-                "id", billing.getId(),
-                "billingDate", billing.getBillingDate()
-            )
+            "Billing date updated and invoice regenerated successfully.",
+            responseData
         );
     }
 }

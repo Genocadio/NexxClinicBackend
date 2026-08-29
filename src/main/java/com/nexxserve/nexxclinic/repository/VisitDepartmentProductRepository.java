@@ -22,8 +22,11 @@ public interface VisitDepartmentProductRepository extends JpaRepository<VisitDep
     @Query("SELECT v FROM VisitDepartmentProduct v WHERE v.visitDepartment.id = :visitDepartmentId")
     List<VisitDepartmentProduct> findByVisitDepartmentIdIncludingDeleted(@Param("visitDepartmentId") UUID visitDepartmentId);
 
-    @Query("SELECT v FROM VisitDepartmentProduct v WHERE v.visitDepartment.id = :visitDepartmentId AND v.product.id = :productId")
-    Optional<VisitDepartmentProduct> findByVisitDepartmentIdAndProductIdIncludingDeleted(@Param("visitDepartmentId") UUID visitDepartmentId, @Param("productId") UUID productId);
+    // Returns ALL rows (active + soft-deleted) for the given pair, ordered newest first.
+    // An Optional here is unsafe: a product that was removed multiple times produces
+    // multiple soft-deleted rows, which would throw NonUniqueResultException.
+    @Query("SELECT v FROM VisitDepartmentProduct v WHERE v.visitDepartment.id = :visitDepartmentId AND v.product.id = :productId ORDER BY v.createdAt DESC")
+    List<VisitDepartmentProduct> findAllByVisitDepartmentIdAndProductIdIncludingDeleted(@Param("visitDepartmentId") UUID visitDepartmentId, @Param("productId") UUID productId);
 
     @Query("SELECT v FROM VisitDepartmentProduct v WHERE v.visitDepartment.visit.id = :visitId")
     List<VisitDepartmentProduct> findByVisitDepartmentVisitIdIncludingDeleted(@Param("visitId") UUID visitId);

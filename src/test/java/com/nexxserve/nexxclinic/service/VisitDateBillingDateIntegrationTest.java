@@ -135,14 +135,14 @@ class VisitDateBillingDateIntegrationTest {
         w.setActive(true);
         w.setAutoReset(false);
         w.setMustChangeOnNextLogin(false);
-        w.setRoles(Set.of(RoleName.FINANCE, RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.MANAGER));
+        w.setRoles(Set.of(RoleName.FINANCE, RoleName.ADMIN, RoleName.CLINIC_ADMIN));
         return w;
     }
 
     private AuthenticatedUser auth(Worker worker) {
         return new AuthenticatedUser(
             worker.getId(), worker.getEmail(),
-            Set.of(RoleName.FINANCE, RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.MANAGER),
+            Set.of(RoleName.FINANCE, RoleName.ADMIN, RoleName.CLINIC_ADMIN),
             "test-token", Instant.now().plusSeconds(3600)
         );
     }
