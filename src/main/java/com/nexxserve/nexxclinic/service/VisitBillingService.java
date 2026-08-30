@@ -68,6 +68,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.hibernate.Hibernate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
@@ -442,7 +443,6 @@ public class VisitBillingService {
         Map<UUID, VisitDepartment> visitDepartmentsById = allVisitDepartments
             .stream()
             .collect(Collectors.toMap(VisitDepartment::getId, d -> d, (a, b) -> a));
-
         Map<UUID, VisitDepartment> rootDepartments = new LinkedHashMap<>();
         Map<
             UUID,
@@ -1495,11 +1495,81 @@ public class VisitBillingService {
         // Delete pre-billing price estimates now that real billing has been persisted
         visitPriceEstimateService.deleteEstimates(visit.getId());
 
+        // open-in-view is disabled, so every lazy relation in the response graph must be
+        // initialized inside this transaction. The GraphQL response for billVisit is
+        // serialized AFTER the method returns and the session closes; any proxy left
+        // uninitialized here would throw LazyInitializationException (surfaced as
+        // LAZY_LOAD_ERROR by GraphQlExceptionResolver). The in-memory container built by
+        // prepareBill can carry detached/closed-session proxies for some relations (e.g.
+        // VisitDepartment.department), so we re-read the freshly persisted container from
+        // the database — a fresh query binds every lazy proxy to the current transaction's
+        // session — then force-initialize the whole graph before the mapper reads it.
+        VisitBilling responseBilling = visitBillingRepository
+            .findById(savedVisitBilling.getId())
+            .orElse(savedVisitBilling);
+        initializeBillingGraph(responseBilling);
+
         return ApiResponse.success(
             successMessage,
-            billingDataMapper.visitBillingToMap(savedVisitBilling)
+            billingDataMapper.visitBillingToMap(responseBilling)
         );
-    }    @Transactional
+    }
+
+    /**
+     * Eagerly initializes every lazy association reachable from a billing container so
+     * the response DTO can be built and serialized without an open Hibernate session.
+     * Must be called inside the billing transaction (open-in-view is disabled).
+     */
+    private void initializeBillingGraph(VisitBilling billing) {
+        if (billing == null) {
+            return;
+        }
+        Hibernate.initialize(billing.getVisit());
+        Hibernate.initialize(billing.getBillingVersion());
+        Hibernate.initialize(billing.getDepartments());
+        for (VisitDepartmentBilling deptBilling : billing.getDepartments()) {
+            if (deptBilling == null) {
+                continue;
+            }
+            Hibernate.initialize(deptBilling.getVisitDepartment());
+            VisitDepartment visitDepartment = deptBilling.getVisitDepartment();
+            if (visitDepartment != null) {
+                Hibernate.initialize(visitDepartment.getDepartment());
+            }
+            Hibernate.initialize(deptBilling.getPayments());
+            for (VisitBillingPayment payment : deptBilling.getPayments()) {
+                if (payment != null) {
+                    Hibernate.initialize(payment.getVisitDepartmentBilling());
+                }
+            }
+            Hibernate.initialize(deptBilling.getInsuranceBillings());
+            for (DepartmentInsuranceBilling insuranceBilling : deptBilling.getInsuranceBillings()) {
+                if (insuranceBilling == null) {
+                    continue;
+                }
+                Hibernate.initialize(insuranceBilling.getPatientInsurance());
+                PatientInsurance patientInsurance = insuranceBilling.getPatientInsurance();
+                if (patientInsurance != null) {
+                    Hibernate.initialize(patientInsurance.getPatient());
+                    Hibernate.initialize(patientInsurance.getInsuranceProvider());
+                    Hibernate.initialize(patientInsurance.getPatientShareCoverage());
+                }
+                Hibernate.initialize(insuranceBilling.getItems());
+                for (VisitBillingItem item : insuranceBilling.getItems()) {
+                    if (item == null) {
+                        continue;
+                    }
+                    Hibernate.initialize(item.getVisitDepartmentProduct());
+                    VisitDepartmentProduct vdp = item.getVisitDepartmentProduct();
+                    if (vdp != null) {
+                        Hibernate.initialize(vdp.getProduct());
+                    }
+                }
+            }
+        }
+    }
+
+    @Transactional
     public ApiResponse recordVisitBillingPayment(
         RecordVisitBillingPaymentInput input,
         AuthenticatedUser authUser

@@ -11,6 +11,7 @@ import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
 import com.nexxserve.nexxclinic.entity.Worker;
 import com.nexxserve.nexxclinic.graphql.input.BillVisitInput;
 import com.nexxserve.nexxclinic.graphql.input.EditBillVisitInput;
+import com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion;
 import com.nexxserve.nexxclinic.model.AccountStatus;
 import com.nexxserve.nexxclinic.model.CoverageType;
 import com.nexxserve.nexxclinic.model.ExemptionType;
@@ -27,6 +28,7 @@ import com.nexxserve.nexxclinic.model.VisitStatus;
 import com.nexxserve.nexxclinic.repository.DepartmentRepository;
 import com.nexxserve.nexxclinic.repository.PatientRepository;
 import com.nexxserve.nexxclinic.repository.ProductRepository;
+import com.nexxserve.nexxclinic.repository.VisitBillingVersionRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
 import com.nexxserve.nexxclinic.repository.VisitRepository;
@@ -59,6 +61,7 @@ class FlushSoftDeletedVisitProductsIntegrationTest {
     @Autowired private VisitDepartmentRepository visitDepartmentRepository;
     @Autowired private ProductRepository productRepository;
     @Autowired private VisitDepartmentProductRepository visitDepartmentProductRepository;
+    @Autowired private VisitBillingVersionRepository visitBillingVersionRepository;
 
     private record Fixture(
         Worker actor,
@@ -156,9 +159,18 @@ class FlushSoftDeletedVisitProductsIntegrationTest {
         );
     }
 
+    /** The latest (authoritative) billing version id — the expectedBillingVersionId an edit session must pass. */
+    private UUID latestBillingVersionId(UUID visitId) {
+        return visitBillingVersionRepository
+            .findFirstByVisitIdOrderByVersionDesc(visitId)
+            .map(VisitBillingVersion::getId)
+            .orElseThrow(() -> new IllegalStateException("No billing version found for visit " + visitId));
+    }
+
     private void softDeleteProduct(Fixture fx) {
         EditBillVisitInput input = new EditBillVisitInput(
             fx.visit().getId(),
+            latestBillingVersionId(fx.visit().getId()),
             List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
                 fx.visitDepartment().getId(),
                 null,
@@ -182,6 +194,23 @@ class FlushSoftDeletedVisitProductsIntegrationTest {
     @Test
     void flush_softDeletedNoBillingHistory_hardDeleted() {
         Fixture fx = createVisitWithTwoProducts();
+
+        // Bill only the KEEP product so a billing version exists (editBillVisit requires
+        // one) while the TARGET product stays unbilled — i.e. it has no billing history.
+        BillVisitInput billKeep = new BillVisitInput(
+            fx.visit().getId(),
+            List.of(new BillVisitInput.BillVisitDepartmentInput(
+                fx.visitDepartment().getId(),
+                List.of(new BillVisitInput.BillVisitDepartmentProductInput(
+                    fx.keepProduct().getId(), null, BigDecimal.ONE,
+                    CoverageType.PRIVATE, null, ExemptionType.NONE, null)),
+                List.of(new BillVisitInput.BillingPaymentInput(
+                    new BigDecimal("50.00"), PaymentMethod.CASH, null)),
+                "Bill keep product before soft-delete"
+            , null, null))
+        );
+        assertEquals(ResponseStatus.SUCCESS,
+            visitBillingService.billVisit(billKeep, auth(fx.actor())).status());
 
         softDeleteProduct(fx);
 

@@ -11,6 +11,7 @@ import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
 import com.nexxserve.nexxclinic.entity.Worker;
 import com.nexxserve.nexxclinic.graphql.input.BillVisitInput;
 import com.nexxserve.nexxclinic.graphql.input.EditBillVisitInput;
+import com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion;
 import com.nexxserve.nexxclinic.model.AccountStatus;
 import com.nexxserve.nexxclinic.model.CoverageType;
 import com.nexxserve.nexxclinic.model.ExemptionType;
@@ -142,6 +143,14 @@ class ExemptionTypeIntegrationTest {
             Set.of(RoleName.FINANCE, RoleName.ADMIN, RoleName.CLINIC_ADMIN),
             "test-token", Instant.now().plusSeconds(3600)
         );
+    }
+
+    /** The latest (authoritative) billing version id — the expectedBillingVersionId an edit session must pass. */
+    private UUID latestBillingVersionId(UUID visitId) {
+        return visitBillingVersionRepository
+            .findFirstByVisitIdOrderByVersionDesc(visitId)
+            .map(VisitBillingVersion::getId)
+            .orElseThrow(() -> new IllegalStateException("No billing version found for visit " + visitId));
     }
 
     @SuppressWarnings("unchecked")
@@ -283,6 +292,7 @@ class ExemptionTypeIntegrationTest {
 
         EditBillVisitInput input = new EditBillVisitInput(
             fx.visit().getId(),
+            latestBillingVersionId(fx.visit().getId()),
             List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
                 fx.visitDepartment().getId(),
                 null, null, null,
@@ -331,6 +341,7 @@ class ExemptionTypeIntegrationTest {
 
         EditBillVisitInput input = new EditBillVisitInput(
             fx.visit().getId(),
+            latestBillingVersionId(fx.visit().getId()),
             List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
                 fx.visitDepartment().getId(),
                 null, null, null,
@@ -370,6 +381,7 @@ class ExemptionTypeIntegrationTest {
 
         EditBillVisitInput input = new EditBillVisitInput(
             fx.visit().getId(),
+            latestBillingVersionId(fx.visit().getId()),
             List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
                 fx.visitDepartment().getId(),
                 null, null, null,

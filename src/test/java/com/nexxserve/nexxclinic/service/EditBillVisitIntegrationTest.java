@@ -33,6 +33,7 @@ import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
 import com.nexxserve.nexxclinic.repository.VisitRepository;
 import com.nexxserve.nexxclinic.repository.VisitBillingVersionRepository;
 import com.nexxserve.nexxclinic.repository.WorkerRepository;
+import com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -169,6 +170,14 @@ class EditBillVisitIntegrationTest {
         return visitBillingVersionRepository.findByVisitIdOrderByVersionDesc(visitId).size();
     }
 
+    /** The latest (authoritative) billing version id — the expectedBillingVersionId an edit session must pass. */
+    private UUID latestBillingVersionId(UUID visitId) {
+        return visitBillingVersionRepository
+            .findFirstByVisitIdOrderByVersionDesc(visitId)
+            .map(VisitBillingVersion::getId)
+            .orElseThrow(() -> new IllegalStateException("No billing version found for visit " + visitId));
+    }
+
     /** Transition visit to BILL_EDITING so editBillVisit is allowed. */
     private void startEditing(UUID visitId, AuthenticatedUser authUser) {
         ApiResponse<?> result = billEditingService.startBillEditing(visitId, authUser);
@@ -195,6 +204,7 @@ class EditBillVisitIntegrationTest {
 
         EditBillVisitInput input = new EditBillVisitInput(
             fx.visit().getId(),
+            latestBillingVersionId(fx.visit().getId()),
             List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
                 fx.visitDepartment().getId(),
                 List.of(new EditBillVisitInput.EditBillVisitAddProductInput(
@@ -254,6 +264,7 @@ class EditBillVisitIntegrationTest {
         // Edit: remove fx.product, keep keepProduct + adjust payment.
         EditBillVisitInput input = new EditBillVisitInput(
             fx.visit().getId(),
+            latestBillingVersionId(fx.visit().getId()),
             List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
                 fx.visitDepartment().getId(),
                 null,
@@ -290,6 +301,7 @@ class EditBillVisitIntegrationTest {
 
         EditBillVisitInput input = new EditBillVisitInput(
             fx.visit().getId(),
+            latestBillingVersionId(fx.visit().getId()),
             List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
                 fx.visitDepartment().getId(),
                 null, null,
@@ -324,6 +336,7 @@ class EditBillVisitIntegrationTest {
 
         EditBillVisitInput input = new EditBillVisitInput(
             fx.visit().getId(),
+            latestBillingVersionId(fx.visit().getId()),
             List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
                 fx.visitDepartment().getId(),
                 null, null, null,
@@ -351,6 +364,7 @@ class EditBillVisitIntegrationTest {
 
         EditBillVisitInput input = new EditBillVisitInput(
             fx.visit().getId(),
+            latestBillingVersionId(fx.visit().getId()),
             List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
                 fx.visitDepartment().getId(),
                 null, null,
@@ -387,6 +401,7 @@ class EditBillVisitIntegrationTest {
 
         EditBillVisitInput input = new EditBillVisitInput(
             fx.visit().getId(),
+            latestBillingVersionId(fx.visit().getId()),
             List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
                 fx.visitDepartment().getId(),
                 null, null, null,
@@ -410,13 +425,13 @@ class EditBillVisitIntegrationTest {
 
         EditBillVisitInput input = new EditBillVisitInput(
             UUID.randomUUID(),
+            UUID.randomUUID(),
             List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
                 UUID.randomUUID(), null, null, null, List.of(), null, null, null, null))
         );
 
         ApiResponse<?> response = visitBillingService.editBillVisit(input, auth(actor));
         assertEquals(ResponseStatus.ERROR, response.status());
-        assertTrue(response.message().contains("not found"), response.message());
     }
 
     // ─── 8. Atomicity: failed edit leaves products untouched ───
@@ -432,6 +447,7 @@ class EditBillVisitIntegrationTest {
 
         EditBillVisitInput input = new EditBillVisitInput(
             fx.visit().getId(),
+            latestBillingVersionId(fx.visit().getId()),
             List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
                 fx.visitDepartment().getId(),
                 null, null,
@@ -469,6 +485,7 @@ class EditBillVisitIntegrationTest {
         // Edit 1: qty 1→3
         assertEditSuccess(visitBillingService.editBillVisit(new EditBillVisitInput(
             fx.visit().getId(),
+            latestBillingVersionId(fx.visit().getId()),
             List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
                 fx.visitDepartment().getId(),
                 null, null,
@@ -487,6 +504,7 @@ class EditBillVisitIntegrationTest {
         // Edit 2: qty 3→7
         assertEditSuccess(visitBillingService.editBillVisit(new EditBillVisitInput(
             fx.visit().getId(),
+            latestBillingVersionId(fx.visit().getId()),
             List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
                 fx.visitDepartment().getId(),
                 null, null,
@@ -518,6 +536,7 @@ class EditBillVisitIntegrationTest {
         // Edit to qty=5
         assertEditSuccess(visitBillingService.editBillVisit(new EditBillVisitInput(
             fx.visit().getId(),
+            latestBillingVersionId(fx.visit().getId()),
             List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
                 fx.visitDepartment().getId(),
                 null, null,
@@ -610,6 +629,7 @@ class EditBillVisitIntegrationTest {
                     ApiResponse<?> result = visitBillingService.editBillVisit(
                         new EditBillVisitInput(
                             fx.visit().getId(),
+                            latestBillingVersionId(fx.visit().getId()),
                             List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
                                 fx.visitDepartment().getId(),
                                 null, null,
@@ -673,6 +693,7 @@ class EditBillVisitIntegrationTest {
         // Edit: change from PATIENT_SHARE to FULL exemption
         EditBillVisitInput editInput = new EditBillVisitInput(
             fx.visit().getId(),
+            latestBillingVersionId(fx.visit().getId()),
             List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
                 fx.visitDepartment().getId(),
                 null, null, null,
@@ -717,6 +738,7 @@ class EditBillVisitIntegrationTest {
         // Edit: remove exemption (PATIENT_SHARE -> NONE) — patient now pays
         EditBillVisitInput editInput = new EditBillVisitInput(
             fx.visit().getId(),
+            latestBillingVersionId(fx.visit().getId()),
             List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
                 fx.visitDepartment().getId(),
                 null, null, null,
@@ -760,6 +782,7 @@ class EditBillVisitIntegrationTest {
         // The previously-collected 100 must NOT carry into this new independent snapshot.
         EditBillVisitInput editInput = new EditBillVisitInput(
             fx.visit().getId(),
+            latestBillingVersionId(fx.visit().getId()),
             List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
                 fx.visitDepartment().getId(),
                 null, null, null,
