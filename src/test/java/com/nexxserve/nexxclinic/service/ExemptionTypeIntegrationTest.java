@@ -52,6 +52,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ExemptionTypeIntegrationTest {
 
     @Autowired private VisitBillingService visitBillingService;
+    @Autowired private VisitService visitService;
     @Autowired private BillEditingService billEditingService;
     @Autowired private WorkerRepository workerRepository;
     @Autowired private PatientRepository patientRepository;
@@ -322,6 +323,14 @@ class ExemptionTypeIntegrationTest {
     }
 
     private void startEditing(UUID visitId, AuthenticatedUser authUser) {
+        // billVisit no longer auto-completes the visit, so an edit session must be
+        // reachable by first completing the visit explicitly (as FINANCE would).
+        Visit current = visitRepository.findById(visitId).orElseThrow();
+        if (current.getStatus() != VisitStatus.COMPLETED) {
+            ApiResponse<?> complete = visitService.completeVisit(visitId, authUser);
+            assertEquals(ResponseStatus.SUCCESS, complete.status(),
+                "completeVisit failed: " + complete.message());
+        }
         ApiResponse<?> result = billEditingService.startBillEditing(visitId, authUser);
         assertEquals(ResponseStatus.SUCCESS, result.status(),
             "startBillEditing failed: " + result.message());
@@ -441,7 +450,13 @@ class ExemptionTypeIntegrationTest {
         assertEquals(ResponseStatus.SUCCESS, response.status());
 
         Visit visit = visitRepository.findById(fx.visit().getId()).orElseThrow();
-        assertEquals(VisitStatus.COMPLETED, visit.getStatus(),
+        // billVisit does not auto-complete the visit — completion is explicit.
+        assertEquals(VisitStatus.IN_PROGRESS, visit.getStatus());
+
+        // The PATIENT_SHARE_EXEMPTED product counts as fully billed (terminal).
+        VisitDepartmentProduct vdp = visitDepartmentProductRepository
+            .findById(fx.product().getId()).orElseThrow();
+        assertEquals(VisitProductStatus.PATIENT_SHARE_EXEMPTED, vdp.getStatus(),
             "PATIENT_SHARE_EXEMPTED product should count as fully billed");
     }
 }

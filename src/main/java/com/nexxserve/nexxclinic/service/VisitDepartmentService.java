@@ -1139,6 +1139,13 @@ public class VisitDepartmentService {
         if (requestedStatus == null) {
             return ApiResponse.error("status is required.");
         }
+        // FINANCE may only move a department to a terminal state (COMPLETED/CANCELLED).
+        // Clinical/administrative roles keep the full transition set.
+        if (isFinanceOnlyRole(authUser)
+                && requestedStatus != VisitDepartmentStatus.COMPLETED
+                && requestedStatus != VisitDepartmentStatus.CANCELLED) {
+            return ApiResponse.error("FINANCE can only mark a department COMPLETED or CANCELLED.");
+        }
         if (currentStatus == VisitDepartmentStatus.COMPLETED
                 || currentStatus == VisitDepartmentStatus.CANCELLED) {
             return ApiResponse.error("A " + currentStatus + " department is terminal and cannot be changed.");
@@ -1322,6 +1329,25 @@ public class VisitDepartmentService {
         }
         return authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.FINANCE)
                 || authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.ADMIN);
+    }
+
+    /**
+     * True when the caller's only billable-for-status role is FINANCE (no ADMIN,
+     * CLINIC_ADMIN, RECEPTION, NURSE or CLINICIAN). Used to restrict FINANCE to the
+     * terminal transitions (COMPLETED/CANCELLED) in updateVisitDepartmentStatus.
+     */
+    private boolean isFinanceOnlyRole(AuthenticatedUser authUser) {
+        if (authUser == null || authUser.roles() == null) {
+            return false;
+        }
+        if (!authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.FINANCE)) {
+            return false;
+        }
+        return !authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.ADMIN)
+                && !authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.CLINIC_ADMIN)
+                && !authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.RECEPTION)
+                && !authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.NURSE)
+                && !authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.CLINICIAN);
     }
 
     @Transactional

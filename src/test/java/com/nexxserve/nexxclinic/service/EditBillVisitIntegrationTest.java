@@ -57,6 +57,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class EditBillVisitIntegrationTest {
 
     @Autowired private VisitBillingService visitBillingService;
+    @Autowired private VisitService visitService;
     @Autowired private BillEditingService billEditingService;
     @Autowired private WorkerRepository workerRepository;
     @Autowired private PatientRepository patientRepository;
@@ -180,6 +181,14 @@ class EditBillVisitIntegrationTest {
 
     /** Transition visit to BILL_EDITING so editBillVisit is allowed. */
     private void startEditing(UUID visitId, AuthenticatedUser authUser) {
+        // billVisit no longer auto-completes the visit, so an edit session must be
+        // reachable by first completing the visit explicitly (as FINANCE would).
+        Visit current = visitRepository.findById(visitId).orElseThrow();
+        if (current.getStatus() != VisitStatus.COMPLETED) {
+            ApiResponse<?> complete = visitService.completeVisit(visitId, authUser);
+            assertEquals(ResponseStatus.SUCCESS, complete.status(),
+                "completeVisit failed: " + complete.message());
+        }
         ApiResponse<?> result = billEditingService.startBillEditing(visitId, authUser);
         assertEquals(ResponseStatus.SUCCESS, result.status(),
             "startBillEditing failed: " + result.message());

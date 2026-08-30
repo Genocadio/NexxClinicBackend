@@ -264,7 +264,11 @@ public class VisitBillingService {
                 // Saving a correction and unlocking the visit are one business
                 // operation. Doing this in the same transaction prevents a
                 // saved bill from leaving the visit stranded in BILL_EDITING.
-                visitCheck.ifPresent(v -> v.setStatus(VisitStatus.COMPLETED));
+                // Reload the current managed instance: the stale visitCheck captured
+                // before prepareBill can be a different persistence-context instance
+                // than the one later queries return (see reopensCompletedVisit case).
+                visitRepository.findById(input.visitId())
+                    .ifPresent(v -> v.setStatus(VisitStatus.COMPLETED));
             }
             return result;
         } catch (IllegalArgumentException e) {
@@ -1452,26 +1456,11 @@ public class VisitBillingService {
             }
         }
 
+        // billingVersionBuilder.isVisitFullyBilled(visit.getId())
+        // Billing must NOT mutate the visit or visit-department status: it only stamps
+        // products BILLED/EXEMPTED above. Compl/terminal states are driven by the
+        // explicit updateVisitDepartmentStatus / completeVisit / cancelVisit mutations.
         boolean fullyBilled = billingVersionBuilder.isVisitFullyBilled(visit.getId());
-        if (fullyBilled) {
-            // Requirement: Only mark the visit COMPLETED when every non-CANCELLED department is finished (terminal).
-            List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(visit.getId());
-            boolean allFinished = departments.stream()
-                .allMatch(dept -> dept.getStatus() == VisitDepartmentStatus.CANCELLED
-                    || dept.getStatus() == VisitDepartmentStatus.COMPLETED
-                    || dept.getStatus() == VisitDepartmentStatus.BILLING); // BILLING means it's with finance
-
-            if (allFinished) {
-                for (VisitDepartment dept : departments) {
-                    if (dept.getStatus() == VisitDepartmentStatus.BILLING) {
-                        dept.setStatus(VisitDepartmentStatus.COMPLETED);
-                        visitDepartmentRepository.save(dept);
-                    }
-                }
-                visit.setStatus(VisitStatus.COMPLETED);
-                visitRepository.save(visit);
-            }
-        }
 
         // D2 fix: surface which products are still pending billing instead of a
         // generic success message that hides a partially-billed visit.

@@ -414,7 +414,9 @@ class VisitBillingOrphanedStatusRegressionTest {
         }
         assertEquals(ResponseStatus.SUCCESS, response.status());
         updatedVisit = visitRepository.findById(fx.visit().getId()).get();
-        assertEquals(com.nexxserve.nexxclinic.model.VisitStatus.COMPLETED, updatedVisit.getStatus());
+        // billVisit never auto-completes the visit/departments — it only stamps
+        // products. Completion is driven explicitly by completeVisit.
+        assertEquals(com.nexxserve.nexxclinic.model.VisitStatus.IN_PROGRESS, updatedVisit.getStatus());
     }
 
     // ─────────────────────────────────────────────────────────────

@@ -159,7 +159,7 @@ public class VisitMutationController {
         return visitService.unlinkVisitInsurances(visitId, insuranceIds, authUser);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
     @MutationMapping
     public ApiResponse updateVisitDepartmentStatus(
             @Argument @Valid UpdateVisitDepartmentStatusInput input,
@@ -224,7 +224,7 @@ public class VisitMutationController {
         return visitService.completeVisit(input, finalAnswer, authUser);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
     @MutationMapping
     public ApiResponse completeVisit(
             @Argument UUID visitId,
@@ -233,7 +233,7 @@ public class VisitMutationController {
         return visitService.completeVisit(visitId, authUser);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.MANAGER})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.MANAGER, RoleName.FINANCE})
     @MutationMapping
     public ApiResponse cancelVisit(
             @Argument UUID visitId,
