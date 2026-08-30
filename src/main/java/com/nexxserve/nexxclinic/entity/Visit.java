@@ -60,6 +60,10 @@ public class Visit {
     @Column(name = "estimated_patient_pay", precision = 19, scale = 2)
     private BigDecimal estimatedPatientPay;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "billing_edit_source_status", length = 20)
+    private VisitStatus billingEditSourceStatus;
+
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
@@ -154,5 +158,20 @@ public class Visit {
 
     public void setEstimatedPatientPay(BigDecimal estimatedPatientPay) {
         this.estimatedPatientPay = estimatedPatientPay;
+    }
+
+    /**
+     * Visit status that existed before {@code BILL_EDITING} was entered.
+     * Nullable — always null outside of billing edit mode. Only set (and
+     * cleared) by the bill-editing service so exiting the mode can restore
+     * the original status (CREATED/IN_PROGRESS/COMPLETED) rather than always
+     * force-completing the visit.
+     */
+    public VisitStatus getBillingEditSourceStatus() {
+        return billingEditSourceStatus;
+    }
+
+    public void setBillingEditSourceStatus(VisitStatus billingEditSourceStatus) {
+        this.billingEditSourceStatus = billingEditSourceStatus;
     }
 }

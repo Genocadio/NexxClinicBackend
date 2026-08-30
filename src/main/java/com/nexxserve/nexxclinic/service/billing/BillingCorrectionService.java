@@ -294,9 +294,11 @@ public class BillingCorrectionService {
 
         // BILL_EDITING guard: billing corrections require the visit to be in
         // BILL_EDITING mode. COMPLETED visits must call startBillEditing first.
-        // IN_PROGRESS visits are allowed (pre-completion corrections).
+        // PENDING visits (CREATED/IN_PROGRESS) are allowed (pre-completion
+        // corrections), matching editBillVisit's own guard.
         if (visit.getStatus() != VisitStatus.BILL_EDITING
-                && visit.getStatus() != VisitStatus.IN_PROGRESS) {
+                && visit.getStatus() != VisitStatus.IN_PROGRESS
+                && visit.getStatus() != VisitStatus.CREATED) {
             return ApiResponse.error(
                 "Billing corrections require the visit to be in BILL_EDITING mode. " +
                 "Use startBillEditing before editing a completed visit."

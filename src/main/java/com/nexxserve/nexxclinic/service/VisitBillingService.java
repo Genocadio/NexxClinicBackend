@@ -268,7 +268,22 @@ public class VisitBillingService {
                 // before prepareBill can be a different persistence-context instance
                 // than the one later queries return (see reopensCompletedVisit case).
                 visitRepository.findById(input.visitId())
-                    .ifPresent(v -> v.setStatus(VisitStatus.COMPLETED));
+                    .ifPresent(v -> {
+                        if (v.getStatus() == VisitStatus.BILL_EDITING) {
+                            // Restore the pre-edit status (remembered when the
+                            // visit entered BILL_EDITING) instead of always
+                            // force-completing. Pending visits (CREATED/
+                            // IN_PROGRESS) must return to their own status;
+                            // completed visits return to COMPLETED. Legacy
+                            // sessions without a remembered source default to
+                            // COMPLETED.
+                            VisitStatus editSource = v.getBillingEditSourceStatus() != null
+                                ? v.getBillingEditSourceStatus()
+                                : VisitStatus.COMPLETED;
+                            v.setBillingEditSourceStatus(null);
+                            v.setStatus(editSource);
+                        }
+                    });
             }
             return result;
         } catch (IllegalArgumentException e) {

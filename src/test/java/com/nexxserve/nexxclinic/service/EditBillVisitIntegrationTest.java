@@ -820,4 +820,70 @@ class EditBillVisitIntegrationTest {
         assertEquals(0, deptBilling.getOutstandingAmount().compareTo(java.math.BigDecimal.ZERO),
             "fully-exempted product leaves no outstanding patient share");
     }
+
+    // ─── 15. PENDING (billed, not yet completed) visits can be edited ──
+
+    @Test
+    void startBillEditing_allowsPendingBilledVisit_andCancelRestoresPending() {
+        Fixture fx = createVisitWithProduct(); // visit is IN_PROGRESS
+        assertEquals(ResponseStatus.SUCCESS,
+            visitBillingService.billVisit(billInput(fx), auth(fx.actor())).status());
+
+        ApiResponse<?> start = billEditingService.startBillEditing(fx.visit().getId(), auth(fx.actor()));
+        assertEquals(ResponseStatus.SUCCESS, start.status(), start.message());
+        Visit during = visitRepository.findById(fx.visit().getId()).orElseThrow();
+        assertEquals(VisitStatus.BILL_EDITING, during.getStatus());
+        assertEquals(VisitStatus.IN_PROGRESS, during.getBillingEditSourceStatus());
+
+        ApiResponse<?> cancelled = billEditingService.cancelBillEditing(fx.visit().getId(), auth(fx.actor()));
+        assertEquals(ResponseStatus.SUCCESS, cancelled.status(), cancelled.message());
+        Visit after = visitRepository.findById(fx.visit().getId()).orElseThrow();
+        assertEquals(VisitStatus.IN_PROGRESS, after.getStatus(),
+            "cancelling an edit on a pending visit must restore IN_PROGRESS, not COMPLETED");
+        assertEquals(null, after.getBillingEditSourceStatus());
+    }
+
+    @Test
+    void completeBillEditing_restoresPendingStatus_afterSuccessfulEdit() {
+        Fixture fx = createVisitWithProduct(); // visit is IN_PROGRESS
+        assertEquals(ResponseStatus.SUCCESS,
+            visitBillingService.billVisit(billInput(fx), auth(fx.actor())).status());
+
+        assertEquals(ResponseStatus.SUCCESS,
+            billEditingService.startBillEditing(fx.visit().getId(), auth(fx.actor())).status());
+
+        // Edit: mark the product FULLY exempted so no payment is collected.
+        EditBillVisitInput editInput = new EditBillVisitInput(
+            fx.visit().getId(),
+            latestBillingVersionId(fx.visit().getId()),
+            List.of(new EditBillVisitInput.EditBillVisitDepartmentInput(
+                fx.visitDepartment().getId(),
+                null, null, null,
+                List.of(new EditBillVisitInput.EditBillVisitBillProductInput(
+                    fx.catalogProductId(), null, CoverageType.PRIVATE, null, ExemptionType.FULL, null)),
+                List.of(), "Pending visit correction — full exemption"
+            , null, null))
+        );
+        assertEditSuccess(visitBillingService.editBillVisit(editInput, auth(fx.actor())));
+        assertEquals(2, billingVersionCount(fx.visit().getId()));
+
+        Visit afterEdit = visitRepository.findById(fx.visit().getId()).orElseThrow();
+        assertEquals(VisitStatus.IN_PROGRESS, afterEdit.getStatus(),
+            "an edit on a pending visit must restore IN_PROGRESS, not COMPLETED");
+        assertEquals(null, afterEdit.getBillingEditSourceStatus());
+    }
+
+    @Test
+    void startBillEditing_pendingVisit_requiresExistingBilling() {
+        Fixture fx = createVisitWithProduct();
+        // No billVisit — the pending visit has not been billed yet.
+        ApiResponse<?> result = billEditingService.startBillEditing(fx.visit().getId(), auth(fx.actor()));
+        assertEquals(ResponseStatus.ERROR, result.status());
+        assertTrue(result.message().toLowerCase().contains("not been billed"),
+            "expected 'not been billed' error, got: " + result.message());
+
+        Visit still = visitRepository.findById(fx.visit().getId()).orElseThrow();
+        assertEquals(VisitStatus.IN_PROGRESS, still.getStatus());
+        assertEquals(null, still.getBillingEditSourceStatus());
+    }
 }

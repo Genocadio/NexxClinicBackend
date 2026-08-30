@@ -21,10 +21,13 @@ import org.springframework.transaction.annotation.Transactional;
  * <p>
  * Flow:
  * <pre>
- *   COMPLETED → startBillEditing → BILL_EDITING
- *   BILL_EDITING → completeBillEditing → COMPLETED
- *   BILL_EDITING → cancelBillEditing → COMPLETED
+ *   COMPLETED → startBillEditing → BILL_EDITING → exit → COMPLETED
+ *   CREATED/IN_PROGRESS → startBillEditing → BILL_EDITING → exit → same status
+ *   BILL_EDITING → completeBillEditing → pre-edit status
+ *   BILL_EDITING → cancelBillEditing → pre-edit status
  * </pre>
+ * The pre-edit status is remembered on the visit
+ * ({@code billing_edit_source_status}) so exiting the mode restores it.
  * <p>
  * While in BILL_EDITING, the following mutations are permitted:
  * <ul>
@@ -54,8 +57,10 @@ public class BillEditingService {
     }
 
     /**
-     * Transition a COMPLETED visit into BILL_EDITING mode so billing corrections
-     * and product/insurance changes can be made.
+     * Transition a COMPLETED or PENDING (CREATED/IN_PROGRESS) visit into
+     * BILL_EDITING mode so billing corrections and product/insurance changes
+     * can be made. The pre-edit status is remembered on the visit so exiting
+     * the mode restores it instead of always forcing COMPLETED.
      */
     @Transactional
     public ApiResponse<?> startBillEditing(UUID visitId, AuthenticatedUser authUser) {
@@ -78,6 +83,10 @@ public class BillEditingService {
             return ApiResponse.error("Cannot edit billing on a cancelled visit.");
         }
 
+        if (visit.getStatus() == VisitStatus.FINALISED) {
+            return ApiResponse.error("Cannot edit billing on a finalised visit.");
+        }
+
         if (visit.getStatus() == VisitStatus.BILL_EDITING) {
             // A browser crash or lost connection must not leave financial work
             // locked indefinitely. The visit's updatedAt is refreshed when the
@@ -86,24 +95,22 @@ public class BillEditingService {
             LocalDateTime timeout = LocalDateTime.now().minusMinutes(EDIT_SESSION_TIMEOUT_MINUTES);
             if (visit.getUpdatedAt() != null && visit.getUpdatedAt().isBefore(timeout)) {
                 log.warn("Recovering abandoned billing edit session for visit {}", visitId);
-                visit.setStatus(VisitStatus.COMPLETED);
+                visit.setStatus(
+                    visit.getBillingEditSourceStatus() != null
+                        ? visit.getBillingEditSourceStatus()
+                        : VisitStatus.COMPLETED
+                );
+                visit.setBillingEditSourceStatus(null);
             } else {
                 return ApiResponse.error("Visit is already in billing edit mode.");
             }
         }
 
-        if (visit.getStatus() == VisitStatus.CREATED) {
-            return ApiResponse.error("Cannot edit billing on a visit that has not been completed yet.");
-        }
-
-        if (visit.getStatus() == VisitStatus.IN_PROGRESS) {
-            return ApiResponse.error("Cannot edit billing on a visit that is still in progress. Complete the visit first.");
-        }
-
-        // Must be COMPLETED to enter BILL_EDITING
-        if (visit.getStatus() != VisitStatus.COMPLETED) {
+        if (visit.getStatus() != VisitStatus.CREATED
+                && visit.getStatus() != VisitStatus.IN_PROGRESS
+                && visit.getStatus() != VisitStatus.COMPLETED) {
             return ApiResponse.error(
-                "Visit must be COMPLETED to enter billing edit mode. Current status: " + visit.getStatus()
+                "Visit must be COMPLETED or PENDING (CREATED/IN_PROGRESS) to enter billing edit mode. Current status: " + visit.getStatus()
             );
         }
 
@@ -112,12 +119,13 @@ public class BillEditingService {
             return ApiResponse.error("Visit has not been billed yet. Use billVisit first.");
         }
 
+        visit.setBillingEditSourceStatus(visit.getStatus());
         visit.setStatus(VisitStatus.BILL_EDITING);
         Visit saved = visitRepository.save(visit);
 
         log.info(
-            "Visit {} entered BILL_EDITING mode by user {}",
-            visitId, actor.getId()
+            "Visit {} entered BILL_EDITING mode by user {} (source status {})",
+            visitId, actor.getId(), visit.getBillingEditSourceStatus()
         );
 
         return ApiResponse.success(
@@ -130,8 +138,8 @@ public class BillEditingService {
     }
 
     /**
-     * Exit BILL_EDITING mode and lock billing back to COMPLETED.
-     * Called after a successful editBillVisit.
+     * Exit BILL_EDITING mode and lock billing back to the visit's pre-edit
+     * status. Called after a successful editBillVisit.
      */
     @Transactional
     public ApiResponse<?> completeBillEditing(UUID visitId, AuthenticatedUser authUser) {
@@ -156,26 +164,25 @@ public class BillEditingService {
             );
         }
 
-        visit.setStatus(VisitStatus.COMPLETED);
-        Visit saved = visitRepository.save(visit);
+        VisitStatus restored = restoreFromBillingEditing(visit);
 
         log.info(
-            "Visit {} exited BILL_EDITING → COMPLETED by user {}",
-            visitId, actor.getId()
+            "Visit {} exited BILL_EDITING → {} by user {}",
+            visitId, restored, actor.getId()
         );
 
         return ApiResponse.success(
-            "Billing edit mode deactivated. Visit is now COMPLETED.",
+            "Billing edit mode deactivated. Visit is now " + restored + ".",
             Map.of(
-                "visitId", saved.getId(),
-                "status", saved.getStatus().name()
+                "visitId", visit.getId(),
+                "status", restored.name()
             )
         );
     }
 
     /**
      * Exit BILL_EDITING mode without saving changes (user cancelled the edit).
-     * Transitions back to COMPLETED.
+     * Transitions back to the visit's pre-edit status.
      */
     @Transactional
     public ApiResponse<?> cancelBillEditing(UUID visitId, AuthenticatedUser authUser) {
@@ -200,21 +207,35 @@ public class BillEditingService {
             );
         }
 
-        visit.setStatus(VisitStatus.COMPLETED);
-        Visit saved = visitRepository.save(visit);
+        VisitStatus restored = restoreFromBillingEditing(visit);
 
         log.info(
-            "Visit {} exited BILL_EDITING → COMPLETED (cancelled) by user {}",
-            visitId, actor.getId()
+            "Visit {} exited BILL_EDITING → {} (cancelled) by user {}",
+            visitId, restored, actor.getId()
         );
 
         return ApiResponse.success(
-            "Billing edit mode cancelled. Visit is now COMPLETED.",
+            "Billing edit mode cancelled. Visit is now " + restored + ".",
             Map.of(
-                "visitId", saved.getId(),
-                "status", saved.getStatus().name()
+                "visitId", visit.getId(),
+                "status", restored.name()
             )
         );
+    }
+
+    /**
+     * Restore a visit from BILL_EDITING to its remembered pre-edit status,
+     * falling back to COMPLETED (legacy behaviour) when no source was recorded.
+     * Returns the restored status.
+     */
+    private VisitStatus restoreFromBillingEditing(Visit visit) {
+        VisitStatus restored = visit.getBillingEditSourceStatus() != null
+            ? visit.getBillingEditSourceStatus()
+            : VisitStatus.COMPLETED;
+        visit.setBillingEditSourceStatus(null);
+        visit.setStatus(restored);
+        visitRepository.save(visit);
+        return restored;
     }
 
     private Worker resolveWorker(AuthenticatedUser authUser) {
