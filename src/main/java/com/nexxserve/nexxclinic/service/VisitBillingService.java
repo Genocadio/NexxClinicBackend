@@ -11,7 +11,7 @@ import com.nexxserve.nexxclinic.entity.VisitBillingItem;
 import com.nexxserve.nexxclinic.entity.VisitBillingPayment;
 import com.nexxserve.nexxclinic.entity.VisitDepartment;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentBilling;
-import com.nexxserve.nexxclinic.entity.VisitDepartmentNote;
+
 import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
 import com.nexxserve.nexxclinic.entity.VisitInsurance;
 import com.nexxserve.nexxclinic.entity.Worker;
@@ -22,7 +22,7 @@ import com.nexxserve.nexxclinic.model.CoverageType;
 import com.nexxserve.nexxclinic.model.EncounterType;
 import com.nexxserve.nexxclinic.model.PatientShareSource;
 import com.nexxserve.nexxclinic.model.ExemptionType;
-import com.nexxserve.nexxclinic.model.NoteType;
+
 import com.nexxserve.nexxclinic.model.VisitBillingStatus;
 import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
@@ -33,7 +33,7 @@ import com.nexxserve.nexxclinic.repository.VisitBillingItemRepository;
 import com.nexxserve.nexxclinic.repository.VisitBillingRepository;
 import com.nexxserve.nexxclinic.repository.VisitBillingVersionRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentBillingRepository;
-import com.nexxserve.nexxclinic.repository.VisitDepartmentNoteRepository;
+
 import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentProductSnapshotRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
@@ -88,7 +88,7 @@ public class VisitBillingService {
     private final VisitBillingVersionRepository visitBillingVersionRepository;
     private final VisitDepartmentProductSnapshotRepository visitDepartmentProductSnapshotRepository;
     private final WorkerRepository workerRepository;
-    private final VisitDepartmentNoteRepository visitDepartmentNoteRepository;
+
     private final BillingVersionBuilder billingVersionBuilder;
     private final BillingPaymentDistributor paymentDistributor;
     private final BillingPricingCalculator pricingCalculator;
@@ -117,7 +117,6 @@ public class VisitBillingService {
         VisitBillingVersionRepository visitBillingVersionRepository,
         VisitDepartmentProductSnapshotRepository visitDepartmentProductSnapshotRepository,
         WorkerRepository workerRepository,
-        VisitDepartmentNoteRepository visitDepartmentNoteRepository,
         BillingVersionBuilder billingVersionBuilder,
         BillingPaymentDistributor paymentDistributor,
         BillingPricingCalculator pricingCalculator,
@@ -144,7 +143,6 @@ public class VisitBillingService {
         this.visitBillingVersionRepository = visitBillingVersionRepository;
         this.visitDepartmentProductSnapshotRepository = visitDepartmentProductSnapshotRepository;
         this.workerRepository = workerRepository;
-        this.visitDepartmentNoteRepository = visitDepartmentNoteRepository;
         this.billingVersionBuilder = billingVersionBuilder;
         this.paymentDistributor = paymentDistributor;
         this.pricingCalculator = pricingCalculator;
@@ -1440,17 +1438,17 @@ public class VisitBillingService {
             }
         }
 
-        // Persist billing notes attached to the relevant visit department
+        // Store billing notes as a financial annotation on the department billing row.
+        // Billing notes are justifications for outstanding balances or exemptions —
+        // they are NOT inter-department communication notes and must NOT be written
+        // to visit_department_notes (VisitDepartmentNote), which is a separate entity
+        // used exclusively for clinical/operational communication between departments.
         for (VisitDepartmentBilling deptBilling : visitBilling.getDepartments()) {
             UUID rootDeptId = deptBilling.getVisitDepartment().getId();
             String note = noteByDepartmentId.get(rootDeptId);
             if (hasText(note)) {
-                VisitDepartmentNote billingNote = new VisitDepartmentNote();
-                billingNote.setVisitDepartment(deptBilling.getVisitDepartment());
-                billingNote.setContent(note);
-                billingNote.setCreatedBy(actingUser);
-                billingNote.setNoteType(NoteType.BILLING);
-                visitDepartmentNoteRepository.save(billingNote);
+                deptBilling.setBillingNote(note);
+                visitDepartmentBillingRepository.save(deptBilling);
             }
         }
 

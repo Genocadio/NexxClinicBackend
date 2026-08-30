@@ -69,6 +69,9 @@ public class VisitDepartmentBilling {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
+    @Column(name = "billing_note", length = 1000)
+    private String billingNote;
+
     @PrePersist
     void onCreate() {
         LocalDateTime now = LocalDateTime.now();
@@ -219,5 +222,13 @@ public class VisitDepartmentBilling {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getBillingNote() {
+        return billingNote;
+    }
+
+    public void setBillingNote(String billingNote) {
+        this.billingNote = billingNote;
     }
 }

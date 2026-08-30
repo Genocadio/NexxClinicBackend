@@ -78,6 +78,7 @@ public class BillingDataMapper {
         );
         data.put("createdAt", billing.getCreatedAt());
         data.put("updatedAt", billing.getUpdatedAt());
+        data.put("billingNote", billing.getBillingNote());
         return data;
     }
 
