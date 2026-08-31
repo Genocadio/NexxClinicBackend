@@ -179,17 +179,24 @@ class EditBillVisitIntegrationTest {
             .orElseThrow(() -> new IllegalStateException("No billing version found for visit " + visitId));
     }
 
-    /** Transition visit to BILL_EDITING so editBillVisit is allowed. */
+    /** Transition a department to DEPARTMENT_EDITING so editBillVisit is allowed. */
     private void startEditing(UUID visitId, AuthenticatedUser authUser) {
-        // billVisit no longer auto-completes the visit, so an edit session must be
-        // reachable by first completing the visit explicitly (as FINANCE would).
         Visit current = visitRepository.findById(visitId).orElseThrow();
         if (current.getStatus() != VisitStatus.COMPLETED) {
             ApiResponse<?> complete = visitService.completeVisit(visitId, authUser);
             assertEquals(ResponseStatus.SUCCESS, complete.status(),
                 "completeVisit failed: " + complete.message());
         }
-        ApiResponse<?> result = billEditingService.startBillEditing(visitId, authUser);
+        // Complete the department (BILLING -> COMPLETED) so DEPARTMENT_EDITING is allowed
+        VisitDepartment dept = visitDepartmentRepository.findByVisitId(visitId).stream()
+            .filter(d -> d.getParentVisitDepartment() == null)
+            .findFirst().orElseThrow();
+        if (dept.getStatus() == VisitDepartmentStatus.BILLING) {
+            dept.setStatus(VisitDepartmentStatus.COMPLETED);
+            dept.setCompletedAt(java.time.LocalDateTime.now());
+            visitDepartmentRepository.save(dept);
+        }
+        ApiResponse<?> result = billEditingService.startBillEditing(dept.getId(), authUser);
         assertEquals(ResponseStatus.SUCCESS, result.status(),
             "startBillEditing failed: " + result.message());
     }
@@ -827,24 +834,43 @@ class EditBillVisitIntegrationTest {
 
     // ─── 15. PENDING (billed, not yet completed) visits can be edited ──
 
+    /** Complete a BILLING department so DEPARTMENT_EDITING is allowed. */
+    private void completeDepartment(VisitDepartment dept) {
+        if (dept.getStatus() == VisitDepartmentStatus.BILLING) {
+            dept.setStatus(VisitDepartmentStatus.COMPLETED);
+            dept.setCompletedAt(java.time.LocalDateTime.now());
+            visitDepartmentRepository.save(dept);
+        }
+    }
+
     @Test
     void startBillEditing_allowsPendingBilledVisit_andCancelRestoresPending() {
         Fixture fx = createVisitWithProduct(); // visit is IN_PROGRESS
         assertEquals(ResponseStatus.SUCCESS,
             visitBillingService.billVisit(billInput(fx), auth(fx.actor())).status());
+        // Complete the department so DEPARTMENT_EDITING is allowed
+        completeDepartment(fx.visitDepartment());
 
-        ApiResponse<?> start = billEditingService.startBillEditing(fx.visit().getId(), auth(fx.actor()));
+        // Enter DEPARTMENT_EDITING on the department (not the visit)
+        ApiResponse<?> start = billEditingService.startBillEditing(fx.visitDepartment().getId(), auth(fx.actor()));
         assertEquals(ResponseStatus.SUCCESS, start.status(), start.message());
-        Visit during = visitRepository.findById(fx.visit().getId()).orElseThrow();
-        assertEquals(VisitStatus.BILL_EDITING, during.getStatus());
-        assertEquals(VisitStatus.IN_PROGRESS, during.getBillingEditSourceStatus());
+        // Visit status should remain IN_PROGRESS (not BILL_EDITING)
+        Visit duringVisit = visitRepository.findById(fx.visit().getId()).orElseThrow();
+        assertEquals(VisitStatus.IN_PROGRESS, duringVisit.getStatus());
+        // Department should be in DEPARTMENT_EDITING
+        VisitDepartment duringDept = visitDepartmentRepository.findById(fx.visitDepartment().getId()).orElseThrow();
+        assertEquals(VisitDepartmentStatus.DEPARTMENT_EDITING, duringDept.getStatus());
+        assertEquals(VisitDepartmentStatus.COMPLETED, duringDept.getBillingEditSourceStatus());
 
-        ApiResponse<?> cancelled = billEditingService.cancelBillEditing(fx.visit().getId(), auth(fx.actor()));
+        ApiResponse<?> cancelled = billEditingService.cancelBillEditing(fx.visitDepartment().getId(), auth(fx.actor()));
         assertEquals(ResponseStatus.SUCCESS, cancelled.status(), cancelled.message());
-        Visit after = visitRepository.findById(fx.visit().getId()).orElseThrow();
-        assertEquals(VisitStatus.IN_PROGRESS, after.getStatus(),
-            "cancelling an edit on a pending visit must restore IN_PROGRESS, not COMPLETED");
-        assertEquals(null, after.getBillingEditSourceStatus());
+        // Visit status should still be IN_PROGRESS
+        Visit afterVisit = visitRepository.findById(fx.visit().getId()).orElseThrow();
+        assertEquals(VisitStatus.IN_PROGRESS, afterVisit.getStatus());
+        // Department should be restored
+        VisitDepartment afterDept = visitDepartmentRepository.findById(fx.visitDepartment().getId()).orElseThrow();
+        assertEquals(VisitDepartmentStatus.COMPLETED, afterDept.getStatus());
+        assertEquals(null, afterDept.getBillingEditSourceStatus());
     }
 
     @Test
@@ -852,9 +878,11 @@ class EditBillVisitIntegrationTest {
         Fixture fx = createVisitWithProduct(); // visit is IN_PROGRESS
         assertEquals(ResponseStatus.SUCCESS,
             visitBillingService.billVisit(billInput(fx), auth(fx.actor())).status());
+        // Complete the department so DEPARTMENT_EDITING is allowed
+        completeDepartment(fx.visitDepartment());
 
         assertEquals(ResponseStatus.SUCCESS,
-            billEditingService.startBillEditing(fx.visit().getId(), auth(fx.actor())).status());
+            billEditingService.startBillEditing(fx.visitDepartment().getId(), auth(fx.actor())).status());
 
         // Edit: mark the product FULLY exempted so no payment is collected.
         EditBillVisitInput editInput = new EditBillVisitInput(
@@ -880,14 +908,17 @@ class EditBillVisitIntegrationTest {
     @Test
     void startBillEditing_pendingVisit_requiresExistingBilling() {
         Fixture fx = createVisitWithProduct();
-        // No billVisit — the pending visit has not been billed yet.
-        ApiResponse<?> result = billEditingService.startBillEditing(fx.visit().getId(), auth(fx.actor()));
+        // Complete the department first (BILLING -> COMPLETED)
+        completeDepartment(fx.visitDepartment());
+        // No billVisit billing record exists on the department
+        ApiResponse<?> result = billEditingService.startBillEditing(fx.visitDepartment().getId(), auth(fx.actor()));
         assertEquals(ResponseStatus.ERROR, result.status());
         assertTrue(result.message().toLowerCase().contains("not been billed"),
             "expected 'not been billed' error, got: " + result.message());
 
         Visit still = visitRepository.findById(fx.visit().getId()).orElseThrow();
         assertEquals(VisitStatus.IN_PROGRESS, still.getStatus());
-        assertEquals(null, still.getBillingEditSourceStatus());
+        VisitDepartment deptStill = visitDepartmentRepository.findById(fx.visitDepartment().getId()).orElseThrow();
+        assertEquals(null, deptStill.getBillingEditSourceStatus());
     }
 }

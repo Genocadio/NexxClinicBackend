@@ -98,6 +98,10 @@ public class VisitDepartment {
     )
     private List<Worker> processors = new ArrayList<>();
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "billing_edit_source_status", length = 32)
+    private VisitDepartmentStatus billingEditSourceStatus;
+
     @Column(name = "answer_id")
     private UUID answerId;
 
@@ -236,6 +240,14 @@ public class VisitDepartment {
 
     public void setEncounterType(EncounterType encounterType) {
         this.encounterType = encounterType;
+    }
+
+    public VisitDepartmentStatus getBillingEditSourceStatus() {
+        return billingEditSourceStatus;
+    }
+
+    public void setBillingEditSourceStatus(VisitDepartmentStatus billingEditSourceStatus) {
+        this.billingEditSourceStatus = billingEditSourceStatus;
     }
 
     public UUID getAnswerId() {

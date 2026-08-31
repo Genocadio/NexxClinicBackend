@@ -247,11 +247,14 @@ public class InvoiceGenerator {
             return InvoiceSnapshot.error("Visit not found for billing.");
         }
 
-        // BLOCK: invoices must not be generated while the visit is in BILL_EDITING
-        // mode — the billing data is in flux and the invoice would be incorrect.
-        if (visit.getStatus() == com.nexxserve.nexxclinic.model.VisitStatus.BILL_EDITING) {
+        // BLOCK: invoices must not be generated while the owning department is in
+        // DEPARTMENT_EDITING mode — the billing data is in flux.
+        if (billing.getVisitDepartmentBilling() != null
+                && billing.getVisitDepartmentBilling().getVisitDepartment() != null
+                && billing.getVisitDepartmentBilling().getVisitDepartment().getStatus()
+                    == com.nexxserve.nexxclinic.model.VisitDepartmentStatus.DEPARTMENT_EDITING) {
             return InvoiceSnapshot.error(
-                "Cannot generate invoice while the visit is in billing edit mode. Complete or cancel the edit first."
+                "Cannot generate invoice while the department is in billing edit mode. Complete or cancel the edit first."
             );
         }
 

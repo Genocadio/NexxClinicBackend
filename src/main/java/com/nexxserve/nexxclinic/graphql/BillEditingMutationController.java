@@ -23,27 +23,27 @@ public class BillEditingMutationController {
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.FINANCE})
     @MutationMapping
     public ApiResponse startBillEditing(
-            @Argument("visitId") UUID visitId,
+            @Argument("visitDepartmentId") UUID visitDepartmentId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return billEditingService.startBillEditing(visitId, authUser);
+        return billEditingService.startBillEditing(visitDepartmentId, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.FINANCE})
     @MutationMapping
     public ApiResponse completeBillEditing(
-            @Argument("visitId") UUID visitId,
+            @Argument("visitDepartmentId") UUID visitDepartmentId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return billEditingService.completeBillEditing(visitId, authUser);
+        return billEditingService.completeBillEditing(visitDepartmentId, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.FINANCE})
     @MutationMapping
     public ApiResponse cancelBillEditing(
-            @Argument("visitId") UUID visitId,
+            @Argument("visitDepartmentId") UUID visitDepartmentId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return billEditingService.cancelBillEditing(visitId, authUser);
+        return billEditingService.cancelBillEditing(visitDepartmentId, authUser);
     }
 }

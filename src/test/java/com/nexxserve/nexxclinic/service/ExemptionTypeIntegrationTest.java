@@ -323,15 +323,17 @@ class ExemptionTypeIntegrationTest {
     }
 
     private void startEditing(UUID visitId, AuthenticatedUser authUser) {
-        // billVisit no longer auto-completes the visit, so an edit session must be
-        // reachable by first completing the visit explicitly (as FINANCE would).
         Visit current = visitRepository.findById(visitId).orElseThrow();
         if (current.getStatus() != VisitStatus.COMPLETED) {
             ApiResponse<?> complete = visitService.completeVisit(visitId, authUser);
             assertEquals(ResponseStatus.SUCCESS, complete.status(),
                 "completeVisit failed: " + complete.message());
         }
-        ApiResponse<?> result = billEditingService.startBillEditing(visitId, authUser);
+        // Enter DEPARTMENT_EDITING on the first department
+        VisitDepartment dept = visitDepartmentRepository.findByVisitId(visitId).stream()
+            .filter(d -> d.getParentVisitDepartment() == null)
+            .findFirst().orElseThrow();
+        ApiResponse<?> result = billEditingService.startBillEditing(dept.getId(), authUser);
         assertEquals(ResponseStatus.SUCCESS, result.status(),
             "startBillEditing failed: " + result.message());
     }

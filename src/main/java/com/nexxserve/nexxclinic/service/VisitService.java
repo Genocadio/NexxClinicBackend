@@ -229,8 +229,11 @@ public class VisitService {
         if (existingVisit.getStatus() == com.nexxserve.nexxclinic.model.VisitStatus.CANCELLED) {
             return ApiResponse.error("Cannot change the date of a cancelled visit.");
         }
-        if (existingVisit.getStatus() == com.nexxserve.nexxclinic.model.VisitStatus.BILL_EDITING) {
-            return ApiResponse.error("Cannot change the visit date while the visit is in billing edit mode.");
+        // Per-department editing: check if any department is in DEPARTMENT_EDITING
+        boolean hasEditingDept = visitDepartmentRepository.findByVisitId(input.visitId()).stream()
+            .anyMatch(d -> d.getStatus() == com.nexxserve.nexxclinic.model.VisitDepartmentStatus.DEPARTMENT_EDITING);
+        if (hasEditingDept) {
+            return ApiResponse.error("Cannot change the visit date while a department is in billing edit mode.");
         }
 
         int updatedRows = visitRepository.updateVisitDate(input.visitId(), input.visitDate());
@@ -320,8 +323,11 @@ public class VisitService {
         if (existingVisit.getStatus() == com.nexxserve.nexxclinic.model.VisitStatus.CANCELLED) {
             return ApiResponse.error("Cannot change the date of a cancelled visit.");
         }
-        if (existingVisit.getStatus() == com.nexxserve.nexxclinic.model.VisitStatus.BILL_EDITING) {
-            return ApiResponse.error("Cannot change the visit date while the visit is in billing edit mode.");
+        // Per-department editing: check if any department is in DEPARTMENT_EDITING
+        boolean hasEditingDeptPreview = visitDepartmentRepository.findByVisitId(visitId).stream()
+            .anyMatch(d -> d.getStatus() == com.nexxserve.nexxclinic.model.VisitDepartmentStatus.DEPARTMENT_EDITING);
+        if (hasEditingDeptPreview) {
+            return ApiResponse.error("Cannot change the visit date while a department is in billing edit mode.");
         }
 
         LocalDateTime oldVisitDate = existingVisit.getVisitDate();
@@ -581,10 +587,6 @@ public class VisitService {
             return ApiResponse.error("Cancelled visit cannot be completed.");
         }
 
-        if (visit.getStatus() == VisitStatus.BILL_EDITING) {
-            return ApiResponse.error("Cannot complete a visit in billing edit mode. Use completeBillEditing first.");
-        }
-
         // D1/D2 fix: enforce unread-notes gate during completion.
         long unreadNotes = visitDepartmentNoteRepository.countUnreadNotesForVisit(visitId, actingUser.getId());
         if (unreadNotes > 0) {
@@ -713,10 +715,6 @@ public class VisitService {
             return ApiResponse.error("Completed visit cannot be cancelled.");
         }
 
-        if (visit.getStatus() == VisitStatus.BILL_EDITING) {
-            return ApiResponse.error("Cannot cancel a visit in billing edit mode. Use cancelBillEditing first.");
-        }
-
         // Billing guard: a visit that has been billed (any billing container exists)
         // cannot be cancelled — it has a financial and audit trail.
         if (!visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId).isEmpty()) {
@@ -760,10 +758,6 @@ public class VisitService {
 
         if (visit.getStatus() == VisitStatus.COMPLETED) {
             return ApiResponse.error("Cannot delete a completed visit. Cancel it first.");
-        }
-
-        if (visit.getStatus() == VisitStatus.BILL_EDITING) {
-            return ApiResponse.error("Cannot delete a visit in billing edit mode. Cancel the edit first.");
         }
 
         // Billing guard: a billed visit cannot be deleted.
@@ -818,10 +812,6 @@ public class VisitService {
 
         if (visit.getStatus() == VisitStatus.CANCELLED) {
             return ApiResponse.error("Cannot finalise a cancelled visit.");
-        }
-
-        if (visit.getStatus() == VisitStatus.BILL_EDITING) {
-            return ApiResponse.error("Cannot finalise a visit in billing edit mode.");
         }
 
         if (visit.getStatus() != VisitStatus.COMPLETED) {
@@ -953,15 +943,15 @@ public class VisitService {
         }
 
         Visit visit = visitOptional.get();
-        if (visit.getStatus() == VisitStatus.COMPLETED) {
-            return ApiResponse.error("Cannot add insurances to a completed visit. Use startBillEditing to enter billing edit mode first.");
-        }
-
         if (visit.getStatus() == VisitStatus.CANCELLED) {
             return ApiResponse.error("Cannot add insurances to a cancelled visit.");
         }
-
-        // BILL_EDITING: allowed — insurance mutations permitted in billing edit mode
+        // Allow insurance changes on completed visits when any department is in DEPARTMENT_EDITING
+        boolean hasEditingDept = visitDepartmentRepository.findByVisitId(visitId).stream()
+            .anyMatch(d -> d.getStatus() == com.nexxserve.nexxclinic.model.VisitDepartmentStatus.DEPARTMENT_EDITING);
+        if (visit.getStatus() == VisitStatus.COMPLETED && !hasEditingDept) {
+            return ApiResponse.error("Cannot add insurances to a completed visit. Use startBillEditing on a department to enter billing edit mode first.");
+        }
 
         List<UUID> uniqueIds = normalizeUniqueIds(insuranceIds);
         if (uniqueIds.isEmpty()) {
@@ -1005,15 +995,14 @@ public class VisitService {
         }
 
         Visit visit = visitOptional.get();
-        if (visit.getStatus() == VisitStatus.COMPLETED) {
-            return ApiResponse.error("Cannot remove insurances from a completed visit. Use startBillEditing to enter billing edit mode first.");
-        }
-
         if (visit.getStatus() == VisitStatus.CANCELLED) {
             return ApiResponse.error("Cannot remove insurances from a cancelled visit.");
         }
-
-        // BILL_EDITING: allowed — insurance mutations permitted in billing edit mode
+        boolean hasEditingDept = visitDepartmentRepository.findByVisitId(visitId).stream()
+            .anyMatch(d -> d.getStatus() == com.nexxserve.nexxclinic.model.VisitDepartmentStatus.DEPARTMENT_EDITING);
+        if (visit.getStatus() == VisitStatus.COMPLETED && !hasEditingDept) {
+            return ApiResponse.error("Cannot remove insurances from a completed visit. Use startBillEditing on a department to enter billing edit mode first.");
+        }
 
         List<UUID> uniqueIds = normalizeUniqueIds(insuranceIds);
         if (uniqueIds.isEmpty()) {

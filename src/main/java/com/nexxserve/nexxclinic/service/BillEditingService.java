@@ -3,12 +3,15 @@ package com.nexxserve.nexxclinic.service;
 import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.entity.Visit;
+import com.nexxserve.nexxclinic.entity.VisitDepartment;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
-import com.nexxserve.nexxclinic.model.VisitStatus;
+import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
 import com.nexxserve.nexxclinic.repository.VisitRepository;
 import com.nexxserve.nexxclinic.repository.VisitBillingRepository;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentBillingRepository;
 import com.nexxserve.nexxclinic.repository.WorkerRepository;
 import com.nexxserve.nexxclinic.entity.Worker;
 import java.util.List;
@@ -21,23 +24,24 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Manages the BILL_EDITING transitional status on visits.
+ * Manages the DEPARTMENT_EDITING transitional status on visit departments.
  * <p>
+ * Edit mode is per-department — the visit status is left untouched.
  * Flow:
  * <pre>
- *   COMPLETED → startBillEditing → BILL_EDITING → exit → COMPLETED
- *   CREATED/IN_PROGRESS → startBillEditing → BILL_EDITING → exit → same status
- *   BILL_EDITING → completeBillEditing → pre-edit status
- *   BILL_EDITING → cancelBillEditing → pre-edit status
+ *   COMPLETED/FINALISED → startBillEditing → DEPARTMENT_EDITING → exit → back to pre-edit status
+ *   DEPARTMENT_EDITING → completeBillEditing → pre-edit status
+ *   DEPARTMENT_EDITING → cancelBillEditing → pre-edit status
  * </pre>
- * The pre-edit status is remembered on the visit
+ * The pre-edit department status is remembered on the department
  * ({@code billing_edit_source_status}) so exiting the mode restores it.
  * <p>
- * While in BILL_EDITING, the following mutations are permitted:
+ * While a department is in DEPARTMENT_EDITING, the following mutations are permitted
+ * on that department:
  * <ul>
- *   <li>{@code editBillVisit} — correct billing lines</li>
+ *   <li>{@code editBillVisit} — correct billing lines for this department</li>
  *   <li>{@code addVisitDepartmentProduct} / {@code removeVisitDepartmentProduct}</li>
- *   <li>{@code linkVisitInsurances} / {@code unlinkVisitInsurances}</li>
+ *   <li>{@code updateVisitDepartmentProductQuantity}</li>
  * </ul>
  */
 @Service
@@ -48,31 +52,38 @@ public class BillEditingService {
 
     private final VisitRepository visitRepository;
     private final VisitBillingRepository visitBillingRepository;
+    private final VisitDepartmentRepository visitDepartmentRepository;
+    private final VisitDepartmentBillingRepository visitDepartmentBillingRepository;
     private final WorkerRepository workerRepository;
     private final VisitDepartmentProductRepository visitDepartmentProductRepository;
 
     public BillEditingService(
         VisitRepository visitRepository,
         VisitBillingRepository visitBillingRepository,
+        VisitDepartmentRepository visitDepartmentRepository,
+        VisitDepartmentBillingRepository visitDepartmentBillingRepository,
         WorkerRepository workerRepository,
         VisitDepartmentProductRepository visitDepartmentProductRepository
     ) {
         this.visitRepository = visitRepository;
         this.visitBillingRepository = visitBillingRepository;
+        this.visitDepartmentRepository = visitDepartmentRepository;
+        this.visitDepartmentBillingRepository = visitDepartmentBillingRepository;
         this.workerRepository = workerRepository;
         this.visitDepartmentProductRepository = visitDepartmentProductRepository;
     }
 
     /**
-     * Transition a COMPLETED or PENDING (CREATED/IN_PROGRESS) visit into
-     * BILL_EDITING mode so billing corrections and product/insurance changes
-     * can be made. The pre-edit status is remembered on the visit so exiting
-     * the mode restores it instead of always forcing COMPLETED.
+     * Transition a COMPLETED or FINALISED visit department into
+     * DEPARTMENT_EDITING mode so billing corrections and product changes
+     * can be made. The visit status is NOT changed.
+     * <p>
+     * CANCELLED departments cannot be edited.
      */
     @Transactional
-    public ApiResponse<?> startBillEditing(UUID visitId, AuthenticatedUser authUser) {
-        if (visitId == null) {
-            return ApiResponse.error("visitId is required.");
+    public ApiResponse<?> startBillEditing(UUID visitDepartmentId, AuthenticatedUser authUser) {
+        if (visitDepartmentId == null) {
+            return ApiResponse.error("visitDepartmentId is required.");
         }
 
         Worker actor = resolveWorker(authUser);
@@ -80,72 +91,61 @@ public class BillEditingService {
             return ApiResponse.error("Authentication is required.");
         }
 
-        Visit visit = visitRepository.findByIdForUpdate(visitId)
+        VisitDepartment dept = visitDepartmentRepository.findByIdForUpdate(visitDepartmentId)
             .orElse(null);
-        if (visit == null) {
-            return ApiResponse.error("Visit not found.");
+        if (dept == null) {
+            return ApiResponse.error("Visit department not found.");
         }
 
-        if (visit.getStatus() == VisitStatus.CANCELLED) {
-            return ApiResponse.error("Cannot edit billing on a cancelled visit.");
+        if (dept.getStatus() == VisitDepartmentStatus.CANCELLED) {
+            return ApiResponse.error("Cannot edit billing on a cancelled department.");
         }
 
-        if (visit.getStatus() == VisitStatus.FINALISED) {
-            return ApiResponse.error("Cannot edit billing on a finalised visit.");
-        }
-
-        if (visit.getStatus() == VisitStatus.BILL_EDITING) {
-            // A browser crash or lost connection must not leave financial work
-            // locked indefinitely. The visit's updatedAt is refreshed when the
-            // mode was entered; a later authorized user can safely reclaim an
-            // abandoned session after the timeout.
+        if (dept.getStatus() == VisitDepartmentStatus.DEPARTMENT_EDITING) {
+            // Abandoned session recovery: if the department has been in DEPARTMENT_EDITING
+            // for longer than the timeout, allow a new user to reclaim it.
             LocalDateTime timeout = LocalDateTime.now().minusMinutes(EDIT_SESSION_TIMEOUT_MINUTES);
-            if (visit.getUpdatedAt() != null && visit.getUpdatedAt().isBefore(timeout)) {
-                log.warn("Recovering abandoned billing edit session for visit {}", visitId);
-                visit.setStatus(
-                    visit.getBillingEditSourceStatus() != null
-                        ? visit.getBillingEditSourceStatus()
-                        : VisitStatus.COMPLETED
+            if (dept.getUpdatedAt() != null && dept.getUpdatedAt().isBefore(timeout)) {
+                log.warn("Recovering abandoned billing edit session for visit department {}", visitDepartmentId);
+                dept.setStatus(
+                    dept.getBillingEditSourceStatus() != null
+                        ? dept.getBillingEditSourceStatus()
+                        : VisitDepartmentStatus.COMPLETED
                 );
-                visit.setBillingEditSourceStatus(null);
+                dept.setBillingEditSourceStatus(null);
             } else {
-                return ApiResponse.error("Visit is already in billing edit mode.");
+                return ApiResponse.error("Department is already in billing edit mode.");
             }
         }
 
-        if (visit.getStatus() != VisitStatus.CREATED
-                && visit.getStatus() != VisitStatus.IN_PROGRESS
-                && visit.getStatus() != VisitStatus.COMPLETED) {
+        if (dept.getStatus() != VisitDepartmentStatus.COMPLETED
+                && dept.getStatus() != VisitDepartmentStatus.FINALISED) {
             return ApiResponse.error(
-                "Visit must be COMPLETED or PENDING (CREATED/IN_PROGRESS) to enter billing edit mode. Current status: " + visit.getStatus()
+                "Department must be COMPLETED or FINALISED to enter billing edit mode. Current status: " + dept.getStatus()
             );
         }
 
-        // Must have existing billing
-        if (visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId).isEmpty()) {
-            return ApiResponse.error("Visit has not been billed yet. Use billVisit first.");
+        // Must have existing billing for this department
+        if (!visitDepartmentBillingRepository.existsByVisitDepartmentId(visitDepartmentId)) {
+            return ApiResponse.error("Department has not been billed yet. Use billVisit first.");
         }
 
-        visit.setBillingEditSourceStatus(visit.getStatus());
-        visit.setStatus(VisitStatus.BILL_EDITING);
-        Visit saved = visitRepository.save(visit);
+        dept.setBillingEditSourceStatus(dept.getStatus());
+        dept.setStatus(VisitDepartmentStatus.DEPARTMENT_EDITING);
+        VisitDepartment saved = visitDepartmentRepository.save(dept);
 
-        // Transition billed/exempted products to CORRECTION_PENDING so the
-        // billing edit session has a consistent product-level indicator.
-        // editBillVisit Phase 1 already handles updatedProducts, but products
-        // that were BILLED/EXEMPTED/PATIENT_SHARE_EXEMPTED outside the
-        // correction list now visibly reflect the editing state too.
-        int productsUpdated = transitionProductsToCorrectionPending(visitId);
+        // Transition billed/exempted products in THIS department to CORRECTION_PENDING
+        int productsUpdated = transitionProductsToCorrectionPending(visitDepartmentId);
 
         log.info(
-            "Visit {} entered BILL_EDITING mode by user {} (source status {}, products transitioned: {})",
-            visitId, actor.getId(), visit.getBillingEditSourceStatus(), productsUpdated
+            "Visit department {} entered DEPARTMENT_EDITING mode by user {} (source status {}, products transitioned: {})",
+            visitDepartmentId, actor.getId(), saved.getBillingEditSourceStatus(), productsUpdated
         );
 
         return ApiResponse.success(
             "Billing edit mode activated.",
             Map.of(
-                "visitId", saved.getId(),
+                "visitDepartmentId", saved.getId(),
                 "status", saved.getStatus().name(),
                 "productsTransitioned", productsUpdated
             )
@@ -153,13 +153,13 @@ public class BillEditingService {
     }
 
     /**
-     * Exit BILL_EDITING mode and lock billing back to the visit's pre-edit
-     * status. Called after a successful editBillVisit.
+     * Exit DEPARTMENT_EDITING mode and restore the department's pre-edit status.
+     * Called after a successful editBillVisit on this department.
      */
     @Transactional
-    public ApiResponse<?> completeBillEditing(UUID visitId, AuthenticatedUser authUser) {
-        if (visitId == null) {
-            return ApiResponse.error("visitId is required.");
+    public ApiResponse<?> completeBillEditing(UUID visitDepartmentId, AuthenticatedUser authUser) {
+        if (visitDepartmentId == null) {
+            return ApiResponse.error("visitDepartmentId is required.");
         }
 
         Worker actor = resolveWorker(authUser);
@@ -167,42 +167,42 @@ public class BillEditingService {
             return ApiResponse.error("Authentication is required.");
         }
 
-        Visit visit = visitRepository.findByIdForUpdate(visitId)
+        VisitDepartment dept = visitDepartmentRepository.findByIdForUpdate(visitDepartmentId)
             .orElse(null);
-        if (visit == null) {
-            return ApiResponse.error("Visit not found.");
+        if (dept == null) {
+            return ApiResponse.error("Visit department not found.");
         }
 
-        if (visit.getStatus() != VisitStatus.BILL_EDITING) {
+        if (dept.getStatus() != VisitDepartmentStatus.DEPARTMENT_EDITING) {
             return ApiResponse.error(
-                "Visit is not in billing edit mode. Current status: " + visit.getStatus()
+                "Department is not in billing edit mode. Current status: " + dept.getStatus()
             );
         }
 
-        VisitStatus restored = restoreFromBillingEditing(visit);
+        VisitDepartmentStatus restored = restoreFromBillingEditing(dept);
 
         log.info(
-            "Visit {} exited BILL_EDITING → {} by user {}",
-            visitId, restored, actor.getId()
+            "Visit department {} exited DEPARTMENT_EDITING → {} by user {}",
+            visitDepartmentId, restored, actor.getId()
         );
 
         return ApiResponse.success(
-            "Billing edit mode deactivated. Visit is now " + restored + ".",
+            "Billing edit mode deactivated. Department is now " + restored + ".",
             Map.of(
-                "visitId", visit.getId(),
+                "visitDepartmentId", dept.getId(),
                 "status", restored.name()
             )
         );
     }
 
     /**
-     * Exit BILL_EDITING mode without saving changes (user cancelled the edit).
-     * Transitions back to the visit's pre-edit status.
+     * Exit DEPARTMENT_EDITING mode without saving changes (user cancelled the edit).
+     * Transitions back to the department's pre-edit status and restores products.
      */
     @Transactional
-    public ApiResponse<?> cancelBillEditing(UUID visitId, AuthenticatedUser authUser) {
-        if (visitId == null) {
-            return ApiResponse.error("visitId is required.");
+    public ApiResponse<?> cancelBillEditing(UUID visitDepartmentId, AuthenticatedUser authUser) {
+        if (visitDepartmentId == null) {
+            return ApiResponse.error("visitDepartmentId is required.");
         }
 
         Worker actor = resolveWorker(authUser);
@@ -210,67 +210,65 @@ public class BillEditingService {
             return ApiResponse.error("Authentication is required.");
         }
 
-        Visit visit = visitRepository.findByIdForUpdate(visitId)
+        VisitDepartment dept = visitDepartmentRepository.findByIdForUpdate(visitDepartmentId)
             .orElse(null);
-        if (visit == null) {
-            return ApiResponse.error("Visit not found.");
+        if (dept == null) {
+            return ApiResponse.error("Visit department not found.");
         }
 
-        if (visit.getStatus() != VisitStatus.BILL_EDITING) {
+        if (dept.getStatus() != VisitDepartmentStatus.DEPARTMENT_EDITING) {
             return ApiResponse.error(
-                "Visit is not in billing edit mode. Current status: " + visit.getStatus()
+                "Department is not in billing edit mode. Current status: " + dept.getStatus()
             );
         }
 
-        VisitStatus restored = restoreFromBillingEditing(visit);
+        VisitDepartmentStatus restored = restoreFromBillingEditing(dept);
 
         log.info(
-            "Visit {} exited BILL_EDITING → {} (cancelled) by user {}",
-            visitId, restored, actor.getId()
+            "Visit department {} exited DEPARTMENT_EDITING → {} (cancelled) by user {}",
+            visitDepartmentId, restored, actor.getId()
         );
 
         return ApiResponse.success(
-            "Billing edit mode cancelled. Visit is now " + restored + ".",
+            "Billing edit mode cancelled. Department is now " + restored + ".",
             Map.of(
-                "visitId", visit.getId(),
+                "visitDepartmentId", dept.getId(),
                 "status", restored.name()
             )
         );
     }
 
     /**
-     * Restore a visit from BILL_EDITING to its remembered pre-edit status,
-     * falling back to COMPLETED (legacy behaviour) when no source was recorded.
-     * Also restores any products that were transitioned to CORRECTION_PENDING
-     * back to BILLED, so the visit leaves a clean billable state.
+     * Restore a department from DEPARTMENT_EDITING to its remembered pre-edit status,
+     * falling back to COMPLETED when no source was recorded. Also restores any
+     * products that were transitioned to CORRECTION_PENDING back to BILLED.
      * Returns the restored status.
      */
-    private VisitStatus restoreFromBillingEditing(Visit visit) {
-        VisitStatus restored = visit.getBillingEditSourceStatus() != null
-            ? visit.getBillingEditSourceStatus()
-            : VisitStatus.COMPLETED;
-        visit.setBillingEditSourceStatus(null);
-        visit.setStatus(restored);
-        visitRepository.save(visit);
+    private VisitDepartmentStatus restoreFromBillingEditing(VisitDepartment dept) {
+        VisitDepartmentStatus restored = dept.getBillingEditSourceStatus() != null
+            ? dept.getBillingEditSourceStatus()
+            : VisitDepartmentStatus.COMPLETED;
+        dept.setBillingEditSourceStatus(null);
+        dept.setStatus(restored);
+        visitDepartmentRepository.save(dept);
 
-        // Restore CORRECTION_PENDING products back to BILLED so the visit
+        // Restore CORRECTION_PENDING products back to BILLED so the department
         // doesn't stay in an intermediate editing state after cancellation.
-        int restored2 = restoreCorrectionPendingProducts(visit.getId());
-        log.info("Restored {} CORRECTION_PENDING products to BILLED for visit {}", restored2, visit.getId());
+        int restored2 = restoreCorrectionPendingProducts(dept.getId());
+        log.info("Restored {} CORRECTION_PENDING products to BILLED for visit department {}", restored2, dept.getId());
 
         return restored;
     }
 
     /**
-     * Transition all billed/exempted/patient-share-exempted products in a visit
-     * to {@link VisitProductStatus#CORRECTION_PENDING} so the billing edit session
-     * has a consistent product-level indicator.
+     * Transition all billed/exempted/patient-share-exempted products in a
+     * visit department to {@link VisitProductStatus#CORRECTION_PENDING}.
      *
      * @return number of products transitioned
      */
-    private int transitionProductsToCorrectionPending(UUID visitId) {
+    private int transitionProductsToCorrectionPending(UUID visitDepartmentId) {
         List<VisitDepartmentProduct> products =
-            visitDepartmentProductRepository.findByVisitDepartmentVisitId(visitId);
+            visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartmentId);
         int count = 0;
         for (VisitDepartmentProduct p : products) {
             if (p.isDeleted()) continue;
@@ -292,9 +290,9 @@ public class BillEditingService {
      *
      * @return number of products restored
      */
-    private int restoreCorrectionPendingProducts(UUID visitId) {
+    private int restoreCorrectionPendingProducts(UUID visitDepartmentId) {
         List<VisitDepartmentProduct> products =
-            visitDepartmentProductRepository.findByVisitDepartmentVisitId(visitId);
+            visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartmentId);
         int count = 0;
         for (VisitDepartmentProduct p : products) {
             if (p.isDeleted()) continue;

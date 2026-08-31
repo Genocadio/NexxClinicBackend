@@ -165,9 +165,8 @@ public class VisitDepartmentService {
             return ApiResponse.error("Cannot add departments to a cancelled visit.");
         }
 
-        if (visit.getStatus() == VisitStatus.BILL_EDITING) {
-            return ApiResponse.error("Cannot add departments while the bill is being edited.");
-        }
+        // Note: per-department edit mode (DEPARTMENT_EDITING) does not block adding
+        // new departments — editing one department is independent of others.
 
         Optional<Department> departmentOptional = departmentRepository.findById(departmentId);
         if (departmentOptional.isEmpty()) {
@@ -849,16 +848,8 @@ public class VisitDepartmentService {
         }
 
         Visit visit = visitOptional.get();
-        if (visit.getStatus() == VisitStatus.COMPLETED) {
-            return ApiResponse.error("Cannot add products to a completed visit. Use startBillEditing to enter billing edit mode first.");
-        }
-
         if (visit.getStatus() == VisitStatus.CANCELLED) {
             return ApiResponse.error("Cannot add products to a cancelled visit.");
-        }
-
-        if (visit.getStatus() == VisitStatus.BILL_EDITING) {
-            // Allowed: BILL_EDITING mode permits product mutations
         }
 
         Optional<VisitDepartment> visitDepartmentOptional = visitDepartmentRepository.findByVisitIdAndDepartmentId(input.visitId(), input.departmentId());
@@ -870,12 +861,15 @@ public class VisitDepartmentService {
         VisitDepartment visitDepartment = visitDepartmentRepository.findByIdForUpdate(visitDepartmentOptional.get().getId())
                 .orElseThrow(() -> new RuntimeException("Visit department disappeared while locking"));
 
-        if (visitDepartment.getStatus() == VisitDepartmentStatus.COMPLETED) {
-            return ApiResponse.error("Cannot add products to a completed department.");
-        }
-
         if (visitDepartment.getStatus() == VisitDepartmentStatus.CANCELLED) {
             return ApiResponse.error("Cannot add products to a cancelled department.");
+        }
+
+        // Block adding products to a COMPLETED/FINALISED department unless it is in DEPARTMENT_EDITING mode
+        if ((visitDepartment.getStatus() == VisitDepartmentStatus.COMPLETED
+                || visitDepartment.getStatus() == VisitDepartmentStatus.FINALISED)
+                && visitDepartment.getStatus() != VisitDepartmentStatus.DEPARTMENT_EDITING) {
+            return ApiResponse.error("Cannot add products to a completed department. Use startBillEditing to enter billing edit mode.");
         }
 
         Optional<Product> productOptional = productRepository.findById(input.productId());
@@ -986,13 +980,14 @@ public class VisitDepartmentService {
         }
 
         VisitDepartmentProduct item = itemOptional.get();
+        VisitDepartmentStatus deptStatus = item.getVisitDepartment().getStatus();
+        // Allow edits when department is in DEPARTMENT_EDITING mode
+        boolean isDeptEditing = deptStatus == VisitDepartmentStatus.DEPARTMENT_EDITING;
         // D2 fix: products in a department that has been BILLED are frozen for finance.
         // Direct edits here would desync the clinical view from the bill. Use editBillVisit.
-        // (A BILLING-status department that was never actually billed is still editable —
-        //  it can be reopened via updateVisitDepartmentStatus, matching the D1 rule.)
-        if (item.getVisitDepartment().getStatus() == VisitDepartmentStatus.BILLING
+        if (!isDeptEditing && deptStatus == VisitDepartmentStatus.BILLING
                 && visitDepartmentBillingRepository.existsByVisitDepartmentId(item.getVisitDepartment().getId())) {
-            return ApiResponse.error("Cannot change the status of a product in a billed department. Use editBillVisit to correct the billing.");
+            return ApiResponse.error("Cannot change the status of a product in a billed department. Use startBillEditing to enter edit mode first.");
         }
         // S4: BILLED/EXEMPTED/PATIENT_SHARE_EXEMPTED/CORRECTION_PENDING are managed
         // exclusively by the billing service. Externally, product status is effectively
@@ -1029,19 +1024,23 @@ public class VisitDepartmentService {
 
         VisitDepartmentProduct item = itemOptional.get();
         Visit visit = item.getVisitDepartment().getVisit();
+        VisitDepartmentStatus deptStatus = item.getVisitDepartment().getStatus();
+        boolean isDeptEditing = deptStatus == VisitDepartmentStatus.DEPARTMENT_EDITING;
 
         // D2 fix: products in a department that has been BILLED are frozen for finance.
-        if (item.getVisitDepartment().getStatus() == VisitDepartmentStatus.BILLING
+        if (!isDeptEditing && deptStatus == VisitDepartmentStatus.BILLING
                 && visitDepartmentBillingRepository.existsByVisitDepartmentId(item.getVisitDepartment().getId())) {
-            return ApiResponse.error("Cannot change the quantity of a product in a billed department. Use editBillVisit to correct the billing.");
+            return ApiResponse.error("Cannot change the quantity of a product in a billed department. Use startBillEditing to enter edit mode first.");
         }
 
         // E4: a BILLED/EXEMPTED/PATIENT_SHARE_EXEMPTED product's live quantity must not
         // diverge from its billing snapshot. Quantity corrections go through editBillVisit.
-        if (item.getStatus() == VisitProductStatus.BILLED
-                || item.getStatus() == VisitProductStatus.EXEMPTED
-                || item.getStatus() == VisitProductStatus.PATIENT_SHARE_EXEMPTED) {
-            return ApiResponse.error("Cannot change the quantity of a billed or exempted product. Use editBillVisit to correct the billing.");
+        // In DEPARTMENT_EDITING mode, quantity changes are allowed.
+        if (!isDeptEditing
+                && (item.getStatus() == VisitProductStatus.BILLED
+                    || item.getStatus() == VisitProductStatus.EXEMPTED
+                    || item.getStatus() == VisitProductStatus.PATIENT_SHARE_EXEMPTED)) {
+            return ApiResponse.error("Cannot change the quantity of a billed or exempted product. Use startBillEditing to enter edit mode first.");
         }
 
         if (input.quantity().compareTo(BigDecimal.ZERO) <= 0) {
@@ -1085,6 +1084,8 @@ public class VisitDepartmentService {
         VisitDepartmentProduct item = itemOptional.get();
         Visit visit = item.getVisitDepartment().getVisit();
         VisitDepartment affectedDepartment = item.getVisitDepartment();
+        VisitDepartmentStatus deptStatus = affectedDepartment.getStatus();
+        boolean isDeptEditing = deptStatus == VisitDepartmentStatus.DEPARTMENT_EDITING;
 
         // Profile products are managed by the profile — they cannot be removed
         // individually. Only changeVisitDepartmentProfile can replace them.
@@ -1093,9 +1094,9 @@ public class VisitDepartmentService {
         }
 
         // D2 fix: products in a department that has been BILLED are frozen for finance.
-        if (affectedDepartment.getStatus() == VisitDepartmentStatus.BILLING
+        if (!isDeptEditing && deptStatus == VisitDepartmentStatus.BILLING
                 && visitDepartmentBillingRepository.existsByVisitDepartmentId(affectedDepartment.getId())) {
-            return ApiResponse.error("Cannot remove a product from a billed department. Use editBillVisit to correct the billing.");
+            return ApiResponse.error("Cannot remove a product from a billed department. Use startBillEditing to enter edit mode first.");
         }
 
         // B5: never hard-delete a product that has billing history. If a billing item
@@ -1272,18 +1273,19 @@ public class VisitDepartmentService {
             return ApiResponse.error("Cannot change processor on a cancelled department.");
         }
 
-        // BILL_EDITING mode: allow processor changes on completed/billing departments.
-        Visit visit = visitDepartment.getVisit();
-        boolean billEditingMode = visit != null && visit.getStatus() == VisitStatus.BILL_EDITING;
+        // DEPARTMENT_EDITING mode: allow processor changes on completed/billing departments.
+        boolean deptEditingMode = visitDepartment.getStatus() == VisitDepartmentStatus.DEPARTMENT_EDITING;
 
-        if (visitDepartment.getStatus() == VisitDepartmentStatus.COMPLETED && !billEditingMode) {
-            return ApiResponse.error("Cannot change processor on a completed department.");
+        if ((visitDepartment.getStatus() == VisitDepartmentStatus.COMPLETED
+                || visitDepartment.getStatus() == VisitDepartmentStatus.FINALISED)
+                && !deptEditingMode) {
+            return ApiResponse.error("Cannot change processor on a completed department. Use startBillEditing to enter edit mode.");
         }
 
         // BILLING guard: once a department is billed, only FINANCE/ADMIN can change processor.
         if (visitDepartment.getStatus() == VisitDepartmentStatus.BILLING
                 && visitDepartmentBillingRepository.existsByVisitDepartmentId(visitDepartment.getId())
-                && !billEditingMode) {
+                && !deptEditingMode) {
             if (!hasFinanceOrAdminRole(authUser)) {
                 return ApiResponse.error("Cannot change processor on a billed department. Only FINANCE or ADMIN can do this.");
             }

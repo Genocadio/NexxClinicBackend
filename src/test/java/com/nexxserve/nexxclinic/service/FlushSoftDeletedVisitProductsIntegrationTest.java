@@ -168,6 +168,16 @@ class FlushSoftDeletedVisitProductsIntegrationTest {
     }
 
     private void softDeleteProduct(Fixture fx) {
+        // Ensure department is in DEPARTMENT_EDITING mode for the edit
+        VisitDepartment dept = visitDepartmentRepository.findById(fx.visitDepartment().getId()).orElseThrow();
+        if (dept.getStatus() != VisitDepartmentStatus.DEPARTMENT_EDITING) {
+            if (dept.getStatus() == VisitDepartmentStatus.BILLING) {
+                dept.setStatus(VisitDepartmentStatus.COMPLETED);
+                dept.setCompletedAt(java.time.LocalDateTime.now());
+                visitDepartmentRepository.save(dept);
+            }
+            billEditingService.startBillEditing(fx.visitDepartment().getId(), auth(fx.actor()));
+        }
         EditBillVisitInput input = new EditBillVisitInput(
             fx.visit().getId(),
             latestBillingVersionId(fx.visit().getId()),
@@ -256,8 +266,13 @@ class FlushSoftDeletedVisitProductsIntegrationTest {
         assertEquals(ResponseStatus.SUCCESS,
             visitBillingService.billVisit(billInput, auth(fx.actor())).status());
 
-        // Enter BILL_EDITING mode before soft-deleting
-        billEditingService.startBillEditing(fx.visit().getId(), auth(fx.actor()));
+        // Complete the department (BILLING -> COMPLETED) so DEPARTMENT_EDITING is allowed
+        fx.visitDepartment().setStatus(VisitDepartmentStatus.COMPLETED);
+        fx.visitDepartment().setCompletedAt(java.time.LocalDateTime.now());
+        visitDepartmentRepository.save(fx.visitDepartment());
+
+        // Enter DEPARTMENT_EDITING mode before soft-deleting
+        billEditingService.startBillEditing(fx.visitDepartment().getId(), auth(fx.actor()));
 
         // Now soft-delete via edit (remove only fx.product, keep keepProduct)
         softDeleteProduct(fx);

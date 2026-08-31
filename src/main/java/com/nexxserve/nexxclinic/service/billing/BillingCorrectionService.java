@@ -10,6 +10,7 @@ import com.nexxserve.nexxclinic.entity.Worker;
 import com.nexxserve.nexxclinic.graphql.input.BillVisitInput;
 import com.nexxserve.nexxclinic.graphql.input.EditBillVisitInput;
 import com.nexxserve.nexxclinic.model.VisitDepartmentProductSource;
+import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
 import com.nexxserve.nexxclinic.model.VisitStatus;
 import com.nexxserve.nexxclinic.repository.ProductRepository;
@@ -292,16 +293,23 @@ public class BillingCorrectionService {
             }
         }
 
-        // BILL_EDITING guard: billing corrections require the visit to be in
-        // BILL_EDITING mode. COMPLETED visits must call startBillEditing first.
+        // DEPARTMENT_EDITING guard: billing corrections require at least one
+        // department in DEPARTMENT_EDITING mode. COMPLETED/FINALISED departments
+        // must call startBillEditing (per-department) first.
         // PENDING visits (CREATED/IN_PROGRESS) are allowed (pre-completion
-        // corrections), matching editBillVisit's own guard.
-        if (visit.getStatus() != VisitStatus.BILL_EDITING
-                && visit.getStatus() != VisitStatus.IN_PROGRESS
-                && visit.getStatus() != VisitStatus.CREATED) {
+        // corrections).
+        boolean hasEditingDepartment = input.departments().stream().anyMatch(d -> {
+            if (d == null || d.visitDepartmentId() == null) return false;
+            return visitDepartmentRepository.findById(d.visitDepartmentId())
+                .map(vd -> vd.getStatus() == VisitDepartmentStatus.DEPARTMENT_EDITING)
+                .orElse(false);
+        });
+        boolean isPreBillingVisit = visit.getStatus() == VisitStatus.IN_PROGRESS
+                || visit.getStatus() == VisitStatus.CREATED;
+        if (!hasEditingDepartment && !isPreBillingVisit) {
             return ApiResponse.error(
-                "Billing corrections require the visit to be in BILL_EDITING mode. " +
-                "Use startBillEditing before editing a completed visit."
+                "Billing corrections require at least one department to be in DEPARTMENT_EDITING mode. " +
+                "Use startBillEditing on the department you want to edit."
             );
         }
 

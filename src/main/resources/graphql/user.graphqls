@@ -825,7 +825,7 @@ type BillEditingResponse implements ApiResponse {
 }
 
 type BillEditingData {
-  visitId: ID!
+  visitDepartmentId: ID!
   status: String!
 }
 
@@ -1855,13 +1855,13 @@ type Mutation {
   """Permanently delete an unbilled visit and all its data. Only ADMIN and MANAGER."""
   deleteVisit(visitId: ID!): BooleanResponse!
 
-  # ── Bill Editing Mode ────────────────────────────────────────────────────
-  """Enter BILL_EDITING mode on a COMPLETED visit to allow billing corrections."""
-  startBillEditing(visitId: ID!): BillEditingResponse!
-  """Exit BILL_EDITING mode and lock billing back to COMPLETED."""
-  completeBillEditing(visitId: ID!): BillEditingResponse!
-  """Exit BILL_EDITING mode without saving (user cancelled the edit)."""
-  cancelBillEditing(visitId: ID!): BillEditingResponse!
+  # ── Bill Editing Mode (per-department) ──────────────────────────────────
+  """Enter DEPARTMENT_EDITING mode on a COMPLETED/FINALISED department to allow billing corrections. Visit status is untouched."""
+  startBillEditing(visitDepartmentId: ID!): BillEditingResponse!
+  """Exit DEPARTMENT_EDITING mode and restore department pre-edit status."""
+  completeBillEditing(visitDepartmentId: ID!): BillEditingResponse!
+  """Exit DEPARTMENT_EDITING mode without saving (user cancelled the edit)."""
+  cancelBillEditing(visitDepartmentId: ID!): BillEditingResponse!
   updateClinicProfile(input: UpdateClinicProfileInput!): ClinicProfileResponse!
   deleteClinicProfile: BooleanResponse!
   reindexSearchIndexes(indexes: [SearchIndexType!]!): BooleanResponse!

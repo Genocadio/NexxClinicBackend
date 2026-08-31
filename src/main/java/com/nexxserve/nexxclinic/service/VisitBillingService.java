@@ -204,19 +204,32 @@ public class VisitBillingService {
         // runs, so the pessimistic lock must be acquired here, before any mutation.
         visitRepository.findByIdForUpdate(input.visitId());
 
-        // BILL_EDITING guard: editing an already-billed visit requires BILL_EDITING mode.
-        // Use startBillEditing mutation to enter this mode on a COMPLETED visit.
+        // DEPARTMENT_EDITING guard: at least one department in the edit must be in
+        // DEPARTMENT_EDITING mode. Use startBillEditing (per-department) first.
         java.util.Optional<com.nexxserve.nexxclinic.entity.Visit> visitCheck =
             visitRepository.findById(input.visitId());
         if (visitCheck.isPresent()) {
             com.nexxserve.nexxclinic.entity.Visit v = visitCheck.get();
-            if (v.getStatus() == com.nexxserve.nexxclinic.model.VisitStatus.COMPLETED) {
-                return ApiResponse.error(
-                    "Visit is COMPLETED. Use startBillEditing to enter billing edit mode first."
-                );
-            }
             if (v.getStatus() == com.nexxserve.nexxclinic.model.VisitStatus.CANCELLED) {
                 return ApiResponse.error("Cannot edit billing on a cancelled visit.");
+            }
+            // Allow pre-billing edits (CREATED/IN_PROGRESS visits without billing)
+            boolean hasExistingBilling = billingVersionBuilder.hasAnyExistingBilling(input.visitId());
+            if (hasExistingBilling) {
+                // For already-billed visits, at least one department in the input must be in DEPARTMENT_EDITING
+                boolean anyDeptEditing = input.departments() != null && input.departments().stream()
+                    .anyMatch(d -> {
+                        if (d == null || d.visitDepartmentId() == null) return false;
+                        return visitDepartmentRepository.findById(d.visitDepartmentId())
+                            .map(vd -> vd.getStatus() == com.nexxserve.nexxclinic.model.VisitDepartmentStatus.DEPARTMENT_EDITING)
+                            .orElse(false);
+                    });
+                if (!anyDeptEditing) {
+                    return ApiResponse.error(
+                        "At least one department must be in DEPARTMENT_EDITING mode to edit billing. " +
+                        "Use startBillEditing on the department you want to edit."
+                    );
+                }
             }
         }
 
@@ -261,29 +274,24 @@ public class VisitBillingService {
                     .setRollbackOnly();
             }
             if (result.status() == com.nexxserve.nexxclinic.model.ResponseStatus.SUCCESS) {
-                // Saving a correction and unlocking the visit are one business
-                // operation. Doing this in the same transaction prevents a
-                // saved bill from leaving the visit stranded in BILL_EDITING.
-                // Reload the current managed instance: the stale visitCheck captured
-                // before prepareBill can be a different persistence-context instance
-                // than the one later queries return (see reopensCompletedVisit case).
-                visitRepository.findById(input.visitId())
-                    .ifPresent(v -> {
-                        if (v.getStatus() == VisitStatus.BILL_EDITING) {
-                            // Restore the pre-edit status (remembered when the
-                            // visit entered BILL_EDITING) instead of always
-                            // force-completing. Pending visits (CREATED/
-                            // IN_PROGRESS) must return to their own status;
-                            // completed visits return to COMPLETED. Legacy
-                            // sessions without a remembered source default to
-                            // COMPLETED.
-                            VisitStatus editSource = v.getBillingEditSourceStatus() != null
-                                ? v.getBillingEditSourceStatus()
-                                : VisitStatus.COMPLETED;
-                            v.setBillingEditSourceStatus(null);
-                            v.setStatus(editSource);
-                        }
-                    });
+                // Per-department editing: restore DEPARTMENT_EDITING departments
+                // back to their pre-edit status. Visit status is untouched.
+                if (input.departments() != null) {
+                    for (EditBillVisitInput.EditBillVisitDepartmentInput dept : input.departments()) {
+                        if (dept == null || dept.visitDepartmentId() == null) continue;
+                        visitDepartmentRepository.findById(dept.visitDepartmentId())
+                            .ifPresent(vd -> {
+                                if (vd.getStatus() == com.nexxserve.nexxclinic.model.VisitDepartmentStatus.DEPARTMENT_EDITING) {
+                                    com.nexxserve.nexxclinic.model.VisitDepartmentStatus editSource =
+                                        vd.getBillingEditSourceStatus() != null
+                                            ? vd.getBillingEditSourceStatus()
+                                            : com.nexxserve.nexxclinic.model.VisitDepartmentStatus.COMPLETED;
+                                    vd.setBillingEditSourceStatus(null);
+                                    vd.setStatus(editSource);
+                                }
+                            });
+                    }
+                }
             }
             return result;
         } catch (IllegalArgumentException e) {
@@ -1998,8 +2006,11 @@ public class VisitBillingService {
         if (visit == null) {
             return ApiResponse.error("Visit not found for this billing.");
         }
-        if (visit.getStatus() == com.nexxserve.nexxclinic.model.VisitStatus.BILL_EDITING) {
-            return ApiResponse.error("Cannot update billing date while the visit is in billing edit mode.");
+        // Check if the department being billed is in DEPARTMENT_EDITING
+        if (billing.getVisitDepartmentBilling().getVisitDepartment() != null
+                && billing.getVisitDepartmentBilling().getVisitDepartment().getStatus()
+                    == com.nexxserve.nexxclinic.model.VisitDepartmentStatus.DEPARTMENT_EDITING) {
+            return ApiResponse.error("Cannot update billing date while the department is in billing edit mode.");
         }
         if (visit.getStatus() == com.nexxserve.nexxclinic.model.VisitStatus.CANCELLED) {
             return ApiResponse.error("Cannot update billing date for a cancelled visit.");
