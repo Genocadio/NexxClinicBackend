@@ -3,11 +3,15 @@ package com.nexxserve.nexxclinic.service;
 import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.entity.Visit;
+import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
 import com.nexxserve.nexxclinic.model.VisitStatus;
+import com.nexxserve.nexxclinic.model.VisitProductStatus;
 import com.nexxserve.nexxclinic.repository.VisitRepository;
 import com.nexxserve.nexxclinic.repository.VisitBillingRepository;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
 import com.nexxserve.nexxclinic.repository.WorkerRepository;
 import com.nexxserve.nexxclinic.entity.Worker;
+import java.util.List;
 import java.util.Map;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -45,15 +49,18 @@ public class BillEditingService {
     private final VisitRepository visitRepository;
     private final VisitBillingRepository visitBillingRepository;
     private final WorkerRepository workerRepository;
+    private final VisitDepartmentProductRepository visitDepartmentProductRepository;
 
     public BillEditingService(
         VisitRepository visitRepository,
         VisitBillingRepository visitBillingRepository,
-        WorkerRepository workerRepository
+        WorkerRepository workerRepository,
+        VisitDepartmentProductRepository visitDepartmentProductRepository
     ) {
         this.visitRepository = visitRepository;
         this.visitBillingRepository = visitBillingRepository;
         this.workerRepository = workerRepository;
+        this.visitDepartmentProductRepository = visitDepartmentProductRepository;
     }
 
     /**
@@ -123,16 +130,24 @@ public class BillEditingService {
         visit.setStatus(VisitStatus.BILL_EDITING);
         Visit saved = visitRepository.save(visit);
 
+        // Transition billed/exempted products to CORRECTION_PENDING so the
+        // billing edit session has a consistent product-level indicator.
+        // editBillVisit Phase 1 already handles updatedProducts, but products
+        // that were BILLED/EXEMPTED/PATIENT_SHARE_EXEMPTED outside the
+        // correction list now visibly reflect the editing state too.
+        int productsUpdated = transitionProductsToCorrectionPending(visitId);
+
         log.info(
-            "Visit {} entered BILL_EDITING mode by user {} (source status {})",
-            visitId, actor.getId(), visit.getBillingEditSourceStatus()
+            "Visit {} entered BILL_EDITING mode by user {} (source status {}, products transitioned: {})",
+            visitId, actor.getId(), visit.getBillingEditSourceStatus(), productsUpdated
         );
 
         return ApiResponse.success(
             "Billing edit mode activated.",
             Map.of(
                 "visitId", saved.getId(),
-                "status", saved.getStatus().name()
+                "status", saved.getStatus().name(),
+                "productsTransitioned", productsUpdated
             )
         );
     }
@@ -226,6 +241,8 @@ public class BillEditingService {
     /**
      * Restore a visit from BILL_EDITING to its remembered pre-edit status,
      * falling back to COMPLETED (legacy behaviour) when no source was recorded.
+     * Also restores any products that were transitioned to CORRECTION_PENDING
+     * back to BILLED, so the visit leaves a clean billable state.
      * Returns the restored status.
      */
     private VisitStatus restoreFromBillingEditing(Visit visit) {
@@ -235,7 +252,59 @@ public class BillEditingService {
         visit.setBillingEditSourceStatus(null);
         visit.setStatus(restored);
         visitRepository.save(visit);
+
+        // Restore CORRECTION_PENDING products back to BILLED so the visit
+        // doesn't stay in an intermediate editing state after cancellation.
+        int restored2 = restoreCorrectionPendingProducts(visit.getId());
+        log.info("Restored {} CORRECTION_PENDING products to BILLED for visit {}", restored2, visit.getId());
+
         return restored;
+    }
+
+    /**
+     * Transition all billed/exempted/patient-share-exempted products in a visit
+     * to {@link VisitProductStatus#CORRECTION_PENDING} so the billing edit session
+     * has a consistent product-level indicator.
+     *
+     * @return number of products transitioned
+     */
+    private int transitionProductsToCorrectionPending(UUID visitId) {
+        List<VisitDepartmentProduct> products =
+            visitDepartmentProductRepository.findByVisitDepartmentVisitId(visitId);
+        int count = 0;
+        for (VisitDepartmentProduct p : products) {
+            if (p.isDeleted()) continue;
+            if (p.getStatus() == VisitProductStatus.BILLED
+                    || p.getStatus() == VisitProductStatus.EXEMPTED
+                    || p.getStatus() == VisitProductStatus.PATIENT_SHARE_EXEMPTED) {
+                p.setStatus(VisitProductStatus.CORRECTION_PENDING);
+                visitDepartmentProductRepository.save(p);
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Restore any products stuck in {@link VisitProductStatus#CORRECTION_PENDING}
+     * back to BILLED. This happens when a billing edit session is cancelled
+     * before {@code editBillVisit} could re-bill them.
+     *
+     * @return number of products restored
+     */
+    private int restoreCorrectionPendingProducts(UUID visitId) {
+        List<VisitDepartmentProduct> products =
+            visitDepartmentProductRepository.findByVisitDepartmentVisitId(visitId);
+        int count = 0;
+        for (VisitDepartmentProduct p : products) {
+            if (p.isDeleted()) continue;
+            if (p.getStatus() == VisitProductStatus.CORRECTION_PENDING) {
+                p.setStatus(VisitProductStatus.BILLED);
+                visitDepartmentProductRepository.save(p);
+                count++;
+            }
+        }
+        return count;
     }
 
     private Worker resolveWorker(AuthenticatedUser authUser) {

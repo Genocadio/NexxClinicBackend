@@ -393,7 +393,9 @@ class EditBillVisitIntegrationTest {
         assertEquals(1, billingVersionCount(fx.visit().getId()));
         VisitDepartmentProduct reloaded = visitDepartmentProductRepository
             .findById(fx.product().getId()).orElseThrow();
-        assertEquals(VisitProductStatus.BILLED, reloaded.getStatus());
+        // Product stays CORRECTION_PENDING: startBillEditing transitioned it from
+        // BILLED before the edit was attempted, and editBillVisit rolled back.
+        assertEquals(VisitProductStatus.CORRECTION_PENDING, reloaded.getStatus());
     }
 
     // ─── 6. Cancelled visit rejected ───────────────────────────
@@ -474,7 +476,9 @@ class EditBillVisitIntegrationTest {
 
         VisitDepartmentProduct after = visitDepartmentProductRepository
             .findById(fx.product().getId()).orElseThrow();
-        assertEquals(VisitProductStatus.BILLED, after.getStatus());
+        // Product stays CORRECTION_PENDING: startBillEditing transitioned it from
+        // BILLED before the edit was attempted, and editBillVisit rolled back.
+        assertEquals(VisitProductStatus.CORRECTION_PENDING, after.getStatus());
         assertEquals(qtyBefore, after.getQuantity());
         assertEquals(1, billingVersionCount(fx.visit().getId()));
     }

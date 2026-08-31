@@ -400,13 +400,14 @@ public class VisitPriceEstimateService {
     private record ResolvedShare(int percentage, PatientShareSource source) {}
 
     /**
-     * Resolves the patient share percentage for a product, following the same
-     * resolution chain as BillingPricingCalculator:
-     * 1. Coverage rule: dept + encounterType (most specific)
-     * 2. Coverage rule: dept only
-     * 3. Coverage rule: encounterType only
-     * 4. Base coverage (no conditions)
-     * 5. Patient-specific default (PatientInsurance.patientSharePercentage)
+     * Resolves the patient share percentage for a product. Mirrors the updated
+     * BillingPricingCalculator layer ordering where patient-specific takes
+     * priority over generic provider coverage rules:
+     * 1. Patient-specific default (patientShareCoverage FK or legacy integer)
+     * 2. Coverage rule: dept + encounterType (most specific)
+     * 3. Coverage rule: dept only
+     * 4. Coverage rule: encounterType only
+     * 5. Base coverage (no conditions)
      * 6. 0 (insurance covers everything)
      */
     private ResolvedShare resolvePatientShare(
@@ -415,6 +416,19 @@ public class VisitPriceEstimateService {
         EncounterType encounterType,
         Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetchedCoverages
     ) {
+        // 1. Patient-specific assigned tier — a per-patient negotiated rate takes
+        // priority over generic provider coverage rules so the price estimate
+        // shown before billing matches exactly what the biller will submit.
+        if (pi.getPatientShareCoverage() != null) {
+            return new ResolvedShare(
+                pi.getPatientShareCoverage().getPatientSharePercentage(),
+                PatientShareSource.PATIENT_DEFAULT
+            );
+        }
+        if (pi.getPatientSharePercentage() != null) {
+            return new ResolvedShare(pi.getPatientSharePercentage(), PatientShareSource.PATIENT_DEFAULT);
+        }
+
         UUID providerId = pi.getInsuranceProvider().getId();
 
         Map<UUID, List<InsuranceCoverage>> byDept = prefetchedCoverages != null
@@ -422,7 +436,7 @@ public class VisitPriceEstimateService {
             : null;
 
         if (byDept != null) {
-            // 1. Exact: dept + encounterType
+            // 2. Exact: dept + encounterType
             if (departmentId != null && encounterType != null) {
                 List<InsuranceCoverage> deptCoverages = byDept.get(departmentId);
                 if (deptCoverages != null) {
@@ -437,7 +451,7 @@ public class VisitPriceEstimateService {
                 }
             }
 
-            // 2. Dept only
+            // 3. Dept only
             if (departmentId != null) {
                 List<InsuranceCoverage> deptCoverages = byDept.get(departmentId);
                 if (deptCoverages != null) {
@@ -452,7 +466,7 @@ public class VisitPriceEstimateService {
                 }
             }
 
-            // 3. EncounterType only
+            // 4. EncounterType only
             if (encounterType != null) {
                 List<InsuranceCoverage> nullDeptCoverages = byDept.get(null);
                 if (nullDeptCoverages != null) {
@@ -467,7 +481,7 @@ public class VisitPriceEstimateService {
                 }
             }
 
-            // 4. Base (no conditions)
+            // 5. Base (no conditions)
             List<InsuranceCoverage> providerCoverages = byDept.get(null);
             if (providerCoverages != null) {
                 for (InsuranceCoverage cov : providerCoverages) {
@@ -479,18 +493,6 @@ public class VisitPriceEstimateService {
                     }
                 }
             }
-        }
-
-        // 5. Patient-specific default
-        Integer patientDefault = null;
-        if (pi.getPatientShareCoverage() != null) {
-            patientDefault = pi.getPatientShareCoverage().getPatientSharePercentage();
-        }
-        if (patientDefault == null) {
-            patientDefault = pi.getPatientSharePercentage();
-        }
-        if (patientDefault != null) {
-            return new ResolvedShare(patientDefault, PatientShareSource.PATIENT_DEFAULT);
         }
 
         // 6. Provider base (fallback lazy-load)

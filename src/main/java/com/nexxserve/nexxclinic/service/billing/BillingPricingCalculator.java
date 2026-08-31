@@ -110,12 +110,15 @@ public class BillingPricingCalculator {
      *
      * <p>Resolution chain (most specific wins):
      * <ol>
-     *   <li><b>Per-line override</b> — only accepted when no coverage blocks it.</li>
+     *   <li><b>Per-line override</b> — only accepted when no exact coverage rule blocks it.</li>
+     *   <li><b>Patient-specific tier</b> — {@code PatientInsurance.patientShareCoverage} FK
+     *       (or legacy integer column). Per-patient negotiated rates take priority over
+     *       generic provider rules. Previously this was Layer 3, causing dept-level rules
+     *       to silently override a patient's personal rate.</li>
      *   <li><b>Coverage: dept + encounterType</b> — exact match.</li>
      *   <li><b>Coverage: dept only</b> — department-level.</li>
      *   <li><b>Coverage: encounterType only</b> — encounter-type-level.</li>
      *   <li><b>Base coverage</b> — provider-wide (no conditions).</li>
-     *   <li><b>Patient default</b> — {@code PatientInsurance.patientSharePercentage}.</li>
      *   <li><b>0</b> — insurance covers everything.</li>
      * </ol>
      */
@@ -140,30 +143,39 @@ public class BillingPricingCalculator {
             InsuranceCoverage overrideCoverage = resolveOverrideCoverage(
                 perLineOverrideCoverageId, providerId, prefetchedCoverages
             );
-            if (overrideCoverage != null && isOverrideAllowed(providerId, departmentId, encounterType, prefetchedCoverages)) {
+            // Honor the override only when the tier's own conditions are satisfied
+            // by the current billing context. A dept/encounterType-specific tier
+            // must not be applied on a visit that doesn't match those conditions.
+            if (overrideCoverage != null && isOverrideAllowed(overrideCoverage, departmentId, encounterType)) {
                 int clamped = Math.max(0, Math.min(100, overrideCoverage.getPatientSharePercentage()));
                 return new ResolvedPatientShare(clamped, PatientShareSource.OVERRIDE);
             }
-            // Override blocked or coverage not found — fall through to coverage resolution
+            // Override rejected (tier conditions not met or coverage not found) —
+            // fall through to patient-specific and coverage-rule resolution.
         }
 
-        // Layer 2: coverage-based resolution (most specific wins)
+        // Layer 2: patient-specific assigned tier — the FK to an InsuranceCoverage
+        // record is a per-patient negotiated rate and takes priority over generic
+        // provider coverage rules (Layer 3). Without this ordering, a dept-level
+        // rule (e.g. Dental/OUTPATIENT → 20%) would silently override a patient's
+        // personal rate (e.g. 10%), causing the billed % to differ from what the
+        // frontend displayed. The legacy integer column is a lower-priority fallback
+        // for patients who were set up before the FK was introduced.
+        if (appliedInsurance.getPatientShareCoverage() != null) {
+            int patientCoveragePct = appliedInsurance.getPatientShareCoverage().getPatientSharePercentage();
+            return new ResolvedPatientShare(patientCoveragePct, PatientShareSource.PATIENT_DEFAULT);
+        }
+        if (appliedInsurance.getPatientSharePercentage() != null) {
+            return new ResolvedPatientShare(
+                appliedInsurance.getPatientSharePercentage(), PatientShareSource.PATIENT_DEFAULT
+            );
+        }
+
+        // Layer 3: provider coverage rules (most specific wins: dept+type → dept → type → base).
+        // These are provider-wide rules that apply to all patients without a personal tier.
         Integer coveragePct = lookupCoveragePercentage(providerId, departmentId, encounterType, prefetchedCoverages);
         if (coveragePct != null) {
             return new ResolvedPatientShare(coveragePct, PatientShareSource.RULE);
-        }
-
-        // Layer 3: patient-specific default — prefer the FK reference to an
-        // InsuranceCoverage record (new path), fall back to the legacy integer column.
-        Integer patientDefault = null;
-        if (appliedInsurance.getPatientShareCoverage() != null) {
-            patientDefault = appliedInsurance.getPatientShareCoverage().getPatientSharePercentage();
-        }
-        if (patientDefault == null) {
-            patientDefault = appliedInsurance.getPatientSharePercentage();
-        }
-        if (patientDefault != null) {
-            return new ResolvedPatientShare(patientDefault, PatientShareSource.PATIENT_DEFAULT);
         }
 
         // Layer 4: provider base coverage — try prefetched map first, then lazy-load
@@ -181,37 +193,39 @@ public class BillingPricingCalculator {
     }
 
     /**
-     * Determines whether a per-line override is allowed. Only an exact
-     * (department + encounterType) coverage rule blocks the override; partial
-     * matches, base-only setups and rule sets for other departments must not
-     * silently swallow it.
+     * Determines whether a per-line override is allowed for the current billing context.
+     *
+     * <p>A tier override is valid when the tier's own conditions are satisfied by
+     * the billing line's department and encounter type:
+     * <ul>
+     *   <li>Base tier (no dept, no encounterType) → always valid</li>
+     *   <li>Dept-only tier → valid when departmentId matches</li>
+     *   <li>EncounterType-only tier → valid when encounterType matches</li>
+     *   <li>Dept + encounterType tier → valid only when BOTH match</li>
+     * </ul>
+     *
+     * <p>An override whose tier conditions don’t fit the current context is
+     * silently dropped so resolution falls through to the auto-selection chain.
      */
     private boolean isOverrideAllowed(
-        UUID providerId,
+        InsuranceCoverage overrideTier,
         UUID departmentId,
-        EncounterType encounterType,
-        Map<UUID, Map<UUID, List<InsuranceCoverage>>> prefetchedCoverages
+        EncounterType encounterType
     ) {
-        Map<UUID, List<InsuranceCoverage>> byDept = prefetchedCoverages != null
-            ? prefetchedCoverages.get(providerId)
-            : null;
+        if (overrideTier == null) return false;
 
-        if (byDept == null || byDept.isEmpty()) {
-            return true;
-        }
+        UUID tierDept = overrideTier.getDepartment() != null ? overrideTier.getDepartment().getId() : null;
+        EncounterType tierEt = overrideTier.getEncounterType();
 
-        for (Map.Entry<UUID, List<InsuranceCoverage>> entry : byDept.entrySet()) {
-            UUID covDeptId = entry.getKey();
-            for (InsuranceCoverage cov : entry.getValue()) {
-                if (
-                    deptMatches(departmentId, covDeptId) &&
-                    encounterType != null &&
-                    encounterType.equals(cov.getEncounterType())
-                ) {
-                    return false;
-                }
-            }
-        }
+        // Base tier — no conditions, always applicable
+        if (tierDept == null && tierEt == null) return true;
+
+        // Has a dept condition — must match the billing department
+        if (tierDept != null && !tierDept.equals(departmentId)) return false;
+
+        // Has an encounterType condition — must match the visit encounter type
+        if (tierEt != null && !tierEt.equals(encounterType)) return false;
+
         return true;
     }
 
@@ -278,7 +292,22 @@ public class BillingPricingCalculator {
     }
 
     /**
-     * Looks up the most specific coverage percentage for the given provider/department/encounter type.
+     * Finds the lowest patient-share % among coverage tiers that are applicable
+     * to the current billing context (provider + department + encounterType).
+     *
+     * <p>A tier is applicable when its own conditions are satisfied:
+     * <ul>
+     *   <li>Base (no dept, no encounterType) → always applicable; lower priority
+     *       than any contextual rule that also applies.</li>
+     *   <li>Dept-only → applicable when departmentId matches.</li>
+     *   <li>EncounterType-only → applicable when encounterType matches.</li>
+     *   <li>Dept + encounterType → applicable only when BOTH match.</li>
+     * </ul>
+     *
+     * <p>Among applicable contextual rules (with at least one condition), the
+     * one with the lowest patient-share % wins. If no contextual rule applies,
+     * the base tier with the lowest % is returned. This gives the patient the
+     * best deal while respecting the insurer’s negotiated structure.
      */
     private Integer lookupCoveragePercentage(
         UUID providerId,
@@ -294,53 +323,35 @@ public class BillingPricingCalculator {
             return null;
         }
 
-        // 1. Exact match: provider + dept + encounterType
-        if (departmentId != null && encounterType != null) {
-            List<InsuranceCoverage> deptCoverages = byDept.get(departmentId);
-            if (deptCoverages != null) {
-                for (InsuranceCoverage cov : deptCoverages) {
-                    if (encounterType.equals(cov.getEncounterType())) {
-                        return cov.getPatientSharePercentage();
-                    }
+        Integer lowestRule = null;  // best (lowest) among contextual rules
+        Integer lowestBase = null;  // best (lowest) among base tiers
+
+        for (java.util.Map.Entry<UUID, List<InsuranceCoverage>> entry : byDept.entrySet()) {
+            UUID covDeptId = entry.getKey(); // null → no-dept tiers
+            for (InsuranceCoverage cov : entry.getValue()) {
+                int pct = cov.getPatientSharePercentage();
+                boolean isBase = covDeptId == null && cov.getEncounterType() == null;
+
+                if (isBase) {
+                    // Base tier (no conditions) — lowest priority
+                    if (lowestBase == null || pct < lowestBase) lowestBase = pct;
+                    continue;
+                }
+
+                // Check whether this tier’s conditions match the current context
+                boolean deptOk = covDeptId == null || covDeptId.equals(departmentId);
+                boolean etOk   = cov.getEncounterType() == null || cov.getEncounterType().equals(encounterType);
+
+                if (deptOk && etOk) {
+                    // Contextual rule that fits — track the lowest %
+                    if (lowestRule == null || pct < lowestRule) lowestRule = pct;
                 }
             }
         }
 
-        // 2. Department-level: provider + dept, encounterType = null
-        if (departmentId != null) {
-            List<InsuranceCoverage> deptCoverages = byDept.get(departmentId);
-            if (deptCoverages != null) {
-                for (InsuranceCoverage cov : deptCoverages) {
-                    if (cov.getEncounterType() == null) {
-                        return cov.getPatientSharePercentage();
-                    }
-                }
-            }
-        }
-
-        // 3. Encounter-type-level: provider + encounterType, dept = null
-        if (encounterType != null) {
-            List<InsuranceCoverage> nullDeptCoverages = byDept.get(null);
-            if (nullDeptCoverages != null) {
-                for (InsuranceCoverage cov : nullDeptCoverages) {
-                    if (encounterType.equals(cov.getEncounterType())) {
-                        return cov.getPatientSharePercentage();
-                    }
-                }
-            }
-        }
-
-        // 4. Base: provider, dept = null, encounterType = null
-        List<InsuranceCoverage> providerCoverages = byDept.get(null);
-        if (providerCoverages != null) {
-            for (InsuranceCoverage cov : providerCoverages) {
-                if (cov.getEncounterType() == null) {
-                    return cov.getPatientSharePercentage();
-                }
-            }
-        }
-
-        return null;
+        // Contextual rules beat the base tier; within each group the lowest % wins.
+        if (lowestRule != null) return lowestRule;
+        return lowestBase;
     }
 
     /** Resolves the insurance that applies to this product line. */
