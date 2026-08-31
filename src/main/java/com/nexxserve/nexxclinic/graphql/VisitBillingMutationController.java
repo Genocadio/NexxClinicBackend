@@ -76,7 +76,7 @@ public class VisitBillingMutationController {
         return invoiceGenerator.generateInvoice(departmentInsuranceBillingId, authUser);
     }
 
-    @HasRole({RoleName.ADMIN})
+    @HasRole({RoleName.ADMIN, RoleName.MANAGER})
     @MutationMapping
     public ApiResponse updateBillingDate(
             @Argument @Valid UpdateBillingDateInput input,

@@ -222,7 +222,11 @@ public class InvoiceGenerator {
         UUID visitId = resolveVisitIdForDepartmentInsuranceBilling(
             departmentInsuranceBillingId
         );
-        if (visitId != null) {
+        // Skip unread-notes gate for MANAGER and ADMIN — they manage billing,
+        // not clinical notes. Only FINANCE/CLINICIAN roles are blocked.
+        boolean skipNotesGuard = actingUser.getRoles().contains(com.nexxserve.nexxclinic.model.RoleName.MANAGER)
+                || actingUser.getRoles().contains(com.nexxserve.nexxclinic.model.RoleName.ADMIN);
+        if (visitId != null && !skipNotesGuard) {
             long unreadNotes = billingValidation.countUnreadNotesForVisit(visitId, actingUser);
             if (unreadNotes > 0) {
                 return InvoiceSnapshot.error(

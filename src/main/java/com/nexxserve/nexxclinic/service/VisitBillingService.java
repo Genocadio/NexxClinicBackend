@@ -1985,8 +1985,9 @@ public class VisitBillingService {
             return ApiResponse.error("Authentication is required.");
         }
 
-        // Only ADMIN may change the billing date.
-        boolean authorised = actingUser.getRoles().contains(com.nexxserve.nexxclinic.model.RoleName.ADMIN);
+        // ADMIN and MANAGER may change the billing date.
+        boolean authorised = actingUser.getRoles().contains(com.nexxserve.nexxclinic.model.RoleName.ADMIN)
+                || actingUser.getRoles().contains(com.nexxserve.nexxclinic.model.RoleName.MANAGER);
         if (!authorised) {
             return ApiResponse.error("Only admin can update the billing date.");
         }
@@ -2073,6 +2074,7 @@ public class VisitBillingService {
         Map<String, Object> responseData = new java.util.LinkedHashMap<>();
         responseData.put("id", billing.getId());
         responseData.put("billingDate", billing.getBillingDate());
+        responseData.put("totalAmount", billing.getTotalAmount());
         responseData.put("invoiceRegenerated", invoiceRegenerated.get());
 
         if (invoiceRegenError.get() != null) {

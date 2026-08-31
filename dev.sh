@@ -35,13 +35,14 @@ ensure_playwright() {
   export PLAYWRIGHT_BROWSERS_PATH="$HOME/.cache/ms-playwright"
   mkdir -p "$PLAYWRIGHT_BROWSERS_PATH"
 
-  # Check if any Chromium binary already exists
+  # Check if any Chromium binary already exists (Linux, macOS ARM64, macOS x64)
   if ls "$PLAYWRIGHT_BROWSERS_PATH/chromium-"*/chrome-linux/chrome >/dev/null 2>&1 || \
-     ls "$PLAYWRIGHT_BROWSERS_PATH/chromium-"*/chrome-linux/chromium >/dev/null 2>&1; then
+     ls "$PLAYWRIGHT_BROWSERS_PATH/chromium-"*/chrome-linux/chromium >/dev/null 2>&1 || \
+     ls "$PLAYWRIGHT_BROWSERS_PATH/chromium-"*/chrome-mac*/Chromium.app/Contents/MacOS/Chromium >/dev/null 2>&1 || \
+     ls "$PLAYWRIGHT_BROWSERS_PATH/chromium-"*/chrome-mac*/Google\ Chrome\ for\ Testing.app/Contents/MacOS/Google\ Chrome\ for\ Testing >/dev/null 2>&1; then
     echo "✅ Playwright Chromium already present"
   else
     echo "Installing Playwright Chromium (~85 MiB, one-time)..."
-    # Use Node.js playwright CLI to install just chromium (not Firefox/WebKit)
     npx -y playwright@1.44.0 install chromium 2>&1 | tail -5
     echo "✅ Playwright Chromium installed"
   fi
