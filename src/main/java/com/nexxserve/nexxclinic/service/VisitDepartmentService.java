@@ -817,6 +817,12 @@ public class VisitDepartmentService {
             warnings.add("Could not delete price estimates: " + e.getMessage());
         }
 
+        // Clear the ManyToMany processors join table before deleting the
+        // department — JPA only auto-clears the join table when the field
+        // is loaded, which it isn't here (LAZY + batch deletes).
+        vd.setProcessors(new ArrayList<>());
+        visitDepartmentRepository.save(vd);
+
         // Finally delete the department itself
         visitDepartmentRepository.delete(vd);
         return warnings;

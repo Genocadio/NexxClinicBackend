@@ -2002,7 +2002,7 @@ public class VisitBillingService {
 
         DepartmentInsuranceBilling billing = billingOpt.get();
 
-        // Validate: visit must not be in BILL_EDITING or CANCELLED state.
+        // Validate: department must not be in DEPARTMENT_EDITING or visit CANCELLED.
         Visit visit = billing.getVisitDepartmentBilling().getVisitBilling().getVisit();
         if (visit == null) {
             return ApiResponse.error("Visit not found for this billing.");

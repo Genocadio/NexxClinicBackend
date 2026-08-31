@@ -1382,8 +1382,7 @@ public class VisitService {
     }
 
     public void reopenVisitIfCompleted(Visit visit) {
-        // BILL_EDITING: visits in BILL_EDITING mode stay in BILL_EDITING.
-        // COMPLETED visits are no longer auto-reopened — use startBillEditing instead.
+        // COMPLETED visits are no longer auto-reopened — use startBillEditing mutation instead.
         if (visit.getStatus() == VisitStatus.COMPLETED) {
             // No longer auto-reopen. Use startBillEditing mutation.
         }

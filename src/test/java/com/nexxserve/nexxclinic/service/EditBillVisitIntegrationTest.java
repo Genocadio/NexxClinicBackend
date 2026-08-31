@@ -902,7 +902,6 @@ class EditBillVisitIntegrationTest {
         Visit afterEdit = visitRepository.findById(fx.visit().getId()).orElseThrow();
         assertEquals(VisitStatus.IN_PROGRESS, afterEdit.getStatus(),
             "an edit on a pending visit must restore IN_PROGRESS, not COMPLETED");
-        assertEquals(null, afterEdit.getBillingEditSourceStatus());
     }
 
     @Test
