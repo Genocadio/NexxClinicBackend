@@ -862,7 +862,7 @@ class EditBillVisitIntegrationTest {
         assertEquals(VisitDepartmentStatus.DEPARTMENT_EDITING, duringDept.getStatus());
         assertEquals(VisitDepartmentStatus.COMPLETED, duringDept.getBillingEditSourceStatus());
 
-        ApiResponse<?> cancelled = billEditingService.cancelBillEditing(fx.visitDepartment().getId(), auth(fx.actor()));
+        ApiResponse<?> cancelled = billEditingService.cancelBillEditing(fx.visitDepartment().getId(), null, auth(fx.actor()));
         assertEquals(ResponseStatus.SUCCESS, cancelled.status(), cancelled.message());
         // Visit status should still be IN_PROGRESS
         Visit afterVisit = visitRepository.findById(fx.visit().getId()).orElseThrow();

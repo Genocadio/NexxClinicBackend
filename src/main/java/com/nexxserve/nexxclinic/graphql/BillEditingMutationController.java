@@ -5,6 +5,7 @@ import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.security.HasRole;
 import com.nexxserve.nexxclinic.service.BillEditingService;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.graphql.data.method.annotation.Argument;
 import org.springframework.graphql.data.method.annotation.ContextValue;
@@ -42,8 +43,9 @@ public class BillEditingMutationController {
     @MutationMapping
     public ApiResponse cancelBillEditing(
             @Argument("visitDepartmentId") UUID visitDepartmentId,
+            @Argument("addedProductIds") List<UUID> addedProductIds,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return billEditingService.cancelBillEditing(visitDepartmentId, authUser);
+        return billEditingService.cancelBillEditing(visitDepartmentId, addedProductIds, authUser);
     }
 }

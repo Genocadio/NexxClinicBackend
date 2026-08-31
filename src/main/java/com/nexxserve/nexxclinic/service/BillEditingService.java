@@ -197,10 +197,13 @@ public class BillEditingService {
 
     /**
      * Exit DEPARTMENT_EDITING mode without saving changes (user cancelled the edit).
-     * Transitions back to the department's pre-edit status and restores products.
+     * Transitions back to the department's pre-edit status, restores products,
+     * and removes any PENDING products that were added during the edit session.
+     *
+     * @param addedProductIds product IDs that were added during the edit session (may be null)
      */
     @Transactional
-    public ApiResponse<?> cancelBillEditing(UUID visitDepartmentId, AuthenticatedUser authUser) {
+    public ApiResponse<?> cancelBillEditing(UUID visitDepartmentId, java.util.List<UUID> addedProductIds, AuthenticatedUser authUser) {
         if (visitDepartmentId == null) {
             return ApiResponse.error("visitDepartmentId is required.");
         }
@@ -223,6 +226,13 @@ public class BillEditingService {
         }
 
         VisitDepartmentStatus restored = restoreFromBillingEditing(dept);
+
+        // Remove PENDING products that were added during the edit session.
+        // These are identified by the frontend's list of added product IDs.
+        if (addedProductIds != null && !addedProductIds.isEmpty()) {
+            int removed = removeAddedProducts(visitDepartmentId, addedProductIds);
+            log.info("Removed {} products added during cancelled edit for visit department {}", removed, visitDepartmentId);
+        }
 
         log.info(
             "Visit department {} exited DEPARTMENT_EDITING → {} (cancelled) by user {}",
@@ -299,6 +309,30 @@ public class BillEditingService {
             if (p.getStatus() == VisitProductStatus.CORRECTION_PENDING) {
                 p.setStatus(VisitProductStatus.BILLED);
                 visitDepartmentProductRepository.save(p);
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Soft-delete products that were added during the edit session.
+     * Called when the user cancels the edit — these products should not persist.
+     *
+     * @return number of products removed
+     */
+    private int removeAddedProducts(UUID visitDepartmentId, java.util.List<UUID> addedProductIds) {
+        int count = 0;
+        for (UUID productId : addedProductIds) {
+            if (productId == null) continue;
+            List<VisitDepartmentProduct> allRows = visitDepartmentProductRepository
+                .findAllByVisitDepartmentIdAndProductIdIncludingDeleted(visitDepartmentId, productId);
+            VisitDepartmentProduct activeRow = allRows.stream()
+                .filter(r -> !r.isDeleted())
+                .findFirst().orElse(null);
+            if (activeRow != null && !activeRow.isDeleted()) {
+                activeRow.setDeleted(true);
+                visitDepartmentProductRepository.save(activeRow);
                 count++;
             }
         }

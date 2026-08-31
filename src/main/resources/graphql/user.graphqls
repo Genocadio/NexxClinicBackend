@@ -143,6 +143,7 @@ enum VisitDepartmentStatus {
   COMPLETED
   FINALISED
   CANCELLED
+  DEPARTMENT_EDITING
 }
 
 enum EncounterType {
@@ -1860,8 +1861,8 @@ type Mutation {
   startBillEditing(visitDepartmentId: ID!): BillEditingResponse!
   """Exit DEPARTMENT_EDITING mode and restore department pre-edit status."""
   completeBillEditing(visitDepartmentId: ID!): BillEditingResponse!
-  """Exit DEPARTMENT_EDITING mode without saving (user cancelled the edit)."""
-  cancelBillEditing(visitDepartmentId: ID!): BillEditingResponse!
+  """Exit DEPARTMENT_EDITING mode without saving (user cancelled the edit). Pass addedProductIds to remove products that were added during the edit session."""
+  cancelBillEditing(visitDepartmentId: ID!, addedProductIds: [ID!]): BillEditingResponse!
   updateClinicProfile(input: UpdateClinicProfileInput!): ClinicProfileResponse!
   deleteClinicProfile: BooleanResponse!
   reindexSearchIndexes(indexes: [SearchIndexType!]!): BooleanResponse!
