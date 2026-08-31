@@ -1616,6 +1616,38 @@ public class VisitBillingService {
             return ApiResponse.error("Visit has more than 1 linked insurance. Use the full billing flow instead.");
         }
 
+        // With exactly 1 linked insurance, quick-bill is only safe when EVERY
+        // product on the visit is supported by that insurance. We must never
+        // auto-bill a product as PRIVATE while an insurance is linked, and we
+        // must never substitute a different insurance. If any product is not
+        // covered, defer to the full billing flow so the user can pick per line.
+        if (visitInsurances.size() == 1) {
+            VisitInsurance onlyInsurance = visitInsurances.get(0);
+            PatientInsurance pi = onlyInsurance.getPatientInsurance();
+            if (pi == null || pi.getInsuranceProvider() == null) {
+                return ApiResponse.error("Quick bill cannot apply: the linked insurance is invalid. Use the full billing flow instead.");
+            }
+            UUID onlyProviderId = pi.getInsuranceProvider().getId();
+            List<VisitDepartmentProduct> allProducts =
+                visitDepartmentProductRepository.findByVisitDepartmentVisitId(visitId);
+            Set<UUID> productIds = allProducts.stream()
+                .map(vdp -> vdp.getProduct().getId())
+                .collect(Collectors.toSet());
+            Map<UUID, Map<UUID, ProductInsuranceCoverage>> coverages =
+                pricingCalculator.prefetchProductCoverages(productIds, Set.of(onlyProviderId));
+            for (VisitDepartmentProduct vdp : allProducts) {
+                Map<UUID, ProductInsuranceCoverage> byProvider = coverages.get(vdp.getProduct().getId());
+                ProductInsuranceCoverage coverage = byProvider == null ? null : byProvider.get(onlyProviderId);
+                if (coverage == null || !coverage.isCovered() || coverage.isNotPaid()) {
+                    return ApiResponse.error(
+                        "Quick bill cannot apply: insurance (" +
+                        pi.getInsuranceProvider().getInsuranceName() +
+                        ") does not support every product on this visit. Use the full billing flow instead."
+                    );
+                }
+            }
+        }
+
         // Eligibility: 0 unread notes
         long unreadNotes = billingValidation.countUnreadNotesForVisit(visitId, actingUser);
         if (unreadNotes > 0) {
