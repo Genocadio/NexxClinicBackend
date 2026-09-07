@@ -43,8 +43,10 @@ services:
       # Playwright (invoice PDF rendering)
       PLAYWRIGHT_BROWSERS_PATH: /opt/playwright-browsers
 
-      # CORS - Allow frontend domains
-      CORS_ALLOWED_ORIGINS: http://frontend:3000,http://localhost:3000,https://igisubizo.med.rw
+      # CORS - Allowed origin patterns (ProductionCorsConfig reads this in prod).
+      # Must include BOTH schemes the site is actually served on, or POSTs get
+      # 403 "Invalid CORS request".
+      CORS_ALLOWED_ORIGINS: https://igisubizo.med.rw,http://igisubizo.med.rw,http://localhost:3000
 
       # Supabase-specific settings
       SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT: 60000
