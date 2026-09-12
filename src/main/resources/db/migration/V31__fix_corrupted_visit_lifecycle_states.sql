@@ -190,16 +190,16 @@ WHERE vdb.outstanding_amount > 0
         AND v.status = 'CANCELLED'
   );
 
-UPDATE department_insurance_billings dib
+UPDATE visit_billings vb
 SET outstanding_amount = 0,
     status = 'PAID',
     updated_at = NOW()
-WHERE dib.outstanding_amount > 0
+WHERE vb.outstanding_amount > 0
   AND EXISTS (
       SELECT 1 FROM visit_department_billings vdb
       JOIN visit_billing_containers vbc ON vbc.id = vdb.visit_billing_id
       JOIN visits v ON v.id = vbc.visit_id
-      WHERE vdb.id = dib.visit_department_billing_id
+      WHERE vdb.id = vb.visit_department_billing_id
         AND v.status = 'CANCELLED'
   );
 
