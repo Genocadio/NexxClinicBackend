@@ -184,9 +184,9 @@ SET outstanding_amount = 0,
     updated_at = NOW()
 WHERE vdb.outstanding_amount > 0
   AND EXISTS (
-      SELECT 1 FROM visit_billings vb
-      JOIN visits v ON v.id = vb.visit_id
-      WHERE vb.id = vdb.visit_billing_id
+      SELECT 1 FROM visit_billing_containers vbc
+      JOIN visits v ON v.id = vbc.visit_id
+      WHERE vbc.id = vdb.visit_billing_id
         AND v.status = 'CANCELLED'
   );
 
@@ -197,8 +197,8 @@ SET outstanding_amount = 0,
 WHERE dib.outstanding_amount > 0
   AND EXISTS (
       SELECT 1 FROM visit_department_billings vdb
-      JOIN visit_billings vb ON vb.id = vdb.visit_billing_id
-      JOIN visits v ON v.id = vb.visit_id
+      JOIN visit_billing_containers vbc ON vbc.id = vdb.visit_billing_id
+      JOIN visits v ON v.id = vbc.visit_id
       WHERE vdb.id = dib.visit_department_billing_id
         AND v.status = 'CANCELLED'
   );
