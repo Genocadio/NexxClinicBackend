@@ -1605,7 +1605,10 @@ public class VisitBillingService {
             return ApiResponse.error("Authentication is required to quick-bill a visit.");
         }
 
-        Optional<Visit> visitOpt = visitRepository.findById(visitId);
+        // A1/A2 fix: pessimistic lock serializes all billing operations per visit.
+        // Without this, two concurrent quickBill calls could both pass the
+        // eligibility checks and create duplicate billing versions.
+        Optional<Visit> visitOpt = visitRepository.findByIdForUpdate(visitId);
         if (visitOpt.isEmpty()) {
             return ApiResponse.error("Visit not found.");
         }
@@ -1616,6 +1619,24 @@ public class VisitBillingService {
         }
         if (visit.getStatus() == VisitStatus.CANCELLED) {
             return ApiResponse.error("Cannot bill a cancelled visit.");
+        }
+
+        // Guard: quickBill must not run while a department is in billing edit mode.
+        // CORRECTION_PENDING products are transient and only valid inside an
+        // editBillVisit transaction — billing them via quickBill would create
+        // inconsistent data.
+        List<VisitDepartment> visitDepts = visitDepartmentRepository.findByVisitId(visitId);
+        boolean hasEditingDept = visitDepts.stream()
+            .anyMatch(d -> d.getStatus() == VisitDepartmentStatus.DEPARTMENT_EDITING);
+        if (hasEditingDept) {
+            return ApiResponse.error("A department is in billing edit mode. Complete or cancel the edit before quick-billing.");
+        }
+        List<VisitDepartmentProduct> allProductsCheck =
+            visitDepartmentProductRepository.findByVisitDepartmentVisitId(visitId);
+        boolean hasCorrectionPending = allProductsCheck.stream()
+            .anyMatch(p -> !p.isDeleted() && p.getStatus() == VisitProductStatus.CORRECTION_PENDING);
+        if (hasCorrectionPending) {
+            return ApiResponse.error("Some products are mid-edit (CORRECTION_PENDING). Complete or cancel the billing edit before quick-billing.");
         }
 
         // Eligibility: ≤1 linked insurance

@@ -614,6 +614,19 @@ public class VisitService {
         // This likely refers to medical/clinical status transitions.
         // In the context of completeVisit(UUID), if we find any department that is not COMPLETED or CANCELLED,
         // we should probably error or at least ensure we are not force-completing an active clinical flow.
+        boolean hasDeptEditing = departments.stream()
+                .anyMatch(dept -> dept.getStatus() == VisitDepartmentStatus.DEPARTMENT_EDITING);
+        if (hasDeptEditing) {
+            String editingDepts = departments.stream()
+                    .filter(dept -> dept.getStatus() == VisitDepartmentStatus.DEPARTMENT_EDITING)
+                    .map(dept -> dept.getDepartment() != null ? dept.getDepartment().getName() : "Unknown")
+                    .collect(java.util.stream.Collectors.joining(", "));
+            return ApiResponse.error(
+                    "Cannot complete visit: department(s) " + editingDepts
+                    + " are in billing edit mode. Complete or cancel the billing edit first."
+            );
+        }
+
         boolean hasActiveDepartments = departments.stream()
                 .anyMatch(dept -> dept.getStatus() != VisitDepartmentStatus.CANCELLED
                         && dept.getStatus() != VisitDepartmentStatus.COMPLETED

@@ -269,11 +269,18 @@ public class VisitDepartmentService {
         }
 
         VisitDepartment visitDepartment = departmentOptional.get();
-        if (visitDepartment.getStatus() == VisitDepartmentStatus.COMPLETED) {
-            return ApiResponse.error("Cannot change the profile on a completed department.");
-        }
         if (visitDepartment.getStatus() == VisitDepartmentStatus.CANCELLED) {
             return ApiResponse.error("Cannot change the profile on a cancelled department.");
+        }
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.COMPLETED
+                || visitDepartment.getStatus() == VisitDepartmentStatus.FINALISED) {
+            return ApiResponse.error(
+                "Cannot change the profile on a completed or finalised department. "
+                + "Ask a manager to enable billing edit mode on this department first."
+            );
+        }
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.DEPARTMENT_EDITING) {
+            return ApiResponse.error("Cannot change the profile while the department is in billing edit mode.");
         }
         // Billing guard: profiles can only be changed BEFORE billing is done.
         // Once any billing record exists for this department, profile changes are

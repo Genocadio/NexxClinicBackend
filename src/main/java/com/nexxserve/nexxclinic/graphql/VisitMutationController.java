@@ -72,7 +72,7 @@ public class VisitMutationController {
         return visitDepartmentService.addVisitDepartment(visitId, departmentId, profileId, encounterType, processorId, authUser);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.MANAGER, RoleName.CLINICIAN})
     @MutationMapping
     public ApiResponse changeVisitDepartmentProfile(
             @Argument UUID visitDepartmentId,
@@ -80,6 +80,15 @@ public class VisitMutationController {
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         return visitDepartmentService.changeVisitDepartmentProfile(visitDepartmentId, profileId, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.MANAGER})
+    @MutationMapping
+    public ApiResponse removeVisitDepartmentProfile(
+            @Argument UUID visitDepartmentId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitDepartmentService.changeVisitDepartmentProfile(visitDepartmentId, null, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})

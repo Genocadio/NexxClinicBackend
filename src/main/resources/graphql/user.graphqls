@@ -1809,6 +1809,13 @@ type Mutation {
   changeVisitDepartmentProfile(visitDepartmentId: ID!, profileId: ID): VisitDepartmentResponse!
 
   """
+  Remove the profile from a visit department, clearing all PROFILE-sourced
+  products. Only managers, admins and clinic admins may remove a profile.
+  The department must not be in DEPARTMENT_EDITING or have billing history.
+  """
+  removeVisitDepartmentProfile(visitDepartmentId: ID!): VisitDepartmentResponse!
+
+  """
   Add a child visit department with products. Validations occur before creation:
   - If any product validation fails, the child department is NOT created
   - Child departments can be created without processorId and assigned later
