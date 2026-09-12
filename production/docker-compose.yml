@@ -5,7 +5,7 @@ services:
   backend:
     image: genoyves/nexclinic:latest
     container_name: nexxclinic-backend
-    restart: unless-stopped
+    restart: "no"
 
     # No need to expose ports - internal only
     expose:
@@ -68,7 +68,7 @@ services:
   meilisearch:
     image: getmeili/meilisearch:v1.12
     container_name: nexxclinic-meilisearch
-    restart: unless-stopped
+    restart: "no"
 
     # Internal only - the backend reaches it via the app-network
     expose:
@@ -96,7 +96,7 @@ services:
   frontend:
     image: genoyves/nexclinic-front:latest
     container_name: nexxclinic-frontend
-    restart: unless-stopped
+    restart: "no"
 
     ports:
       - "3000:3000"
