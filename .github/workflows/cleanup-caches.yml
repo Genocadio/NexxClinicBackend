@@ -1,0 +1,51 @@
+name: Cleanup Old GitHub Actions Caches
+
+on:
+  schedule:
+    # Run daily at 02:00 UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+  # Also clean up caches when PRs are closed
+  pull_request:
+    types: [closed]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup-caches:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Purge old and unused GitHub Actions caches
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "Fetching list of caches for $REPO..."
+          CACHE_LIST=$(gh api -H "Accept: application/vnd.github+json" "/repos/$REPO/actions/caches?per_page=100")
+          
+          TOTAL_CACHES=$(echo "$CACHE_LIST" | jq '.total_count')
+          echo "Found $TOTAL_CACHES total cache entry/entries."
+          
+          if [ "$TOTAL_CACHES" -eq 0 ]; then
+            echo "No caches to clean up."
+            exit 0
+          fi
+          
+          # Delete caches older than 7 days (or all closed PR caches)
+          CUTOFF=$(date -d '7 days ago' +%s 2>/dev/null || date -v-7d +%s)
+          
+          echo "$CACHE_LIST" | jq -c '.actions_caches[]' | while read -r cache; do
+            CACHE_ID=$(echo "$cache" | jq -r '.id')
+            CACHE_KEY=$(echo "$cache" | jq -r '.key')
+            LAST_ACCESSED=$(echo "$cache" | jq -r '.last_accessed_at')
+            LAST_ACCESSED_SEC=$(date -d "$LAST_ACCESSED" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%SZ" "$LAST_ACCESSED" +%s 2>/dev/null || echo 0)
+            
+            if [ "$LAST_ACCESSED_SEC" -lt "$CUTOFF" ]; then
+              echo "Deleting cache '$CACHE_KEY' (ID: $CACHE_ID, Last accessed: $LAST_ACCESSED)..."
+              gh api --method DELETE -H "Accept: application/vnd.github+json" "/repos/$REPO/actions/caches/$CACHE_ID" || true
+            fi
+          done
+          
+          echo "Cache cleanup completed."
