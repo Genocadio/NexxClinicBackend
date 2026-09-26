@@ -65,6 +65,7 @@ public class WorkerService {
     private final PasswordPolicyService passwordPolicyService;
     private final AdminAuditService adminAuditService;
     private final MeilisearchIndexService meilisearchIndexService;
+    private final LoginRateLimiterService loginRateLimiterService;
 
     public WorkerService(
             WorkerRepository workerRepository,
@@ -77,7 +78,8 @@ public class WorkerService {
             SessionTokenService sessionTokenService,
             PasswordPolicyService passwordPolicyService,
             AdminAuditService adminAuditService,
-            MeilisearchIndexService meilisearchIndexService
+            MeilisearchIndexService meilisearchIndexService,
+            LoginRateLimiterService loginRateLimiterService
     ) {
         this.workerRepository = workerRepository;
         this.departmentRepository = departmentRepository;
@@ -90,6 +92,7 @@ public class WorkerService {
         this.passwordPolicyService = passwordPolicyService;
         this.adminAuditService = adminAuditService;
         this.meilisearchIndexService = meilisearchIndexService;
+        this.loginRateLimiterService = loginRateLimiterService;
     }
 
     @Transactional
@@ -255,11 +258,20 @@ public class WorkerService {
             return ApiResponse.error("identifier and password are required.");
         }
 
+        // Check if the account/identifier is locked out due to too many failed attempts
+        if (loginRateLimiterService.isBlocked(input.identifier())) {
+            long remaining = loginRateLimiterService.getRemainingLockoutMinutes(input.identifier());
+            logger.warn("Login blocked: identifier '{}' is currently rate-limited ({} min remaining)", input.identifier(), remaining);
+            return ApiResponse.error(String.format("Too many failed login attempts. Please try again in %d minute%s.",
+                    remaining, remaining == 1 ? "" : "s"));
+        }
+
         logger.info("Login attempt for identifier: {}", input.identifier());
 
         Optional<Worker> workerOptional = findByIdentifier(input.identifier());
         if (workerOptional.isEmpty()) {
             logger.warn("Login failed: User not found for identifier: {}", input.identifier());
+            loginRateLimiterService.recordFailedAttempt(input.identifier());
             return ApiResponse.error("Invalid credentials.");
         }
 
@@ -287,8 +299,12 @@ public class WorkerService {
 
         if (!passwordEncoder.matches(input.password(), worker.getPasswordHash())) {
             logger.warn("Login failed: Invalid password for user: {}", worker.getId());
+            loginRateLimiterService.recordFailedAttempt(input.identifier());
             return ApiResponse.error("Invalid credentials.");
         }
+
+        // Reset failed attempt counter upon successful authentication
+        loginRateLimiterService.recordSuccessfulAttempt(input.identifier());
 
         TokenBundle bundle = sessionTokenService.issueSession(worker);
         logger.info("User successfully logged in: {} (ID: {}) with roles: {}", worker.getUsername(), worker.getId(), worker.getRoles());

@@ -21,8 +21,9 @@ import com.nexxserve.nexxclinic.graphql.input.SearchVisitsInput;
 import com.nexxserve.nexxclinic.model.AnswerStatus;
 import com.nexxserve.nexxclinic.dto.out.*;
 import com.nexxserve.nexxclinic.mappers.out.*;
-import com.nexxserve.nexxclinic.dto.out.ApiResponse;
+import com.nexxserve.nexxclinic.model.PermissionName;
 import com.nexxserve.nexxclinic.model.ResponseStatus;
+import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
 import com.nexxserve.nexxclinic.model.VisitStatus;
@@ -45,6 +46,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -88,6 +90,9 @@ public class VisitService {
     private final MeilisearchIndexService meilisearchIndexService;
     private final VisitPriceEstimateService visitPriceEstimateService;
     private final ConsultationAnswerRepository consultationAnswerRepository;
+    private final RolePermissionService rolePermissionService;
+    private final com.nexxserve.nexxclinic.service.billing.BillingProductService billingProductService;
+    private final VisitDepartmentNoteService visitDepartmentNoteService;
 
     public VisitService(
             VisitRepository visitRepository,
@@ -112,7 +117,10 @@ public class VisitService {
             com.nexxserve.nexxclinic.service.billing.InvoiceGenerator invoiceGenerator,
             MeilisearchIndexService meilisearchIndexService,
             @Lazy VisitPriceEstimateService visitPriceEstimateService,
-            ConsultationAnswerRepository consultationAnswerRepository
+            ConsultationAnswerRepository consultationAnswerRepository,
+            @Lazy RolePermissionService rolePermissionService,
+            @Lazy com.nexxserve.nexxclinic.service.billing.BillingProductService billingProductService,
+            @Lazy VisitDepartmentNoteService visitDepartmentNoteService
     ) {
         this.visitRepository = visitRepository;
         this.visitInsuranceRepository = visitInsuranceRepository;
@@ -137,6 +145,9 @@ public class VisitService {
         this.meilisearchIndexService = meilisearchIndexService;
         this.visitPriceEstimateService = visitPriceEstimateService;
         this.consultationAnswerRepository = consultationAnswerRepository;
+        this.rolePermissionService = rolePermissionService;
+        this.billingProductService = billingProductService;
+        this.visitDepartmentNoteService = visitDepartmentNoteService;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -373,7 +384,7 @@ public class VisitService {
         return ApiResponse.success("Preview computed.", previews);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public ApiResponse<VisitDto> visit(UUID visitId, AuthenticatedUser authUser) {
         if (visitId == null) {
             return ApiResponse.error("visitId is required.");
@@ -385,7 +396,7 @@ public class VisitService {
                 .orElseGet(() -> ApiResponse.error("Visit not found."));
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public ApiResponse<List<VisitDto>> visits(SearchVisitsInput input, AuthenticatedUser authUser) {
         int page = normalizePage(input == null ? null : input.page());
         int size = normalizeSize(input == null ? null : input.size());
@@ -393,16 +404,21 @@ public class VisitService {
 
         String patientName = input == null ? null : blankToNull(input.patientName());
         com.nexxserve.nexxclinic.model.VisitStatus statusFilter = input == null ? null : input.status();
+        boolean activeOnly = input != null && Boolean.TRUE.equals(input.activeOnly());
+
+        LocalDateTime parsedVisitDate = parseDateTimeOrStartOfDay(input == null ? null : input.visitDate());
+        LocalDateTime parsedFromDate = parseDateTimeOrStartOfDay(input == null ? null : input.fromDate());
+        LocalDateTime parsedToDate = parseDateTimeOrStartOfDay(input == null ? null : input.toDate());
+
         Long visitDateEpochDay = null;
-        if (input != null && input.visitDate() != null) {
-            visitDateEpochDay = input.visitDate().toLocalDate().atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+        if (parsedVisitDate != null) {
+            visitDateEpochDay = parsedVisitDate.toLocalDate().atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
         }
 
         // Meilisearch first (typo-tolerant, ranked); the DB spec below is the fallback.
-        // Only invoke Meilisearch when there's a patientName search param;
-        // plain status/date-only listing goes straight to the database.
+        // Only invoke Meilisearch when there's a simple patientName search param without complex date range
         boolean hasSearchParam = patientName != null;
-        if (hasSearchParam && meilisearchIndexService.isEnabled()) {
+        if (hasSearchParam && parsedFromDate == null && parsedToDate == null && !activeOnly && meilisearchIndexService.isEnabled()) {
             try {
                 MeilisearchIndexService.SearchHit hit = meilisearchIndexService.searchVisits(
                         patientName, statusFilter, visitDateEpochDay, page, size
@@ -418,12 +434,48 @@ public class VisitService {
 
         Specification<Visit> spec = (root, queryDef, builder) -> builder.conjunction();
 
-        if (input != null && input.visitDate() != null) {
-            spec = spec.and((root, queryDef, builder) -> builder.equal(root.get("visitDate"), input.visitDate()));
+        if (parsedVisitDate != null) {
+            String rawVisitDate = input.visitDate().trim();
+            if (!rawVisitDate.contains("T")) {
+                LocalDateTime dayStart = parsedVisitDate.toLocalDate().atStartOfDay();
+                LocalDateTime dayEnd = parsedVisitDate.toLocalDate().plusDays(1).atStartOfDay();
+                spec = spec.and((root, queryDef, builder) -> builder.and(
+                        builder.greaterThanOrEqualTo(root.get("visitDate"), dayStart),
+                        builder.lessThan(root.get("visitDate"), dayEnd)
+                ));
+            } else {
+                spec = spec.and((root, queryDef, builder) -> builder.equal(root.get("visitDate"), parsedVisitDate));
+            }
+        } else if (parsedFromDate != null || parsedToDate != null) {
+            if (parsedFromDate != null) {
+                spec = spec.and((root, queryDef, builder) -> builder.greaterThanOrEqualTo(root.get("visitDate"), parsedFromDate));
+            }
+            if (parsedToDate != null) {
+                String rawToDate = input.toDate().trim();
+                if (!rawToDate.contains("T")) {
+                    LocalDateTime dayEnd = parsedToDate.toLocalDate().plusDays(1).atStartOfDay();
+                    spec = spec.and((root, queryDef, builder) -> builder.lessThan(root.get("visitDate"), dayEnd));
+                } else {
+                    spec = spec.and((root, queryDef, builder) -> builder.lessThanOrEqualTo(root.get("visitDate"), parsedToDate));
+                }
+            }
+        } else if (activeOnly) {
+            spec = spec.and((root, queryDef, builder) -> root.get("status").in(VisitStatus.CREATED, VisitStatus.IN_PROGRESS));
+        } else {
+            // Default rolling operational window:
+            // 1. All open / in-progress visits regardless of date.
+            // 2. Visits completed/finalized/edited within recentDays (default 7 days).
+            int days = (input != null && input.recentDays() != null && input.recentDays() > 0) ? input.recentDays() : 7;
+            LocalDateTime cutoff = LocalDateTime.now().minusDays(days).toLocalDate().atStartOfDay();
+            spec = spec.and((root, queryDef, builder) -> builder.or(
+                    root.get("status").in(VisitStatus.CREATED, VisitStatus.IN_PROGRESS),
+                    builder.greaterThanOrEqualTo(root.get("visitDate"), cutoff),
+                    builder.greaterThanOrEqualTo(root.get("updatedAt"), cutoff)
+            ));
         }
 
-        if (input != null && input.status() != null) {
-            spec = spec.and((root, queryDef, builder) -> builder.equal(root.get("status"), input.status()));
+        if (statusFilter != null) {
+            spec = spec.and((root, queryDef, builder) -> builder.equal(root.get("status"), statusFilter));
         }
 
         if (patientName != null) {
@@ -433,14 +485,82 @@ public class VisitService {
             );
         }
 
+        // Department-level Scoping:
+        // If caller does not have VISIT_VIEW_ALL, but has VISIT_VIEW_ASSIGNED, scope by their assigned departments
+        if (authUser != null && authUser.roles() != null) {
+            boolean hasViewAll = authUser.roles().contains(RoleName.ADMIN)
+                    || authUser.roles().contains(RoleName.CLINIC_ADMIN)
+                    || authUser.roles().contains(RoleName.MANAGER)
+                    || authUser.roles().contains(RoleName.RECEPTION)
+                    || (rolePermissionService != null && rolePermissionService.userHasAnyPermission(authUser, PermissionName.VISIT_VIEW_ALL));
+
+            if (!hasViewAll) {
+                boolean hasViewAssigned = authUser.roles().contains(RoleName.CLINICIAN)
+                        || authUser.roles().contains(RoleName.NURSE)
+                        || (rolePermissionService != null && rolePermissionService.userHasAnyPermission(authUser, PermissionName.VISIT_VIEW_ASSIGNED));
+
+                if (hasViewAssigned && authUser.userId() != null) {
+                    Worker worker = workerRepository.findById(authUser.userId()).orElse(null);
+                    Set<UUID> userDeptIds = (worker != null && worker.getDepartments() != null)
+                            ? worker.getDepartments().stream().map(com.nexxserve.nexxclinic.entity.Department::getId).collect(Collectors.toSet())
+                            : Set.of();
+
+                    if (!userDeptIds.isEmpty()) {
+                        Set<UUID> matchingVisitIds = new LinkedHashSet<>();
+                        for (VisitDepartment vd : visitDepartmentRepository.findByDepartmentIdIn(userDeptIds)) {
+                            if (vd.getVisit() != null && vd.getVisit().getId() != null) {
+                                matchingVisitIds.add(vd.getVisit().getId());
+                            }
+                        }
+                        if (matchingVisitIds.isEmpty()) {
+                            return ApiResponse.success("Visits fetched.", List.of(), new PaginationDto(0, size, page, 0));
+                        }
+                        spec = spec.and((root, queryDef, builder) -> root.get("id").in(matchingVisitIds));
+                    }
+                    // If worker has no assigned departments (floating clinician), falls back gracefully to all clinic visits
+                }
+            }
+        }
+
         Page<Visit> visitPage = visitRepository.findAll(spec, pageable);
         List<VisitDto> visits = visitPage.getContent().stream().map(visit -> visitToDto(visit, Set.of(), authUser)).toList();
 
         return ApiResponse.success("Visits fetched.", visits, new PaginationDto(visitPage.getTotalElements(), visitPage.getSize(), visitPage.getNumber(), visitPage.getTotalPages()));
     }
 
-    @Transactional(readOnly = true)
+    private LocalDateTime parseDateTimeOrStartOfDay(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String trimmed = raw.trim();
+        try {
+            if (trimmed.contains("T")) {
+                String clean = trimmed.endsWith("Z") ? trimmed.substring(0, trimmed.length() - 1) : trimmed;
+                return LocalDateTime.parse(clean, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+            }
+            return LocalDate.parse(trimmed, DateTimeFormatter.ISO_LOCAL_DATE).atStartOfDay();
+        } catch (Exception e) {
+            try {
+                return LocalDateTime.ofInstant(java.time.Instant.parse(trimmed), java.time.ZoneId.systemDefault());
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
+    }
+
+    @Transactional
     public ApiResponse<List<VisitDto>> getPatientHistory(UUID patientId, SearchPatientHistoryInput input, AuthenticatedUser authUser) {
+        if (authUser != null && authUser.roles() != null) {
+            boolean hasHistoryAccess = authUser.roles().contains(RoleName.ADMIN)
+                    || authUser.roles().contains(RoleName.CLINIC_ADMIN)
+                    || authUser.roles().contains(RoleName.MANAGER)
+                    || authUser.roles().contains(RoleName.CLINICIAN)
+                    || (rolePermissionService != null && rolePermissionService.userHasAnyPermission(authUser, PermissionName.PATIENT_HISTORY_VIEW));
+            if (!hasHistoryAccess) {
+                return ApiResponse.error("You do not have permission to view patient history.");
+            }
+        }
+
         if (patientId == null) {
             return ApiResponse.error("patientId is required.");
         }
@@ -587,10 +707,12 @@ public class VisitService {
             return ApiResponse.error("Cancelled visit cannot be completed.");
         }
 
-        // D1/D2 fix: enforce unread-notes gate during completion.
-        long unreadNotes = visitDepartmentNoteRepository.countUnreadNotesForVisit(visitId, actingUser.getId());
-        if (unreadNotes > 0) {
-            return ApiResponse.error("You have unread notes. Please read them before completing the visit.");
+        // D1/D2 fix: enforce unread-notes gate during completion (ADMIN/MANAGER exempt).
+        if (!visitDepartmentNoteService.isExemptFromNotesBlock(authUser)) {
+            long unreadNotes = visitDepartmentNoteRepository.countUnreadNotesForVisit(visitId, actingUser.getId());
+            if (unreadNotes > 0) {
+                return ApiResponse.error("You have unread notes. Please read them before completing the visit.");
+            }
         }
 
         // D2 fix: verify a billing container exists before completion.
@@ -1141,6 +1263,7 @@ public class VisitService {
             VisitDepartment visitDepartment = new VisitDepartment();
             visitDepartment.setVisit(visit);
             visitDepartment.setDepartment(departmentOptional.get());
+            visitDepartment.setAddedBy(actingUser);
             if (departmentInput.encounterType() != null) {
                 visitDepartment.setEncounterType(departmentInput.encounterType());
             }
@@ -1298,6 +1421,10 @@ public class VisitService {
     }
 
     public VisitDto visitToDto(Visit visit, Set<UUID> departmentIds, AuthenticatedUser authUser) {
+        if (visit != null && visit.getId() != null && billingProductService != null) {
+            billingProductService.syncBilledProductsToVisitDepartments(visit.getId());
+        }
+
         Set<UUID> visitInsuranceProviderIds = resolveVisitInsuranceProviderIds(visit.getId());
         List<PatientInsuranceDto> linkedInsurances = visitInsuranceRepository.findByVisitId(visit.getId())
                 .stream()

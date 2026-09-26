@@ -15,4 +15,8 @@ public interface VisitDepartmentBillingRepository extends JpaRepository<VisitDep
     boolean existsByVisitDepartmentId(UUID visitDepartmentId);
 
     java.util.List<VisitDepartmentBilling> findByVisitDepartmentId(UUID visitDepartmentId);
+
+    long countByVisitBillingId(UUID visitBillingId);
+
+    java.util.List<VisitDepartmentBilling> findByVisitBillingId(UUID visitBillingId);
 }

@@ -65,6 +65,9 @@ public class VisitDepartment {
     private EncounterType encounterType;
 
     @Column
+    private LocalDateTime startedAt;
+
+    @Column
     private LocalDateTime completedAt;
 
     @OneToMany(mappedBy = "visitDepartment", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
@@ -97,6 +100,14 @@ public class VisitDepartment {
             inverseJoinColumns = @JoinColumn(name = "worker_id")
     )
     private List<Worker> processors = new ArrayList<>();
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "added_by_id")
+    private Worker addedBy;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "completed_by_id")
+    private Worker completedBy;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "billing_edit_source_status", length = 32)
@@ -165,9 +176,20 @@ public class VisitDepartment {
 
     public void setStatus(VisitDepartmentStatus status) {
         this.status = status;
-        if (status == VisitDepartmentStatus.COMPLETED && this.completedAt == null) {
+        if (status == VisitDepartmentStatus.ACTIVE && this.startedAt == null) {
+            this.startedAt = LocalDateTime.now();
+        }
+        if ((status == VisitDepartmentStatus.COMPLETED || status == VisitDepartmentStatus.FINALISED) && this.completedAt == null) {
             this.completedAt = LocalDateTime.now();
         }
+    }
+
+    public LocalDateTime getStartedAt() {
+        return startedAt;
+    }
+
+    public void setStartedAt(LocalDateTime startedAt) {
+        this.startedAt = startedAt;
     }
 
     public LocalDateTime getCompletedAt() {
@@ -232,6 +254,22 @@ public class VisitDepartment {
 
     public void setProcessors(List<Worker> processors) {
         this.processors = processors == null ? new ArrayList<>() : new ArrayList<>(processors);
+    }
+
+    public Worker getAddedBy() {
+        return addedBy;
+    }
+
+    public void setAddedBy(Worker addedBy) {
+        this.addedBy = addedBy;
+    }
+
+    public Worker getCompletedBy() {
+        return completedBy;
+    }
+
+    public void setCompletedBy(Worker completedBy) {
+        this.completedBy = completedBy;
     }
 
     public EncounterType getEncounterType() {

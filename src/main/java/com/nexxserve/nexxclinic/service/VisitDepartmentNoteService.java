@@ -10,6 +10,7 @@ import com.nexxserve.nexxclinic.dto.out.*;
 import com.nexxserve.nexxclinic.mappers.out.WorkerMapper;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.NoteType;
+import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentNoteRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentNoteViewerRepository;
@@ -398,6 +399,63 @@ public class VisitDepartmentNoteService {
             newNotes = (int) visitDepartmentNoteRepository.countNewNotesForViewer(visitDepartmentId, authUser.userId());
         }
         return new VisitDepartmentNotesSummaryDto((int) totalNotes, newNotes);
+    }
+
+    /**
+     * Admin and Manager roles are never blocked by unread notes.
+     */
+    public boolean isExemptFromNotesBlock(AuthenticatedUser authUser) {
+        if (authUser == null || authUser.roles() == null) {
+            return false;
+        }
+        return authUser.roles().contains(RoleName.ADMIN)
+                || authUser.roles().contains(RoleName.MANAGER)
+                || authUser.roles().contains(RoleName.CLINIC_ADMIN);
+    }
+
+    /**
+     * Checks whether there are any unread BILLING notes for the current user on the given visit.
+     */
+    @Transactional(readOnly = true)
+    public boolean hasUnreadBillingNotes(UUID visitId, AuthenticatedUser authUser) {
+        if (isExemptFromNotesBlock(authUser) || authUser == null || authUser.userId() == null || visitId == null) {
+            return false;
+        }
+        UUID viewerId = authUser.userId();
+        List<VisitDepartmentNote> notes = visitDepartmentNoteRepository.findByVisitDepartment_Visit_IdOrderByCreatedAtAsc(visitId);
+        return notes.stream()
+                .filter(n -> n.getVisitDepartment() == null || n.getVisitDepartment().getStatus() != VisitDepartmentStatus.CANCELLED)
+                .filter(n -> n.getNoteType() == NoteType.BILLING)
+                .anyMatch(n -> isUnreadForViewer(n, viewerId));
+    }
+
+    /**
+     * Checks whether there are any unread department notes for the current user on the given visit department.
+     */
+    @Transactional(readOnly = true)
+    public boolean hasUnreadDepartmentNotes(UUID visitDepartmentId, AuthenticatedUser authUser) {
+        if (isExemptFromNotesBlock(authUser) || authUser == null || authUser.userId() == null || visitDepartmentId == null) {
+            return false;
+        }
+        UUID viewerId = authUser.userId();
+        List<VisitDepartmentNote> notes = visitDepartmentNoteRepository.findByVisitDepartmentId(visitDepartmentId);
+        return notes.stream()
+                .filter(n -> n.getVisitDepartment() == null || n.getVisitDepartment().getStatus() != VisitDepartmentStatus.CANCELLED)
+                .anyMatch(n -> isUnreadForViewer(n, viewerId));
+    }
+
+    private boolean isUnreadForViewer(VisitDepartmentNote note, UUID viewerId) {
+        if (note.getCreatedBy() != null && viewerId.equals(note.getCreatedBy().getId())) {
+            return false;
+        }
+        List<Worker> targets = note.getTargetUsers();
+        if (targets != null && !targets.isEmpty()) {
+            boolean inTargets = targets.stream().anyMatch(w -> viewerId.equals(w.getId()));
+            if (!inTargets) {
+                return false;
+            }
+        }
+        return !visitDepartmentNoteViewerRepository.existsByNoteIdAndViewerId(note.getId(), viewerId);
     }
 
     // ─────────────────────────────────────────────────────────────

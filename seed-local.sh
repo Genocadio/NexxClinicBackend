@@ -18,7 +18,7 @@ docker exec nexxclinic-postgres psql -U "$DB_USER" -d postgres -c \
 
 echo "🔄  Starting backend to apply Flyway migrations..."
 cd "$(dirname "$0")"
-nohup ./gradlew bootRun > /tmp/nexxclinic-migrate.log 2>&1 &
+SERVER_PORT=8085 MEILI_ENABLED=false STORAGE_TYPE=LOCAL nohup ./gradlew bootRun > /tmp/nexxclinic-migrate.log 2>&1 &
 MIGRATE_PID=$!
 
 # Wait for Spring Boot to finish (up to 90s)

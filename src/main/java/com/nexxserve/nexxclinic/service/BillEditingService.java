@@ -277,8 +277,13 @@ public class BillEditingService {
      * @return number of products transitioned
      */
     private int transitionProductsToCorrectionPending(UUID visitDepartmentId) {
-        List<VisitDepartmentProduct> products =
-            visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartmentId);
+        List<VisitDepartmentProduct> products = new java.util.ArrayList<>(
+            visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartmentId)
+        );
+        List<VisitDepartment> childDepts = visitDepartmentRepository.findByParentVisitDepartmentId(visitDepartmentId);
+        for (VisitDepartment child : childDepts) {
+            products.addAll(visitDepartmentProductRepository.findByVisitDepartmentId(child.getId()));
+        }
         int count = 0;
         for (VisitDepartmentProduct p : products) {
             if (p.isDeleted()) continue;
@@ -301,8 +306,13 @@ public class BillEditingService {
      * @return number of products restored
      */
     private int restoreCorrectionPendingProducts(UUID visitDepartmentId) {
-        List<VisitDepartmentProduct> products =
-            visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartmentId);
+        List<VisitDepartmentProduct> products = new java.util.ArrayList<>(
+            visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartmentId)
+        );
+        List<VisitDepartment> childDepts = visitDepartmentRepository.findByParentVisitDepartmentId(visitDepartmentId);
+        for (VisitDepartment child : childDepts) {
+            products.addAll(visitDepartmentProductRepository.findByVisitDepartmentId(child.getId()));
+        }
         int count = 0;
         for (VisitDepartmentProduct p : products) {
             if (p.isDeleted()) continue;

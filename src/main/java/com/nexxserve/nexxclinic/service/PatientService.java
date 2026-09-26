@@ -1053,6 +1053,27 @@ public class PatientService {
                 return ApiResponse.error(validationError.message());
             }
 
+            // Set patient-specific share percentage override (optional)
+            if (input.patientShareCoverageId() != null) {
+                Optional<com.nexxserve.nexxclinic.entity.InsuranceCoverage> coverageOpt =
+                        insuranceCoverageRepository.findById(input.patientShareCoverageId());
+                if (coverageOpt.isEmpty()) {
+                    return ApiResponse.error("InsuranceCoverage not found for the given patientShareCoverageId.");
+                }
+                com.nexxserve.nexxclinic.entity.InsuranceCoverage coverage = coverageOpt.get();
+                if (coverage.getInsuranceProvider() == null
+                        || !coverage.getInsuranceProvider().getId().equals(input.insuranceProviderId())) {
+                    return ApiResponse.error("The selected coverage does not belong to the specified insurance provider.");
+                }
+                patientInsurance.setPatientShareCoverage(coverage);
+                patientInsurance.setPatientSharePercentage(coverage.getPatientSharePercentage());
+            } else if (input.patientSharePercentage() != null) {
+                if (input.patientSharePercentage() < 0 || input.patientSharePercentage() > 100) {
+                    return ApiResponse.error("patientSharePercentage must be between 0 and 100.");
+                }
+                patientInsurance.setPatientSharePercentage(input.patientSharePercentage());
+            }
+
             ApiResponse<Void> businessRuleError = validateInsuranceBusinessRules(patient, patientInsurance);
             if (businessRuleError != null) {
                 return ApiResponse.error(businessRuleError.message());

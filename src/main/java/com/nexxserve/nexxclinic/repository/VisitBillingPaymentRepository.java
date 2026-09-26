@@ -23,4 +23,8 @@ public interface VisitBillingPaymentRepository extends JpaRepository<VisitBillin
             WHERE vd.id = :visitDepartmentId
             """)
     List<VisitBillingPayment> findByVisitDepartmentIdWithBuckets(@Param("visitDepartmentId") UUID visitDepartmentId);
+
+    List<VisitBillingPayment> findByVisitDepartmentBillingId(UUID visitDepartmentBillingId);
+
+    List<VisitBillingPayment> findByDepartmentInsuranceBillingId(UUID departmentInsuranceBillingId);
 }

@@ -135,7 +135,7 @@ class BillingPricingCalculatorResolveTest {
         @Test
         void blocked_whenExactDeptAndEncounterMatch() {
             InsuranceCoverage ec = exactCov(provider, deptADepartment, EncounterType.OUTPATIENT, 10);
-            InsuranceCoverage oc = cov(provider, null, null, 50);
+            InsuranceCoverage oc = cov(provider, deptBDepartment, EncounterType.INPATIENT_ADMISSION, 50);
             var r = calculator.resolvePatientSharePercentage(
                 patientInsurance, deptA, EncounterType.OUTPATIENT, oc.getId(), buildPrefetched(ec, oc));
             assertEquals(10, r.percentage());
@@ -288,13 +288,13 @@ class BillingPricingCalculatorResolveTest {
         }
 
         @Test
-        void coverageWinsOverPatientDefault() {
+        void patientDefaultWinsOverCoverage() {
             patientInsurance.setPatientSharePercentage(35);
             InsuranceCoverage c = exactCov(provider, deptADepartment, EncounterType.OUTPATIENT, 15);
             var r = calculator.resolvePatientSharePercentage(
                 patientInsurance, deptA, EncounterType.OUTPATIENT, null, buildPrefetched(c));
-            assertEquals(15, r.percentage());
-            assertEquals(PatientShareSource.RULE, r.source());
+            assertEquals(35, r.percentage());
+            assertEquals(PatientShareSource.PATIENT_DEFAULT, r.source());
         }
     }
 
@@ -341,9 +341,9 @@ class BillingPricingCalculatorResolveTest {
         }
 
         @Test
-        void overrideBlockedByExactMatch_fallsToCoverage() {
+        void overrideBlockedByMismatch_fallsToCoverage() {
             InsuranceCoverage ec = exactCov(provider, deptADepartment, EncounterType.OUTPATIENT, 7);
-            InsuranceCoverage oc = cov(provider, null, null, 99);
+            InsuranceCoverage oc = cov(provider, deptBDepartment, EncounterType.INPATIENT_ADMISSION, 99);
             var r = calculator.resolvePatientSharePercentage(
                 patientInsurance, deptA, EncounterType.OUTPATIENT, oc.getId(), buildPrefetched(ec, oc));
             assertEquals(7, r.percentage());

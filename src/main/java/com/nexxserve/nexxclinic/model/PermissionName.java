@@ -1,0 +1,92 @@
+package com.nexxserve.nexxclinic.model;
+
+public enum PermissionName {
+    // User & Worker Management
+    USER_VIEW,
+    USER_CREATE,
+    USER_UPDATE,
+    USER_ACTIVATE,
+    USER_DEACTIVATE,
+    USER_SESSION_LIMIT,
+    USER_PASSWORD_RESET,
+
+    // Role & Permission Management
+    ROLE_VIEW,
+    ROLE_MANAGE,
+
+    // Clinic Profile & Configuration
+    CLINIC_PROFILE_VIEW,
+    CLINIC_PROFILE_UPDATE,
+    CLINIC_SETTINGS_UPDATE,
+
+    // Department & Profile Management
+    DEPARTMENT_VIEW,
+    DEPARTMENT_CREATE,
+    DEPARTMENT_UPDATE,
+    DEPARTMENT_DELETE,
+    DEPARTMENT_PROFILE_MANAGE,
+
+    // Clinical Form Templates
+    FORM_TEMPLATE_VIEW,
+    FORM_TEMPLATE_CREATE,
+    FORM_TEMPLATE_UPDATE,
+    FORM_TEMPLATE_PUBLISH,
+    FORM_TEMPLATE_DELETE,
+
+    // Patient Management
+    PATIENT_VIEW,
+    PATIENT_CREATE,
+    PATIENT_UPDATE,
+    PATIENT_DELETE,
+    PATIENT_INSURANCE_VIEW,
+    PATIENT_INSURANCE_MANAGE,
+    PATIENT_HISTORY_VIEW,
+
+    // Visit Lifecycle & Routing
+    VISIT_VIEW,
+    VISIT_VIEW_ALL,
+    VISIT_VIEW_ASSIGNED,
+    VISIT_STATUS_VIEW,
+    VISIT_CREATE,
+    VISIT_UPDATE,
+    VISIT_CANCEL,
+    VISIT_ADD_DEPARTMENT,
+    VISIT_DATE_CHANGE,
+    VISIT_FINALISE,
+    VISIT_SETTINGS_MANAGE,
+
+    // Triage & Vital Signs
+    TRIAGE_VIEW,
+    TRIAGE_RECORD,
+    VITAL_SIGNS_RECORD,
+
+    // Clinical Consultation & Practice
+    CONSULTATION_VIEW,
+    CONSULTATION_CONDUCT,
+    CONSULTATION_ANSWERS_SAVE,
+    CONSULTATION_FINALISE,
+    DIAGNOSIS_RECORD,
+    MEDICATION_PRESCRIBE,
+    CLINICAL_NOTE_CREATE,
+    CLINICAL_NOTE_VIEW,
+
+    // Billing, Payments & Invoicing
+    BILLING_VIEW,
+    BILLING_PROCESS,
+    BILLING_EDIT,
+    BILLING_PAYMENT_COLLECT,
+    INVOICE_GENERATE,
+    BILLING_EXEMPTION_APPLY,
+
+    // Products, Pricing & Insurance Coverage Rules
+    PRODUCT_VIEW,
+    PRODUCT_CREATE,
+    PRODUCT_UPDATE,
+    PRODUCT_DELETE,
+    PRODUCT_PRICE_MANAGE,
+    INSURANCE_COVERAGE_MANAGE,
+
+    // Audit & Administration
+    AUDIT_LOG_VIEW,
+    SEARCH_INDEX_MANAGE
+}

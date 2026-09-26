@@ -14,7 +14,6 @@ public record EditBillVisitInput(
     @NotNull(message = "visitId is required")
     UUID visitId,
 
-    @NotNull(message = "expectedBillingVersionId is required")
     UUID expectedBillingVersionId,
 
     @NotNull(message = "departments is required")

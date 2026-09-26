@@ -26,6 +26,8 @@ public class BillingQueryService {
     private final com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository visitDepartmentProductRepository;
     private final com.nexxserve.nexxclinic.repository.VisitInsuranceRepository visitInsuranceRepository;
     private final com.nexxserve.nexxclinic.repository.VisitDepartmentRepository visitDepartmentRepository;
+    private final com.nexxserve.nexxclinic.repository.VisitDepartmentBillingRepository visitDepartmentBillingRepository;
+    private final com.nexxserve.nexxclinic.repository.VisitBillingItemRepository visitBillingItemRepository;
     private final BillingVersionBuilder billingVersionBuilder;
     private final BillingDataMapper billingDataMapper;
 
@@ -34,6 +36,8 @@ public class BillingQueryService {
         com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository visitDepartmentProductRepository,
         com.nexxserve.nexxclinic.repository.VisitInsuranceRepository visitInsuranceRepository,
         com.nexxserve.nexxclinic.repository.VisitDepartmentRepository visitDepartmentRepository,
+        com.nexxserve.nexxclinic.repository.VisitDepartmentBillingRepository visitDepartmentBillingRepository,
+        com.nexxserve.nexxclinic.repository.VisitBillingItemRepository visitBillingItemRepository,
         BillingVersionBuilder billingVersionBuilder,
         BillingDataMapper billingDataMapper
     ) {
@@ -41,6 +45,8 @@ public class BillingQueryService {
         this.visitDepartmentProductRepository = visitDepartmentProductRepository;
         this.visitInsuranceRepository = visitInsuranceRepository;
         this.visitDepartmentRepository = visitDepartmentRepository;
+        this.visitDepartmentBillingRepository = visitDepartmentBillingRepository;
+        this.visitBillingItemRepository = visitBillingItemRepository;
         this.billingVersionBuilder = billingVersionBuilder;
         this.billingDataMapper = billingDataMapper;
     }
@@ -100,5 +106,41 @@ public class BillingQueryService {
     public Map<UUID, VisitDepartmentProduct> loadVisitDepartmentProductsById(UUID visitId) {
         return loadVisitDepartmentProducts(visitId).stream()
             .collect(Collectors.toMap(VisitDepartmentProduct::getId, p -> p, (a, b) -> a));
+    }
+
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public ApiResponse getVisitDepartmentBilling(UUID visitDepartmentId) {
+        if (visitDepartmentId == null) {
+            return ApiResponse.error("visitDepartmentId is required.");
+        }
+        List<com.nexxserve.nexxclinic.entity.VisitDepartmentBilling> list = visitDepartmentBillingRepository.findByVisitDepartmentId(visitDepartmentId);
+        if (list.isEmpty()) {
+            return ApiResponse.success("No billing found for this visit department.", null);
+        }
+        return ApiResponse.success("Visit department billing fetched.", billingDataMapper.visitDepartmentBillingToMap(list.get(0)));
+    }
+
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public Map<String, Object> departmentBilling(UUID visitDepartmentId) {
+        if (visitDepartmentId == null) {
+            return null;
+        }
+        List<com.nexxserve.nexxclinic.entity.VisitDepartmentBilling> list = visitDepartmentBillingRepository.findByVisitDepartmentId(visitDepartmentId);
+        if (list.isEmpty()) {
+            return null;
+        }
+        return billingDataMapper.visitDepartmentBillingToMap(list.get(0));
+    }
+
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public Map<String, Object> productBillingItem(UUID visitDepartmentProductId) {
+        if (visitDepartmentProductId == null) {
+            return null;
+        }
+        List<com.nexxserve.nexxclinic.entity.VisitBillingItem> items = visitBillingItemRepository.findByVisitDepartmentProductId(visitDepartmentProductId);
+        if (items.isEmpty()) {
+            return null;
+        }
+        return billingDataMapper.visitBillingItemToMap(items.get(0));
     }
 }

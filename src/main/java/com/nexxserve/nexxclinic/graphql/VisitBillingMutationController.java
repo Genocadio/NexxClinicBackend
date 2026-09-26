@@ -70,10 +70,11 @@ public class VisitBillingMutationController {
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.CLINICIAN, RoleName.FINANCE})
     @MutationMapping
     public ApiResponse generateInvoice(
-            @Argument("departmentInsuranceBillingId") UUID departmentInsuranceBillingId,
+            @Argument(name = "visitDepartmentId") UUID visitDepartmentId,
+            @Argument(name = "departmentInsuranceBillingId") UUID departmentInsuranceBillingId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return invoiceGenerator.generateInvoice(departmentInsuranceBillingId, authUser);
+        return invoiceGenerator.generateInvoice(visitDepartmentId, departmentInsuranceBillingId, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.MANAGER})

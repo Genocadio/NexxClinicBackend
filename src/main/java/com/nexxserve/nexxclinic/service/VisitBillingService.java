@@ -217,13 +217,15 @@ public class VisitBillingService {
             boolean hasExistingBilling = billingVersionBuilder.hasAnyExistingBilling(input.visitId());
             if (hasExistingBilling) {
                 // For already-billed visits, at least one department in the input must be in DEPARTMENT_EDITING
-                boolean anyDeptEditing = input.departments() != null && input.departments().stream()
+                boolean anyDeptEditing = (input.departments() != null && input.departments().stream()
                     .anyMatch(d -> {
                         if (d == null || d.visitDepartmentId() == null) return false;
                         return visitDepartmentRepository.findById(d.visitDepartmentId())
-                            .map(vd -> vd.getStatus() == com.nexxserve.nexxclinic.model.VisitDepartmentStatus.DEPARTMENT_EDITING)
+                            .map(vd -> vd.getStatus() == com.nexxserve.nexxclinic.model.VisitDepartmentStatus.DEPARTMENT_EDITING
+                                    || (vd.getParentVisitDepartment() != null && vd.getParentVisitDepartment().getStatus() == com.nexxserve.nexxclinic.model.VisitDepartmentStatus.DEPARTMENT_EDITING))
                             .orElse(false);
-                    });
+                    })) || visitDepartmentRepository.findByVisitId(input.visitId()).stream()
+                        .anyMatch(vd -> vd.getStatus() == com.nexxserve.nexxclinic.model.VisitDepartmentStatus.DEPARTMENT_EDITING);
                 if (!anyDeptEditing) {
                     return ApiResponse.error(
                         "At least one department must be in DEPARTMENT_EDITING mode to edit billing. " +
@@ -239,7 +241,7 @@ public class VisitBillingService {
         java.util.UUID latestVersionId = billingVersionBuilder
             .findLatestVersionId(input.visitId())
             .orElse(null);
-        if (latestVersionId == null || !latestVersionId.equals(input.expectedBillingVersionId())) {
+        if (input.expectedBillingVersionId() != null && latestVersionId != null && !latestVersionId.equals(input.expectedBillingVersionId())) {
             return ApiResponse.error(
                 "Billing changed since this edit session began. Refresh the visit and review the latest bill."
             );
@@ -276,6 +278,17 @@ public class VisitBillingService {
             if (result.status() == com.nexxserve.nexxclinic.model.ResponseStatus.SUCCESS) {
                 // Per-department editing: restore DEPARTMENT_EDITING departments
                 // back to their pre-edit status. Visit status is untouched.
+                for (com.nexxserve.nexxclinic.entity.VisitDepartment vd : visitDepartmentRepository.findByVisitId(input.visitId())) {
+                    if (vd.getStatus() == com.nexxserve.nexxclinic.model.VisitDepartmentStatus.DEPARTMENT_EDITING) {
+                        com.nexxserve.nexxclinic.model.VisitDepartmentStatus editSource =
+                            vd.getBillingEditSourceStatus() != null
+                                ? vd.getBillingEditSourceStatus()
+                                : com.nexxserve.nexxclinic.model.VisitDepartmentStatus.COMPLETED;
+                        vd.setBillingEditSourceStatus(null);
+                        vd.setStatus(editSource);
+                        visitDepartmentRepository.save(vd);
+                    }
+                }
                 if (input.departments() != null) {
                     for (EditBillVisitInput.EditBillVisitDepartmentInput dept : input.departments()) {
                         if (dept == null || dept.visitDepartmentId() == null) continue;
@@ -288,6 +301,7 @@ public class VisitBillingService {
                                             : com.nexxserve.nexxclinic.model.VisitDepartmentStatus.COMPLETED;
                                     vd.setBillingEditSourceStatus(null);
                                     vd.setStatus(editSource);
+                                    visitDepartmentRepository.save(vd);
                                 }
                             });
                     }
@@ -1030,14 +1044,21 @@ public class VisitBillingService {
             insuranceBilling.setPatientPayableAmount(ZERO);
             insuranceBilling.setPaidAmount(ZERO);
             insuranceBilling.setOutstandingAmount(ZERO);
-            // If the current billing time would fall before the visit date (e.g. the
-            // visit date was edited forward for an unbilled visit), do not backdate
-            // billing before the visit. Clamp the billing date to at least 5 minutes
-            // after the visit date, matching the admin billing-date validation rule.
-            // Otherwise leave it null so the @PrePersist hook stamps LocalDateTime.now().
-            java.time.LocalDateTime visitDateNow = visit.getVisitDate();
-            if (visitDateNow != null) {
-                java.time.LocalDateTime minBillingDate = visitDateNow.plusMinutes(5);
+            // If the current billing time would fall before the department encounter date,
+            // clamp the billing date to at least 5 minutes after the department encounter date.
+            VisitDepartment billedDept = departmentBilling.getVisitDepartment();
+            java.time.LocalDateTime deptEncounterNow = null;
+            if (billedDept != null && billedDept.getStartedAt() != null) {
+                deptEncounterNow = billedDept.getStartedAt();
+            } else if (visit.getVisitDate() != null) {
+                deptEncounterNow = visit.getVisitDate();
+            } else if (billedDept != null && billedDept.getCreatedAt() != null) {
+                deptEncounterNow = billedDept.getCreatedAt();
+            } else {
+                deptEncounterNow = visit.getCreatedAt();
+            }
+            if (deptEncounterNow != null) {
+                java.time.LocalDateTime minBillingDate = deptEncounterNow.plusMinutes(5);
                 java.time.LocalDateTime billingNow = java.time.LocalDateTime.now();
                 if (billingNow.isBefore(minBillingDate)) {
                     insuranceBilling.setBillingDate(minBillingDate);
@@ -2038,13 +2059,27 @@ public class VisitBillingService {
             return ApiResponse.error("Cannot update billing date for a cancelled visit.");
         }
 
-        // Validate: billing date must be at least 5 minutes after visit date
-        if (visit.getVisitDate() != null && input.billingDate() != null) {
-            long visitTimeMs = visit.getVisitDate().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+        // Validate: billing date must be at least 5 minutes after the department encounter date
+        VisitDepartment visitDept = billing.getVisitDepartmentBilling() != null
+                ? billing.getVisitDepartmentBilling().getVisitDepartment()
+                : null;
+        java.time.LocalDateTime deptEncounterTime = null;
+        if (visitDept != null && visitDept.getStartedAt() != null) {
+            deptEncounterTime = visitDept.getStartedAt();
+        } else if (visit.getVisitDate() != null) {
+            deptEncounterTime = visit.getVisitDate();
+        } else if (visitDept != null && visitDept.getCreatedAt() != null) {
+            deptEncounterTime = visitDept.getCreatedAt();
+        } else {
+            deptEncounterTime = visit.getCreatedAt();
+        }
+
+        if (deptEncounterTime != null && input.billingDate() != null) {
+            long deptTimeMs = deptEncounterTime.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
             long billingTimeMs = input.billingDate().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
             long fiveMinutesMs = 5 * 60 * 1000;
-            if (billingTimeMs < visitTimeMs + fiveMinutesMs) {
-                return ApiResponse.error("Billing date must be at least 5 minutes after the visit date.");
+            if (billingTimeMs < deptTimeMs + fiveMinutesMs) {
+                return ApiResponse.error("Billing date must be at least 5 minutes after the department encounter date.");
             }
         }
 

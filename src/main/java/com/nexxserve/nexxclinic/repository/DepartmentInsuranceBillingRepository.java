@@ -135,5 +135,50 @@ public interface DepartmentInsuranceBillingRepository extends JpaRepository<Depa
     List<DepartmentInsuranceBilling> findAllByVisitId(
             @Param("visitId") UUID visitId
     );
+
+    List<DepartmentInsuranceBilling> findByVisitDepartmentBillingId(UUID visitDepartmentBillingId);
+
+    @Query("""
+            SELECT b FROM DepartmentInsuranceBilling b
+            JOIN FETCH b.visitDepartmentBilling db
+            JOIN FETCH db.visitDepartment vd
+            LEFT JOIN FETCH vd.department
+            JOIN FETCH db.visitBilling vb
+            JOIN FETCH vb.visit v
+            JOIN FETCH v.patient
+            LEFT JOIN FETCH b.patientInsurance pi
+            LEFT JOIN FETCH pi.insuranceProvider
+            WHERE vd.id = :visitDepartmentId
+            ORDER BY b.createdAt DESC
+            """)
+    List<DepartmentInsuranceBilling> findByVisitDepartmentIdWithInvoiceData(
+            @Param("visitDepartmentId") UUID visitDepartmentId
+    );
+
+    @Query("""
+            SELECT b FROM DepartmentInsuranceBilling b
+            JOIN FETCH b.visitDepartmentBilling db
+            JOIN FETCH db.visitDepartment vd
+            LEFT JOIN FETCH vd.department
+            JOIN FETCH db.visitBilling vb
+            JOIN FETCH vb.visit v
+            JOIN FETCH v.patient
+            LEFT JOIN FETCH b.patientInsurance pi
+            LEFT JOIN FETCH pi.insuranceProvider
+            WHERE vd.id = :visitDepartmentId
+              AND (b.billingVersion.id = :versionId OR (b.billingVersion IS NULL AND :versionId IS NULL))
+            ORDER BY b.createdAt DESC
+            """)
+    List<DepartmentInsuranceBilling> findByVisitDepartmentIdAndBillingVersionWithInvoiceData(
+            @Param("visitDepartmentId") UUID visitDepartmentId,
+            @Param("versionId") UUID versionId
+    );
+
+    @Query("""
+            SELECT b FROM DepartmentInsuranceBilling b
+            WHERE b.visitDepartmentBilling.visitDepartment.id = :visitDepartmentId
+            """)
+    List<DepartmentInsuranceBilling> findAllByVisitDepartmentId(@Param("visitDepartmentId") UUID visitDepartmentId);
 }
+
 

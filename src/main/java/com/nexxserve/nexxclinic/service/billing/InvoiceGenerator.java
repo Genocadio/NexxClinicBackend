@@ -10,6 +10,7 @@ import com.nexxserve.nexxclinic.repository.ClinicProfileRepository;
 import com.nexxserve.nexxclinic.repository.DepartmentInsuranceBillingRepository;
 import com.nexxserve.nexxclinic.repository.VisitBillingItemRepository;
 import com.nexxserve.nexxclinic.repository.VisitBillingVersionRepository;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
 import com.nexxserve.nexxclinic.repository.WorkerRepository;
 import com.nexxserve.nexxclinic.config.SupabaseProperties;
 import com.nexxserve.nexxclinic.service.FileStorageService;
@@ -48,6 +49,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class InvoiceGenerator {
 
     private final DepartmentInsuranceBillingRepository departmentInsuranceBillingRepository;
+    private final VisitDepartmentRepository visitDepartmentRepository;
     private final ClinicProfileRepository clinicProfileRepository;
     private final VisitBillingVersionRepository visitBillingVersionRepository;
     private final VisitBillingItemRepository visitBillingItemRepository;
@@ -66,6 +68,7 @@ public class InvoiceGenerator {
 
     public InvoiceGenerator(
         DepartmentInsuranceBillingRepository departmentInsuranceBillingRepository,
+        VisitDepartmentRepository visitDepartmentRepository,
         ClinicProfileRepository clinicProfileRepository,
         VisitBillingVersionRepository visitBillingVersionRepository,
         VisitBillingItemRepository visitBillingItemRepository,
@@ -80,6 +83,7 @@ public class InvoiceGenerator {
         @Value("${billing.invoice.paper-size:letter}") String paperSizeKey
     ) {
         this.departmentInsuranceBillingRepository = departmentInsuranceBillingRepository;
+        this.visitDepartmentRepository = visitDepartmentRepository;
         this.clinicProfileRepository = clinicProfileRepository;
         this.visitBillingVersionRepository = visitBillingVersionRepository;
         this.visitBillingItemRepository = visitBillingItemRepository;
@@ -101,16 +105,24 @@ public class InvoiceGenerator {
         UUID departmentInsuranceBillingId,
         AuthenticatedUser authUser
     ) {
-        if (departmentInsuranceBillingId == null) {
+        return generateInvoice(null, departmentInsuranceBillingId, authUser);
+    }
+
+    public ApiResponse generateInvoice(
+        UUID visitDepartmentId,
+        UUID departmentInsuranceBillingId,
+        AuthenticatedUser authUser
+    ) {
+        if (visitDepartmentId == null && departmentInsuranceBillingId == null) {
             return ApiResponse.error(
-                "departmentInsuranceBillingId is required."
+                "visitDepartmentId or departmentInsuranceBillingId is required."
             );
         }
 
         // Phase 1 — short read-only tx: authenticate, validate, snapshot the data the
         // PDF needs. All lazy associations are eagerly fetched inside the tx.
         InvoiceSnapshot snapshot = readOnlyTransactionTemplate.execute(
-            status -> loadInvoiceSnapshot(departmentInsuranceBillingId, authUser)
+            status -> loadInvoiceSnapshot(visitDepartmentId, departmentInsuranceBillingId, authUser)
         );
         if (snapshot == null) {
             return ApiResponse.error("Unable to load invoice data. Please try again.");
@@ -120,6 +132,7 @@ public class InvoiceGenerator {
         }
 
         DepartmentInsuranceBilling billing = snapshot.billing();
+        UUID billingId = billing.getId();
 
         // Invoice already stored — return a fresh download URL (pure IO, no DB tx held).
         // If the stored URL can't be resolved (e.g. file missing from storage),
@@ -135,7 +148,7 @@ public class InvoiceGenerator {
                 log.warn(
                     "Stored invoice URL {} for billing {} could not be resolved ({}), regenerating.",
                     billing.getInvoiceUrl(),
-                    departmentInsuranceBillingId,
+                    billingId,
                     e.getMessage()
                 );
                 // Fall through to Phase 2 to regenerate the PDF.
@@ -149,7 +162,7 @@ public class InvoiceGenerator {
         } catch (Exception e) {
             log.error(
                 "Invoice generation failed for billing {}: {}",
-                departmentInsuranceBillingId,
+                billingId,
                 e.getMessage(),
                 e
             );
@@ -161,15 +174,15 @@ public class InvoiceGenerator {
         // file would be an orphan with no DB reference — clean it up best-effort.
         boolean persisted;
         try {
-            persisted = persistInvoiceUrl(departmentInsuranceBillingId, objectPath);
+            persisted = persistInvoiceUrl(billingId, objectPath);
         } catch (Exception e) {
             log.error(
                 "Invoice uploaded for billing {} but object path could not be persisted: {}",
-                departmentInsuranceBillingId,
+                billingId,
                 e.getMessage(),
                 e
             );
-            cleanupOrphanedInvoice(departmentInsuranceBillingId, objectPath);
+            cleanupOrphanedInvoice(billingId, objectPath);
             return ApiResponse.error(
                 "Invoice was generated but could not be saved. Please try again."
             );
@@ -181,9 +194,9 @@ public class InvoiceGenerator {
             log.warn(
                 "Invoice {} for billing {} could not be persisted — billing row missing or no longer the latest version; cleaning up upload.",
                 objectPath,
-                departmentInsuranceBillingId
+                billingId
             );
-            cleanupOrphanedInvoice(departmentInsuranceBillingId, objectPath);
+            cleanupOrphanedInvoice(billingId, objectPath);
             return ApiResponse.error(
                 "Invoice could not be saved because the billing record is no longer available or current. Please refresh and try again."
             );
@@ -209,6 +222,7 @@ public class InvoiceGenerator {
      * {@link InvoiceSnapshot} carrying either a clean error or the loaded data.
      */
     private InvoiceSnapshot loadInvoiceSnapshot(
+        UUID visitDepartmentId,
         UUID departmentInsuranceBillingId,
         AuthenticatedUser authUser
     ) {
@@ -219,36 +233,144 @@ public class InvoiceGenerator {
                 "Authentication is required to generate an invoice."
             );
         }
-        UUID visitId = resolveVisitIdForDepartmentInsuranceBilling(
-            departmentInsuranceBillingId
-        );
-        // Skip unread-notes gate for MANAGER and ADMIN — they manage billing,
-        // not clinical notes. Only FINANCE/CLINICIAN roles are blocked.
+
+        DepartmentInsuranceBilling billing = null;
+        UUID visitId = null;
+
+        // 1. If visitDepartmentId is provided, attempt to look up the VisitDepartment
+        if (visitDepartmentId != null) {
+            Optional<com.nexxserve.nexxclinic.entity.VisitDepartment> vdOpt =
+                visitDepartmentRepository.findById(visitDepartmentId);
+            if (vdOpt.isPresent()) {
+                com.nexxserve.nexxclinic.entity.VisitDepartment vd = vdOpt.get();
+                Visit visit = vd.getVisit();
+                if (visit != null) {
+                    visitId = visit.getId();
+                    Optional<com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion> latestVersionOpt =
+                        visitBillingVersionRepository.findFirstByVisitIdOrderByVersionDesc(visitId);
+                    if (latestVersionOpt.isPresent()) {
+                        UUID versionId = latestVersionOpt.get().getId();
+                        List<DepartmentInsuranceBilling> list =
+                            departmentInsuranceBillingRepository.findByVisitDepartmentIdAndBillingVersionWithInvoiceData(
+                                visitDepartmentId,
+                                versionId
+                            );
+                        if (!list.isEmpty()) {
+                            if (departmentInsuranceBillingId != null) {
+                                billing = list.stream()
+                                    .filter(b -> b.getId().equals(departmentInsuranceBillingId))
+                                    .findFirst()
+                                    .orElse(list.get(0));
+                            } else {
+                                billing = list.get(0);
+                            }
+                        }
+                    }
+                    if (billing == null) {
+                        List<DepartmentInsuranceBilling> fallback =
+                            departmentInsuranceBillingRepository.findByVisitDepartmentIdWithInvoiceData(visitDepartmentId);
+                        if (!fallback.isEmpty()) {
+                            billing = fallback.get(0);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. If billing still not resolved, check whether departmentInsuranceBillingId or visitDepartmentId points to a DepartmentInsuranceBilling directly
+        if (billing == null) {
+            Optional<DepartmentInsuranceBilling> billingOptional = Optional.empty();
+            if (departmentInsuranceBillingId != null) {
+                billingOptional = departmentInsuranceBillingRepository.findByIdWithInvoiceData(departmentInsuranceBillingId);
+            }
+            if (billingOptional.isEmpty() && visitDepartmentId != null) {
+                billingOptional = departmentInsuranceBillingRepository.findByIdWithInvoiceData(visitDepartmentId);
+            }
+
+            if (billingOptional.isPresent()) {
+                billing = billingOptional.get();
+                Visit visit = resolveVisit(billing);
+                if (visit != null) {
+                    visitId = visit.getId();
+                    // If not latest version, automatically resolve latest billing for this department / bucket
+                    if (!isLatestBillingVersion(visitId, billing)) {
+                        com.nexxserve.nexxclinic.entity.VisitDepartment vd = billing.getVisitDepartmentBilling() != null
+                            ? billing.getVisitDepartmentBilling().getVisitDepartment()
+                            : null;
+                        if (vd != null) {
+                            Optional<com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion> latestVersionOpt =
+                                visitBillingVersionRepository.findFirstByVisitIdOrderByVersionDesc(visitId);
+                            if (latestVersionOpt.isPresent()) {
+                                UUID versionId = latestVersionOpt.get().getId();
+                                List<DepartmentInsuranceBilling> latestList =
+                                    departmentInsuranceBillingRepository.findByVisitDepartmentIdAndBillingVersionWithInvoiceData(
+                                        vd.getId(),
+                                        versionId
+                                    );
+                                if (!latestList.isEmpty()) {
+                                    UUID targetPiId = billing.getPatientInsurance() != null
+                                        ? billing.getPatientInsurance().getId()
+                                        : null;
+                                    billing = latestList.stream()
+                                        .filter(b -> (b.getPatientInsurance() == null && targetPiId == null)
+                                            || (b.getPatientInsurance() != null && b.getPatientInsurance().getId().equals(targetPiId)))
+                                        .findFirst()
+                                        .orElse(latestList.get(0));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Fallback: what if candidate ID is a visitId?
+        if (billing == null) {
+            UUID candidateVisitId = visitDepartmentId != null ? visitDepartmentId : departmentInsuranceBillingId;
+            if (candidateVisitId != null) {
+                List<com.nexxserve.nexxclinic.entity.VisitDepartment> vds = visitDepartmentRepository.findByVisitId(candidateVisitId);
+                if (!vds.isEmpty()) {
+                    visitId = candidateVisitId;
+                    for (com.nexxserve.nexxclinic.entity.VisitDepartment vd : vds) {
+                        List<DepartmentInsuranceBilling> list = departmentInsuranceBillingRepository.findByVisitDepartmentIdWithInvoiceData(vd.getId());
+                        if (!list.isEmpty()) {
+                            billing = list.get(0);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (billing == null) {
+            if (visitDepartmentId != null && visitDepartmentRepository.existsById(visitDepartmentId)) {
+                if (!billingVersionBuilder.isVisitDepartmentFullyBilled(visitDepartmentId)) {
+                    return InvoiceSnapshot.error(
+                        "Invoice can only be generated after department products are billed."
+                    );
+                }
+                return InvoiceSnapshot.error("No billing found for this visit department.");
+            }
+            return InvoiceSnapshot.error("Visit department or billing record not found.");
+        }
+
+        if (visitId == null) {
+            Visit visit = resolveVisit(billing);
+            if (visit != null) {
+                visitId = visit.getId();
+            }
+        }
+
+        // Skip unread-notes gate for MANAGER and ADMIN
         boolean skipNotesGuard = actingUser.getRoles().contains(com.nexxserve.nexxclinic.model.RoleName.MANAGER)
                 || actingUser.getRoles().contains(com.nexxserve.nexxclinic.model.RoleName.ADMIN);
-        if (visitId != null && !skipNotesGuard) {
+        if (!skipNotesGuard && visitId != null) {
             long unreadNotes = billingValidation.countUnreadNotesForVisit(visitId, actingUser);
             if (unreadNotes > 0) {
                 return InvoiceSnapshot.error(
                     "You have unread notes. Please read them before generating an invoice."
                 );
             }
-        }
-        Optional<DepartmentInsuranceBilling> billingOptional =
-            departmentInsuranceBillingRepository.findByIdWithInvoiceData(
-                departmentInsuranceBillingId
-            );
-        if (billingOptional.isEmpty()) {
-            return InvoiceSnapshot.error("Department insurance billing not found.");
-        }
-
-        DepartmentInsuranceBilling billing = billingOptional.get();
-        Visit visit = billing
-            .getVisitDepartmentBilling()
-            .getVisitBilling()
-            .getVisit();
-        if (visit == null) {
-            return InvoiceSnapshot.error("Visit not found for billing.");
         }
 
         // BLOCK: invoices must not be generated while the owning department is in
@@ -262,16 +384,16 @@ public class InvoiceGenerator {
             );
         }
 
-        // Flow I: invoices are only ever generated for the LATEST billing version.
-        // Old versions have their invoiceUrl cleared by editBillVisit (B2 fix); this
-        // guard prevents regenerating a fresh PDF from stale data via an old row id.
-        if (!isLatestBillingVersion(visit.getId(), billing)) {
+        // Invoices are generated per department insurance billing. Ensure the department's
+        // products are billed (without blocking on unrelated departments across the visit).
+        com.nexxserve.nexxclinic.entity.VisitDepartment visitDepartment = billing.getVisitDepartmentBilling() != null
+            ? billing.getVisitDepartmentBilling().getVisitDepartment()
+            : null;
+        if (visitDepartment != null && !billingVersionBuilder.isVisitDepartmentFullyBilled(visitDepartment.getId())) {
             return InvoiceSnapshot.error(
-                "Invoices can only be generated for the latest billing version. Use the current billing data."
+                "Invoice can only be generated after all department products are billed."
             );
-        }
-
-        if (!billingVersionBuilder.isVisitFullyBilled(visit.getId())) {
+        } else if (visitDepartment == null && visitId != null && !billingVersionBuilder.isVisitFullyBilled(visitId)) {
             return InvoiceSnapshot.error(
                 "Invoice can only be generated after all visit products are billed."
             );

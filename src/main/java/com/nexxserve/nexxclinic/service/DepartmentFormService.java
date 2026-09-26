@@ -53,6 +53,7 @@ public class DepartmentFormService {
     private final ConsultationAnswerRepository consultationAnswerRepository;
     private final WorkerRepository workerRepository;
     private final VisitDepartmentRepository visitDepartmentRepository;
+    private final VisitDepartmentNoteService visitDepartmentNoteService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public DepartmentFormService(
@@ -61,7 +62,8 @@ public class DepartmentFormService {
             DepartmentFormVersionRepository departmentFormVersionRepository,
             ConsultationAnswerRepository consultationAnswerRepository,
             WorkerRepository workerRepository,
-            VisitDepartmentRepository visitDepartmentRepository
+            VisitDepartmentRepository visitDepartmentRepository,
+            VisitDepartmentNoteService visitDepartmentNoteService
     ) {
         this.departmentRepository = departmentRepository;
         this.departmentFormRepository = departmentFormRepository;
@@ -69,6 +71,7 @@ public class DepartmentFormService {
         this.consultationAnswerRepository = consultationAnswerRepository;
         this.workerRepository = workerRepository;
         this.visitDepartmentRepository = visitDepartmentRepository;
+        this.visitDepartmentNoteService = visitDepartmentNoteService;
     }
 
     @Transactional
@@ -290,13 +293,17 @@ public class DepartmentFormService {
             return ApiResponse.error("Requested form version does not exist.");
         }
 
-        // C1: once a department is handed to finance (BILLING), clinical data is frozen.
-        // We resolve the VisitDepartment to check its status.
+        // Forms are only blocked when the department is FINALISED or CANCELLED.
+        // Completed departments still allow adding/updating consultation answers.
         Optional<VisitDepartment> visitDeptOptional = visitDepartmentRepository.findByVisitIdAndDepartmentId(input.visitId(), input.departmentId());
         if (visitDeptOptional.isPresent()) {
-            VisitDepartmentStatus status = visitDeptOptional.get().getStatus();
-            if (status == VisitDepartmentStatus.BILLING || status == VisitDepartmentStatus.COMPLETED || status == VisitDepartmentStatus.CANCELLED) {
+            VisitDepartment vd = visitDeptOptional.get();
+            VisitDepartmentStatus status = vd.getStatus();
+            if (status == VisitDepartmentStatus.FINALISED || status == VisitDepartmentStatus.CANCELLED) {
                 return ApiResponse.error("Cannot modify forms for a department in " + status + " status.");
+            }
+            if (visitDepartmentNoteService.hasUnreadDepartmentNotes(vd.getId(), authUser)) {
+                return ApiResponse.error("You have unread department notes. Please read them before continuing consultation.");
             }
         }
 

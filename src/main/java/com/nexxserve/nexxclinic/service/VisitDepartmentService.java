@@ -26,6 +26,10 @@ import com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentProductStatus
 import com.nexxserve.nexxclinic.dto.out.*;
 import com.nexxserve.nexxclinic.mappers.out.*;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
+import com.nexxserve.nexxclinic.model.PermissionName;
+import com.nexxserve.nexxclinic.model.ResponseStatus;
+import com.nexxserve.nexxclinic.model.RoleName;
+import com.nexxserve.nexxclinic.model.BillingConfirmationStatus;
 import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
 import com.nexxserve.nexxclinic.model.VisitDepartmentProductSource;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
@@ -42,6 +46,13 @@ import com.nexxserve.nexxclinic.entity.ConsultationAnswer;
 import com.nexxserve.nexxclinic.repository.ConsultationAnswerRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
+import com.nexxserve.nexxclinic.repository.DepartmentInsuranceBillingRepository;
+import com.nexxserve.nexxclinic.repository.VisitBillingPaymentRepository;
+import com.nexxserve.nexxclinic.repository.VisitBillingRepository;
+import com.nexxserve.nexxclinic.entity.DepartmentInsuranceBilling;
+import com.nexxserve.nexxclinic.entity.VisitBilling;
+import com.nexxserve.nexxclinic.entity.VisitBillingPayment;
+import com.nexxserve.nexxclinic.entity.VisitDepartmentBilling;
 import com.nexxserve.nexxclinic.repository.VisitInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.VisitRepository;
 import com.nexxserve.nexxclinic.repository.WorkerRepository;
@@ -71,6 +82,9 @@ public class VisitDepartmentService {
     private final WorkerRepository workerRepository;
     private final VisitBillingItemRepository visitBillingItemRepository;
     private final com.nexxserve.nexxclinic.repository.VisitDepartmentBillingRepository visitDepartmentBillingRepository;
+    private final DepartmentInsuranceBillingRepository departmentInsuranceBillingRepository;
+    private final VisitBillingPaymentRepository visitBillingPaymentRepository;
+    private final VisitBillingRepository visitBillingRepository;
     private final VisitInsuranceRepository visitInsuranceRepository;
     private final DepartmentProfileRepository departmentProfileRepository;
     private final DepartmentProfileProductRepository departmentProfileProductRepository;
@@ -85,6 +99,8 @@ public class VisitDepartmentService {
     private final com.nexxserve.nexxclinic.service.VisitPriceEstimateService visitPriceEstimateService;
     private final MeilisearchIndexService meilisearchIndexService;
     private final com.nexxserve.nexxclinic.repository.VisitDepartmentProductSnapshotRepository visitDepartmentProductSnapshotRepository;
+    private final RolePermissionService rolePermissionService;
+    private final com.nexxserve.nexxclinic.service.billing.BillingProductService billingProductService;
 
     public VisitDepartmentService(
             VisitRepository visitRepository,
@@ -99,6 +115,9 @@ public class VisitDepartmentService {
             WorkerRepository workerRepository,
             VisitBillingItemRepository visitBillingItemRepository,
             com.nexxserve.nexxclinic.repository.VisitDepartmentBillingRepository visitDepartmentBillingRepository,
+            DepartmentInsuranceBillingRepository departmentInsuranceBillingRepository,
+            VisitBillingPaymentRepository visitBillingPaymentRepository,
+            VisitBillingRepository visitBillingRepository,
             VisitInsuranceRepository visitInsuranceRepository,
             DepartmentProfileRepository departmentProfileRepository,
             DepartmentProfileProductRepository departmentProfileProductRepository,
@@ -109,7 +128,9 @@ public class VisitDepartmentService {
             @Lazy VisitService visitService,
             @Lazy com.nexxserve.nexxclinic.service.VisitPriceEstimateService visitPriceEstimateService,
             MeilisearchIndexService meilisearchIndexService,
-            com.nexxserve.nexxclinic.repository.VisitDepartmentProductSnapshotRepository visitDepartmentProductSnapshotRepository
+            com.nexxserve.nexxclinic.repository.VisitDepartmentProductSnapshotRepository visitDepartmentProductSnapshotRepository,
+            @Lazy RolePermissionService rolePermissionService,
+            @Lazy com.nexxserve.nexxclinic.service.billing.BillingProductService billingProductService
     ) {
         this.visitRepository = visitRepository;
         this.visitDepartmentRepository = visitDepartmentRepository;
@@ -123,6 +144,9 @@ public class VisitDepartmentService {
         this.workerRepository = workerRepository;
         this.visitBillingItemRepository = visitBillingItemRepository;
         this.visitDepartmentBillingRepository = visitDepartmentBillingRepository;
+        this.departmentInsuranceBillingRepository = departmentInsuranceBillingRepository;
+        this.visitBillingPaymentRepository = visitBillingPaymentRepository;
+        this.visitBillingRepository = visitBillingRepository;
         this.visitInsuranceRepository = visitInsuranceRepository;
         this.departmentProfileRepository = departmentProfileRepository;
         this.departmentProfileProductRepository = departmentProfileProductRepository;
@@ -134,6 +158,8 @@ public class VisitDepartmentService {
         this.visitPriceEstimateService = visitPriceEstimateService;
         this.meilisearchIndexService = meilisearchIndexService;
         this.visitDepartmentProductSnapshotRepository = visitDepartmentProductSnapshotRepository;
+        this.rolePermissionService = rolePermissionService;
+        this.billingProductService = billingProductService;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -157,12 +183,8 @@ public class VisitDepartmentService {
         }
 
         Visit visit = visitOptional.get();
-        if (visit.getStatus() == VisitStatus.COMPLETED) {
-            return ApiResponse.error("Cannot add departments to a completed visit.");
-        }
-
-        if (visit.getStatus() == VisitStatus.CANCELLED) {
-            return ApiResponse.error("Cannot add departments to a cancelled visit.");
+        if (visit.getStatus() != VisitStatus.CREATED && visit.getStatus() != VisitStatus.IN_PROGRESS) {
+            return ApiResponse.error("Departments can only be added to a visit in CREATED or IN_PROGRESS status.");
         }
 
         // Note: per-department edit mode (DEPARTMENT_EDITING) does not block adding
@@ -197,6 +219,7 @@ public class VisitDepartmentService {
         visitDepartment.setVisit(visit);
         visitDepartment.setDepartment(department);
         visitDepartment.setProfile(profile);
+        visitDepartment.setAddedBy(resolveWorker(authUser));
 
         // When a profile is provided, derive encounterType from it.
         // When no profile, encounterType must be provided explicitly.
@@ -249,6 +272,83 @@ public class VisitDepartmentService {
         // Return refreshed visit DTO via visitRepository – caller can map if needed
         Visit refreshed = visitRepository.findById(visitId).orElse(visit);
         return ApiResponse.success("Department added to visit.", visitService.visitToDto(refreshed, null, authUser));
+    }
+
+    /**
+     * Starts or continues a consultation for a visit department by a clinician.
+     * On first call (when department is PENDING): marks department as ACTIVE,
+     * transitions visit status to IN_PROGRESS if needed, and applies profile if provided.
+     * On all calls: ensures the calling clinician is added to department processors.
+     */
+    @Transactional
+    public ApiResponse<VisitDepartmentDto> consultVisit(UUID visitDepartmentId, UUID profileId, AuthenticatedUser authUser) {
+        if (authUser == null || (!authUser.roles().contains(RoleName.CLINICIAN) && !authUser.roles().contains(RoleName.ADMIN))) {
+            return ApiResponse.error("Only clinicians can start or continue consultations.");
+        }
+
+        if (visitDepartmentId == null) {
+            return ApiResponse.error("visitDepartmentId is required.");
+        }
+
+        Optional<VisitDepartment> departmentOptional = visitDepartmentRepository.findById(visitDepartmentId);
+        if (departmentOptional.isEmpty()) {
+            return ApiResponse.error("Visit department not found.");
+        }
+
+        VisitDepartment visitDepartment = departmentOptional.get();
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.CANCELLED) {
+            return ApiResponse.error("Cannot consult a cancelled department.");
+        }
+
+        Visit visit = visitDepartment.getVisit();
+        if (visit != null && visit.getStatus() == VisitStatus.CANCELLED) {
+            return ApiResponse.error("Cannot consult a cancelled visit.");
+        }
+
+        Worker actingUser = resolveWorker(authUser);
+
+        // 1. If profileId is provided and different from current profile, apply it
+        if (profileId != null && (visitDepartment.getProfile() == null || !profileId.equals(visitDepartment.getProfile().getId()))) {
+            ApiResponse<VisitDepartmentDto> profileRes = changeVisitDepartmentProfile(visitDepartmentId, profileId, authUser);
+            if (profileRes.status() != ResponseStatus.SUCCESS) {
+                return profileRes;
+            }
+            visitDepartment = visitDepartmentRepository.findById(visitDepartmentId).orElse(visitDepartment);
+        }
+
+        // 2. If status is PENDING (or not yet active), transition to ACTIVE
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.PENDING) {
+            visitDepartment.setStatus(VisitDepartmentStatus.ACTIVE);
+            if (visit != null && visit.getStatus() == VisitStatus.CREATED) {
+                visit.setStatus(VisitStatus.IN_PROGRESS);
+                visitRepository.save(visit);
+            }
+        }
+
+        // 3. Automatically add the calling clinician to processors if not already in processors
+        if (actingUser != null) {
+            List<Worker> processors = visitDepartment.getProcessors();
+            if (processors == null) {
+                processors = new ArrayList<>();
+                visitDepartment.setProcessors(processors);
+            }
+            final UUID actingUserId = actingUser.getId();
+            boolean alreadyProcessor = processors.stream()
+                    .anyMatch(p -> p != null && p.getId() != null && p.getId().equals(actingUserId));
+            if (!alreadyProcessor) {
+                processors.add(actingUser);
+            }
+        }
+
+        VisitDepartment saved = visitDepartmentRepository.save(visitDepartment);
+        if (saved.getVisit() != null) {
+            visitPriceEstimateService.recomputeEstimates(saved.getVisit().getId());
+        }
+
+        return ApiResponse.success(
+                "Consultation active.",
+                visitDepartmentToDto(saved, resolveVisitInsuranceProviderIds(saved.getVisit() != null ? saved.getVisit().getId() : null), authUser)
+        );
     }
 
     /**
@@ -459,6 +559,9 @@ public class VisitDepartmentService {
         }
 
         VisitDepartment parent = parentOptional.get();
+        if (parent.getVisit() != null && parent.getVisit().getStatus() != VisitStatus.CREATED && parent.getVisit().getStatus() != VisitStatus.IN_PROGRESS) {
+            return ApiResponse.error("Child departments can only be added to a visit in CREATED or IN_PROGRESS status.");
+        }
         if (parent.getStatus() == VisitDepartmentStatus.COMPLETED) {
             return ApiResponse.error("Cannot add child departments to a completed department.");
         }
@@ -543,6 +646,7 @@ public class VisitDepartmentService {
         child.setVisit(visit);
         child.setDepartment(childDepartment);
         child.setParentVisitDepartment(parent);
+        child.setAddedBy(actingUser != null ? actingUser : resolveWorker(authUser));
         if (input.encounterType() != null) {
             child.setEncounterType(input.encounterType());
         }
@@ -695,36 +799,15 @@ public class VisitDepartmentService {
 
         if (isManagerOrAbove) {
             // Manager/Admin can remove any department at any time.
-            // Hard-delete: cascade all dependents (products, diagnoses, medications,
-            // pre-instructions, notes, billing, processors, estimates) so the
-            // department row can be removed without FK violations.
+            // Hard-delete: cascade all dependents (billing, items, payments, snapshots,
+            // products, diagnoses, medications, pre-instructions, notes, consultation answers,
+            // processors, estimates) so the department row can be removed without FK violations.
             List<String> warnings = hardDeleteVisitDepartment(vd);
             if (!warnings.isEmpty()) {
                 log.warn("Department {} deleted with {} warnings: {}", vd.getId(), warnings.size(), warnings);
             }
         } else {
-            // Reception/Nurse/Clinician/Staff: only allowed when the department
-            // is still IN_PROGRESS (pending) and has no products added yet.
-            if (vd.getStatus() != VisitDepartmentStatus.PENDING && vd.getStatus() != VisitDepartmentStatus.ACTIVE) {
-                return ApiResponse.error("Cannot remove a department that is not pending or active. Only departments with no products can be removed.");
-            }
-
-            List<VisitDepartmentProduct> products = visitDepartmentProductRepository
-                    .findByVisitDepartmentIdIncludingDeleted(vd.getId());
-            if (!products.isEmpty()) {
-                return ApiResponse.error("Cannot remove a department that has products. Remove all products first.");
-            }
-
-            // FK guard: cannot remove if it has clinical dependents or billing history
-            if (!visitDepartmentDiagnosisRepository.findByVisitDepartmentId(vd.getId()).isEmpty()
-                    || !visitDepartmentMedicationRepository.findByVisitDepartmentId(vd.getId()).isEmpty()
-                    || !visitPreInstructionRepository.findByVisitDepartmentIdOrderByCreatedAtAsc(vd.getId()).isEmpty()
-                    || visitDepartmentNoteServiceHasNotes(vd.getId())
-                    || visitDepartmentBillingRepository.existsByVisitDepartmentId(vd.getId())) {
-                return ApiResponse.error("Cannot remove a department that has notes, diagnoses, medications, pre-instructions or billing history.");
-            }
-
-            visitDepartmentRepository.delete(vd);
+            return ApiResponse.error("Only administrators and managers can delete visit departments.");
         }
 
         // Re-index the visit in Meilisearch so search results reflect the removed department.
@@ -734,28 +817,31 @@ public class VisitDepartmentService {
             log.warn("Could not re-index visit {} after department removal: {}", visit.getId(), e.getMessage());
         }
 
+        // Reload visit from repository so fresh state without detached deleted department is used for DTO
+        Visit refreshedVisit = visitRepository.findById(visit.getId()).orElse(visit);
         String message = "Department removed from visit.";
-        return ApiResponse.success(message, visitService.visitToDto(visit, null, authUser));
+        return ApiResponse.success(message, visitService.visitToDto(refreshedVisit, null, authUser));
     }
 
     /**
-     * Hard-delete a visit department and all its dependents. Used by managers/admins
-     * who can remove departments regardless of status or billing history.
+     * Hard-delete a visit department and all its dependents in strict foreign key order.
+     * Used by managers/admins who can remove departments regardless of status or billing history.
      *
      * @return warning messages about cleanup steps that failed (empty = clean delete)
      */
     private List<String> hardDeleteVisitDepartment(VisitDepartment vd) {
         UUID deptId = vd.getId();
+        UUID visitId = vd.getVisit() != null ? vd.getVisit().getId() : null;
+        UUID departmentId = vd.getDepartment() != null ? vd.getDepartment().getId() : null;
         List<String> warnings = new ArrayList<>();
 
-        // Delete child visit departments first (depth-first)
+        // 1. Delete child visit departments first (depth-first)
         List<VisitDepartment> children = visitDepartmentRepository.findByParentVisitDepartmentId(deptId);
         for (VisitDepartment child : children) {
             warnings.addAll(hardDeleteVisitDepartment(child));
         }
 
-        // Delete notes + viewers (the service handles viewer FK cleanup
-        // before deleting notes, avoiding FK violations).
+        // 2. Delete notes + viewers (the service handles viewer FK cleanup before deleting notes)
         try {
             visitDepartmentNoteService.deleteAllNotesForDepartment(deptId);
         } catch (Exception e) {
@@ -763,8 +849,80 @@ public class VisitDepartmentService {
             warnings.add("Could not delete notes: " + e.getMessage());
         }
 
-        // Delete product snapshots (immutable billing history rows with FK to this
-        // department). Must happen before deleting the department itself.
+        // 3. Delete pre-billing price estimates for this department
+        try {
+            visitPriceEstimateService.deleteEstimatesByVisitDepartmentId(deptId);
+        } catch (Exception e) {
+            log.warn("Could not delete price estimates for department {}: {}", deptId, e.getMessage());
+            warnings.add("Could not delete price estimates: " + e.getMessage());
+        }
+
+        // 4. Delete billing records associated with this department in reverse FK order:
+        //    Payments -> Billing Items -> Department Insurance Billings -> Department Billings -> Empty Billing Containers
+        try {
+            List<VisitDepartmentBilling> deptBillings = visitDepartmentBillingRepository.findByVisitDepartmentId(deptId);
+            Set<VisitBilling> affectedContainers = new HashSet<>();
+
+            for (VisitDepartmentBilling db : deptBillings) {
+                if (db.getVisitBilling() != null) {
+                    affectedContainers.add(db.getVisitBilling());
+                }
+
+                // Delete payments directly tied to this department billing
+                List<VisitBillingPayment> payments = visitBillingPaymentRepository.findByVisitDepartmentBillingId(db.getId());
+                if (!payments.isEmpty()) {
+                    visitBillingPaymentRepository.deleteAllInBatch(payments);
+                }
+
+                // Delete insurance billings (buckets) and their items & payments
+                List<DepartmentInsuranceBilling> insBillings =
+                        departmentInsuranceBillingRepository.findByVisitDepartmentBillingId(db.getId());
+                for (DepartmentInsuranceBilling dib : insBillings) {
+                    List<VisitBillingPayment> dibPayments =
+                            visitBillingPaymentRepository.findByDepartmentInsuranceBillingId(dib.getId());
+                    if (!dibPayments.isEmpty()) {
+                        visitBillingPaymentRepository.deleteAllInBatch(dibPayments);
+                    }
+
+                    List<VisitBillingItem> items =
+                            visitBillingItemRepository.findByDepartmentInsuranceBillingId(dib.getId());
+                    if (!items.isEmpty()) {
+                        visitBillingItemRepository.deleteAllInBatch(items);
+                    }
+                }
+
+                if (!insBillings.isEmpty()) {
+                    departmentInsuranceBillingRepository.deleteAllInBatch(insBillings);
+                }
+            }
+
+            if (!deptBillings.isEmpty()) {
+                visitDepartmentBillingRepository.deleteAllInBatch(deptBillings);
+            }
+
+            // Also clean up any remaining VisitBillingItem pointing directly to this department's products
+            List<VisitDepartmentProduct> productsForCleanup =
+                    visitDepartmentProductRepository.findByVisitDepartmentIdIncludingDeleted(deptId);
+            for (VisitDepartmentProduct p : productsForCleanup) {
+                List<VisitBillingItem> orphanItems = visitBillingItemRepository.findByVisitDepartmentProductId(p.getId());
+                if (!orphanItems.isEmpty()) {
+                    visitBillingItemRepository.deleteAllInBatch(orphanItems);
+                }
+            }
+
+            // Check affected VisitBilling containers: delete empty containers
+            for (VisitBilling vb : affectedContainers) {
+                long remainingCount = visitDepartmentBillingRepository.countByVisitBillingId(vb.getId());
+                if (remainingCount == 0) {
+                    visitBillingRepository.delete(vb);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not delete billing records for department {}: {}", deptId, e.getMessage());
+            warnings.add("Could not delete billing records: " + e.getMessage());
+        }
+
+        // 5. Delete product snapshots (immutable billing history rows with FK to this department)
         try {
             List<VisitDepartmentProductSnapshot> snapshots =
                     visitDepartmentProductSnapshotRepository.findByVisitDepartmentId(deptId);
@@ -776,62 +934,88 @@ public class VisitDepartmentService {
             warnings.add("Could not delete billing snapshots: " + e.getMessage());
         }
 
-        // Batch-delete products
-        List<VisitDepartmentProduct> products =
-                visitDepartmentProductRepository.findByVisitDepartmentIdIncludingDeleted(deptId);
-        if (!products.isEmpty()) {
-            visitDepartmentProductRepository.deleteAllInBatch(products);
-        }
-
-        // Batch-delete diagnoses
-        List<VisitDepartmentDiagnosis> diagnoses =
-                visitDepartmentDiagnosisRepository.findByVisitDepartmentId(deptId);
-        if (!diagnoses.isEmpty()) {
-            visitDepartmentDiagnosisRepository.deleteAllInBatch(diagnoses);
-        }
-
-        // Batch-delete medications
-        List<VisitDepartmentMedication> meds =
-                visitDepartmentMedicationRepository.findByVisitDepartmentId(deptId);
-        if (!meds.isEmpty()) {
-            visitDepartmentMedicationRepository.deleteAllInBatch(meds);
-        }
-
-        // Batch-delete pre-instructions
-        List<VisitPreInstruction> preInstructions =
-                visitPreInstructionRepository.findByVisitDepartmentIdOrderByCreatedAtAsc(deptId);
-        if (!preInstructions.isEmpty()) {
-            visitPreInstructionRepository.deleteAllInBatch(preInstructions);
-        }
-
-        // Delete billing (cascade deletes insurance billings, items, payments)
+        // 6. Batch-delete products
         try {
-            List<com.nexxserve.nexxclinic.entity.VisitDepartmentBilling> billings =
-                    visitDepartmentBillingRepository.findByVisitDepartmentId(deptId);
-            if (!billings.isEmpty()) {
-                visitDepartmentBillingRepository.deleteAllInBatch(billings);
+            List<VisitDepartmentProduct> products =
+                    visitDepartmentProductRepository.findByVisitDepartmentIdIncludingDeleted(deptId);
+            if (!products.isEmpty()) {
+                visitDepartmentProductRepository.deleteAllInBatch(products);
             }
         } catch (Exception e) {
-            log.warn("Could not delete billing for department {}: {}", deptId, e.getMessage());
-            warnings.add("Could not delete billing records: " + e.getMessage());
+            log.warn("Could not delete products for department {}: {}", deptId, e.getMessage());
+            warnings.add("Could not delete products: " + e.getMessage());
         }
 
-        // Delete price estimates
+        // 7. Batch-delete diagnoses
         try {
-            visitPriceEstimateService.deleteEstimatesByVisitDepartmentId(deptId);
+            List<VisitDepartmentDiagnosis> diagnoses =
+                    visitDepartmentDiagnosisRepository.findByVisitDepartmentId(deptId);
+            if (!diagnoses.isEmpty()) {
+                visitDepartmentDiagnosisRepository.deleteAllInBatch(diagnoses);
+            }
         } catch (Exception e) {
-            log.warn("Could not delete price estimates for department {}: {}", deptId, e.getMessage());
-            warnings.add("Could not delete price estimates: " + e.getMessage());
+            log.warn("Could not delete diagnoses for department {}: {}", deptId, e.getMessage());
+            warnings.add("Could not delete diagnoses: " + e.getMessage());
         }
 
-        // Clear the ManyToMany processors join table before deleting the
-        // department — JPA only auto-clears the join table when the field
-        // is loaded, which it isn't here (LAZY + batch deletes).
-        vd.setProcessors(new ArrayList<>());
-        visitDepartmentRepository.save(vd);
+        // 8. Batch-delete medications
+        try {
+            List<VisitDepartmentMedication> meds =
+                    visitDepartmentMedicationRepository.findByVisitDepartmentId(deptId);
+            if (!meds.isEmpty()) {
+                visitDepartmentMedicationRepository.deleteAllInBatch(meds);
+            }
+        } catch (Exception e) {
+            log.warn("Could not delete medications for department {}: {}", deptId, e.getMessage());
+            warnings.add("Could not delete medications: " + e.getMessage());
+        }
 
-        // Finally delete the department itself
+        // 9. Batch-delete pre-instructions
+        try {
+            List<VisitPreInstruction> preInstructions =
+                    visitPreInstructionRepository.findByVisitDepartmentIdOrderByCreatedAtAsc(deptId);
+            if (!preInstructions.isEmpty()) {
+                visitPreInstructionRepository.deleteAllInBatch(preInstructions);
+            }
+        } catch (Exception e) {
+            log.warn("Could not delete pre-instructions for department {}: {}", deptId, e.getMessage());
+            warnings.add("Could not delete pre-instructions: " + e.getMessage());
+        }
+
+        // 10. Delete consultation answers for this visit + department
+        try {
+            if (vd.getAnswerId() != null) {
+                consultationAnswerRepository.deleteById(vd.getAnswerId());
+            }
+            if (visitId != null && departmentId != null) {
+                List<ConsultationAnswer> answers =
+                        consultationAnswerRepository.findByVisitIdAndDepartmentIdOrderByUpdatedAtDesc(visitId, departmentId);
+                if (!answers.isEmpty()) {
+                    consultationAnswerRepository.deleteAllInBatch(answers);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not delete consultation answers for department {}: {}", deptId, e.getMessage());
+            warnings.add("Could not delete consultation answers: " + e.getMessage());
+        }
+
+        // 11. Clear the ManyToMany processors join table before deleting the department
+        vd.setProcessors(new ArrayList<>());
+        visitDepartmentRepository.saveAndFlush(vd);
+
+        // 12. Finally delete the department itself and flush
         visitDepartmentRepository.delete(vd);
+        visitDepartmentRepository.flush();
+
+        // 14. Recompute price estimates for the remaining visit
+        if (visitId != null) {
+            try {
+                visitPriceEstimateService.recomputeEstimates(visitId);
+            } catch (Exception e) {
+                log.warn("Could not recompute price estimates after removing department {}: {}", deptId, e.getMessage());
+            }
+        }
+
         return warnings;
     }
 
@@ -841,8 +1025,7 @@ public class VisitDepartmentService {
         }
         return authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.ADMIN)
                 || authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.CLINIC_ADMIN)
-                || authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.MANAGER)
-                || authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.FINANCE);
+                || authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.MANAGER);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -867,6 +1050,34 @@ public class VisitDepartmentService {
 
         Optional<VisitDepartment> visitDepartmentOptional = visitDepartmentRepository.findByVisitIdAndDepartmentId(input.visitId(), input.departmentId());
         if (visitDepartmentOptional.isEmpty()) {
+            visitDepartmentOptional = visitDepartmentRepository.findById(input.departmentId())
+                    .filter(vd -> vd.getVisit() != null && vd.getVisit().getId().equals(input.visitId()));
+        }
+        if (visitDepartmentOptional.isEmpty()) {
+            Optional<Department> deptOpt = departmentRepository.findById(input.departmentId());
+            if (deptOpt.isPresent()) {
+                Department dept = deptOpt.get();
+                VisitDepartment existingVd = visitDepartmentRepository.findByVisitIdAndDepartmentId(visit.getId(), dept.getId())
+                        .orElse(null);
+                if (existingVd != null) {
+                    visitDepartmentOptional = Optional.of(existingVd);
+                } else {
+                    VisitDepartment newVd = new VisitDepartment();
+                    newVd.setVisit(visit);
+                    newVd.setDepartment(dept);
+                    newVd.setStatus(VisitDepartmentStatus.PENDING);
+                    newVd.setAddedBy(resolveWorker(authUser));
+                    VisitDepartment rootVd = visitDepartmentRepository.findByVisitIdAndParentVisitDepartmentIsNull(visit.getId())
+                            .stream().findFirst().orElse(null);
+                    if (dept.isSupportRequests() && rootVd != null) {
+                        newVd.setParentVisitDepartment(rootVd);
+                    }
+                    newVd = visitDepartmentRepository.saveAndFlush(newVd);
+                    visitDepartmentOptional = Optional.of(newVd);
+                }
+            }
+        }
+        if (visitDepartmentOptional.isEmpty()) {
             return ApiResponse.error("Department is not linked to this visit.");
         }
 
@@ -878,11 +1089,20 @@ public class VisitDepartmentService {
             return ApiResponse.error("Cannot add products to a cancelled department.");
         }
 
-        // Block adding products to a COMPLETED/FINALISED department unless it is in DEPARTMENT_EDITING mode
+        // Block adding products to a COMPLETED/FINALISED department only if already billed and not in DEPARTMENT_EDITING mode
+        VisitDepartment rootDeptForBillingCheck = visitDepartment.getParentVisitDepartment() != null
+                ? visitDepartment.getParentVisitDepartment()
+                : visitDepartment;
+        boolean hasExistingBilling = !visitDepartmentBillingRepository.findByVisitDepartmentId(rootDeptForBillingCheck.getId()).isEmpty();
         if ((visitDepartment.getStatus() == VisitDepartmentStatus.COMPLETED
                 || visitDepartment.getStatus() == VisitDepartmentStatus.FINALISED)
-                && visitDepartment.getStatus() != VisitDepartmentStatus.DEPARTMENT_EDITING) {
+                && visitDepartment.getStatus() != VisitDepartmentStatus.DEPARTMENT_EDITING
+                && hasExistingBilling) {
             return ApiResponse.error("Cannot add products to a completed department. Use startBillEditing to enter billing edit mode.");
+        }
+
+        if (visitDepartmentNoteService.hasUnreadDepartmentNotes(visitDepartment.getId(), authUser)) {
+            return ApiResponse.error("You have unread department notes. Please read them before continuing consultation.");
         }
 
         Optional<Product> productOptional = productRepository.findById(input.productId());
@@ -951,6 +1171,11 @@ public class VisitDepartmentService {
             return processorError;
         }
         item.setAddedBy(actingUser);
+        boolean isDepartmentDoctor = actingUser != null && actingUser.getDepartments() != null
+                && actingUser.getDepartments().stream().anyMatch(d -> d.getId().equals(visitDepartment.getDepartment().getId()));
+        if (!isDepartmentDoctor) {
+            item.setBillingConfirmationStatus(BillingConfirmationStatus.PENDING_OPERATOR_CONFIRMATION);
+        }
         if (item.getStatus() != VisitProductStatus.PENDING) {
             item.setBilledBy(actingUser);
         }
@@ -977,6 +1202,11 @@ public class VisitDepartmentService {
         } catch (Exception ex) {
             log.warn("Failed to recompute price estimates after adding product {} to visit {}: {}",
                 input.productId(), input.visitId(), ex.getMessage());
+        }
+        try {
+            billingProductService.syncClinicalProductChangeToBilling(item);
+        } catch (Exception ex) {
+            log.warn("Failed to sync clinical product change to billing: {}", ex.getMessage());
         }
         return ApiResponse.success("Product added to visit department.", visitDepartmentToDto(visitDepartment));
     }
@@ -1080,6 +1310,11 @@ public class VisitDepartmentService {
         VisitDepartmentProduct saved = visitDepartmentProductRepository.save(item);
         deleteChildVisitDepartmentIfEmpty(saved.getVisitDepartment());
         visitPriceEstimateService.recomputeEstimates(visit.getId());
+        try {
+            billingProductService.syncClinicalProductChangeToBilling(saved);
+        } catch (Exception ex) {
+            log.warn("Failed to sync clinical product change to billing: {}", ex.getMessage());
+        }
         return ApiResponse.success("Visit department product quantity updated.", visitDepartmentToDto(saved.getVisitDepartment()));
     }
 
@@ -1118,12 +1353,36 @@ public class VisitDepartmentService {
         List<VisitBillingItem> billingItems = visitBillingItemRepository.findByVisitDepartmentProductId(item.getId());
         if (!billingItems.isEmpty()) {
             return ApiResponse.error("Cannot remove a product that has billing history. Use editBillVisit to correct the billing instead.");
-        }        visitDepartmentProductRepository.delete(item);
+        }
+        visitDepartmentProductRepository.delete(item);
         reopenVisitIfCompleted(visit);
         visitPriceEstimateService.recomputeEstimates(visit.getId());
 
         VisitDepartment mappedDepartment = deleteChildVisitDepartmentIfEmpty(affectedDepartment);
         return ApiResponse.success("Visit department product removed.", visitDepartmentToDto(mappedDepartment == null ? affectedDepartment : mappedDepartment));
+    }
+
+    @Transactional
+    public ApiResponse<VisitDepartmentDto> confirmVisitDepartmentProduct(UUID visitDepartmentProductId, AuthenticatedUser authUser) {
+        if (visitDepartmentProductId == null) {
+            return ApiResponse.error("visitDepartmentProductId is required.");
+        }
+
+        Optional<VisitDepartmentProduct> itemOptional = visitDepartmentProductRepository.findById(visitDepartmentProductId);
+        if (itemOptional.isEmpty()) {
+            return ApiResponse.error("Visit department product not found.");
+        }
+
+        VisitDepartmentProduct item = itemOptional.get();
+        Worker actingUser = authUser != null && authUser.userId() != null
+                ? workerRepository.findById(authUser.userId()).orElse(null)
+                : null;
+
+        item.setConfirmedBy(actingUser);
+        item.setBillingConfirmationStatus(com.nexxserve.nexxclinic.model.BillingConfirmationStatus.CONFIRMED);
+        visitDepartmentProductRepository.save(item);
+
+        return ApiResponse.success("Product confirmed by operator.", visitDepartmentToDto(item.getVisitDepartment()));
     }
 
 
@@ -1180,9 +1439,31 @@ public class VisitDepartmentService {
                 return ApiResponse.error("Cannot complete a department with unbilled products. All products must be billed first.");
             }
         }
+        if (requestedStatus == VisitDepartmentStatus.CANCELLED) {
+            boolean isManagerOrAbove = isManagerOrAboveRole(authUser);
+            boolean isAssignedProcessor = authUser != null && authUser.userId() != null
+                    && department.getProcessors() != null
+                    && department.getProcessors().stream().anyMatch(p -> p != null && authUser.userId().equals(p.getId()));
+
+            if (currentStatus == VisitDepartmentStatus.ACTIVE) {
+                if (!isManagerOrAbove && !isAssignedProcessor) {
+                    return ApiResponse.error("Only the assigned processor or an admin/manager can cancel an active department.");
+                }
+            } else {
+                List<VisitDepartmentProduct> products = visitDepartmentProductRepository
+                        .findByVisitDepartmentIdIncludingDeleted(department.getId());
+                if (!products.isEmpty() && !isManagerOrAbove && !isAssignedProcessor) {
+                    return ApiResponse.error("Only the assigned processor or an admin/manager can cancel a department with products.");
+                }
+            }
+        }
         department.setStatus(requestedStatus);
-        if (requestedStatus == VisitDepartmentStatus.COMPLETED) {
+        if (requestedStatus == VisitDepartmentStatus.COMPLETED || requestedStatus == VisitDepartmentStatus.FINALISED) {
             department.setCompletedAt(java.time.LocalDateTime.now());
+            Worker actingUser = resolveWorker(authUser);
+            if (actingUser != null) {
+                department.setCompletedBy(actingUser);
+            }
         }
 
         if (requestedStatus == VisitDepartmentStatus.ACTIVE) {
@@ -1395,6 +1676,11 @@ public class VisitDepartmentService {
 
     @Transactional
     public ApiResponse<VisitDepartmentDto> addDiagnosisToVisitDepartment(AddDiagnosisInput input) {
+        return addDiagnosisToVisitDepartment(input, null);
+    }
+
+    @Transactional
+    public ApiResponse<VisitDepartmentDto> addDiagnosisToVisitDepartment(AddDiagnosisInput input, AuthenticatedUser authUser) {
         if (input == null || input.visitDepartmentId() == null || input.diagnosisName() == null || input.diagnosisName().isBlank()) {
             return ApiResponse.error("visitDepartmentId and diagnosisName are required.");
         }
@@ -1412,15 +1698,15 @@ public class VisitDepartmentService {
         }
 
         VisitDepartment visitDept = visitDeptOptional.get();
-        if (visitDept.getStatus() == VisitDepartmentStatus.COMPLETED) {
-            return ApiResponse.error("Cannot add diagnostics to a completed department.");
-        }
         if (visitDept.getStatus() == VisitDepartmentStatus.CANCELLED) {
             return ApiResponse.error("Cannot add diagnostics to a cancelled department.");
         }
-        // C1: once a department is handed to finance (BILLING), clinical data is frozen.
-        if (visitDept.getStatus() == VisitDepartmentStatus.BILLING) {
-            return ApiResponse.error("Cannot add diagnostics to a department in BILLING status.");
+        if (visitDept.getStatus() == VisitDepartmentStatus.FINALISED) {
+            return ApiResponse.error("Cannot add diagnostics to a finalised department.");
+        }
+
+        if (visitDepartmentNoteService.hasUnreadDepartmentNotes(visitDept.getId(), authUser)) {
+            return ApiResponse.error("You have unread department notes. Please read them before continuing consultation.");
         }
 
         VisitDepartmentDiagnosis diagnosis = new VisitDepartmentDiagnosis();
@@ -1434,6 +1720,11 @@ public class VisitDepartmentService {
 
     @Transactional
     public ApiResponse<VisitDepartmentDto> addMedicationToVisitDepartment(AddMedicationInput input) {
+        return addMedicationToVisitDepartment(input, null);
+    }
+
+    @Transactional
+    public ApiResponse<VisitDepartmentDto> addMedicationToVisitDepartment(AddMedicationInput input, AuthenticatedUser authUser) {
         if (input == null || input.visitDepartmentId() == null || input.medicationName() == null || input.medicationName().isBlank() || input.instructions() == null || input.instructions().isBlank()) {
             return ApiResponse.error("visitDepartmentId, medicationName and instructions are required.");
         }
@@ -1451,15 +1742,15 @@ public class VisitDepartmentService {
         }
 
         VisitDepartment visitDept = visitDeptOptional.get();
-        if (visitDept.getStatus() == VisitDepartmentStatus.COMPLETED) {
-            return ApiResponse.error("Cannot add medication to a completed department.");
-        }
         if (visitDept.getStatus() == VisitDepartmentStatus.CANCELLED) {
             return ApiResponse.error("Cannot add medication to a cancelled department.");
         }
-        // C1: once a department is handed to finance (BILLING), clinical data is frozen.
-        if (visitDept.getStatus() == VisitDepartmentStatus.BILLING) {
-            return ApiResponse.error("Cannot add medication to a department in BILLING status.");
+        if (visitDept.getStatus() == VisitDepartmentStatus.FINALISED) {
+            return ApiResponse.error("Cannot add medication to a finalised department.");
+        }
+
+        if (visitDepartmentNoteService.hasUnreadDepartmentNotes(visitDept.getId(), authUser)) {
+            return ApiResponse.error("You have unread department notes. Please read them before continuing consultation.");
         }
 
         VisitDepartmentMedication medication = new VisitDepartmentMedication();
@@ -1488,15 +1779,15 @@ public class VisitDepartmentService {
 
         VisitDepartment visitDepartment = visitDepartmentOptional.get();
         Visit visit = visitDepartment.getVisit();
-        if (visitDepartment.getStatus() == VisitDepartmentStatus.COMPLETED) {
-            return ApiResponse.error("Cannot add pre-instructions to a completed department.");
-        }
         if (visitDepartment.getStatus() == VisitDepartmentStatus.CANCELLED) {
             return ApiResponse.error("Cannot add pre-instructions to a cancelled department.");
         }
-        // C1: once a department is handed to finance (BILLING), clinical data is frozen.
-        if (visitDepartment.getStatus() == VisitDepartmentStatus.BILLING) {
-            return ApiResponse.error("Cannot add pre-instructions to a department in BILLING status.");
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.FINALISED) {
+            return ApiResponse.error("Cannot add pre-instructions to a finalised department.");
+        }
+
+        if (visitDepartmentNoteService.hasUnreadDepartmentNotes(visitDepartment.getId(), authUser)) {
+            return ApiResponse.error("You have unread department notes. Please read them before continuing consultation.");
         }
 
         Worker actingUser = resolveWorker(authUser);
@@ -1635,8 +1926,11 @@ public class VisitDepartmentService {
                     visitDepartment.getStatus(),
                     visitDepartment.getEncounterType(),
                     departmentProfileToDto(visitDepartment.getProfile()),
+                    visitDepartment.getStartedAt(),
                     visitDepartment.getCompletedAt(),
-                    visitDepartment.getProcessors() == null || visitDepartment.getProcessors().isEmpty() ? null : visitDepartment.getProcessors().stream().map(workerMapper::toDto).toList(),
+                    resolveAddedBy(visitDepartment),
+                    resolveCompletedBy(visitDepartment),
+                    resolveProcessors(visitDepartment),
                     List.of(),
                     List.of(),
                     List.of(),
@@ -1653,29 +1947,33 @@ public class VisitDepartmentService {
 
         visitedDepartmentIds.add(visitDepartment.getId());
 
-        List<WorkerDto> processors = visitDepartment.getProcessors() == null || visitDepartment.getProcessors().isEmpty()
-                ? null
-                : visitDepartment.getProcessors().stream().map(workerMapper::toDto).toList();
+        List<WorkerDto> processors = resolveProcessors(visitDepartment);
+        WorkerDto addedBy = resolveAddedBy(visitDepartment);
+        WorkerDto completedBy = resolveCompletedBy(visitDepartment);
 
         List<VisitDepartmentProductDto> products = visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartment.getId())
                 .stream()
                 .map(item -> visitDepartmentProductToDto(item, visitInsuranceProviderIds))
                 .toList();
 
-        List<VisitDepartmentDiagnosisDto> diagnostics = visitDepartmentDiagnosisRepository.findByVisitDepartmentId(visitDepartment.getId())
-                .stream()
-                .map(this::visitDepartmentDiagnosisToDto)
-                .toList();
+        boolean canViewClinical = canViewClinicalData(authUser);
 
-        List<VisitDepartmentMedicationDto> medications = visitDepartmentMedicationRepository.findByVisitDepartmentId(visitDepartment.getId())
-                .stream()
-                .map(this::visitDepartmentMedicationToDto)
-                .toList();
+        List<VisitDepartmentDiagnosisDto> diagnostics = canViewClinical
+                ? visitDepartmentDiagnosisRepository.findByVisitDepartmentId(visitDepartment.getId())
+                        .stream().map(this::visitDepartmentDiagnosisToDto).toList()
+                : List.of();
 
-        List<VisitPreInstructionDto> preInstructions = visitPreInstructionRepository.findByVisitDepartmentIdOrderByCreatedAtAsc(visitDepartment.getId())
-                .stream()
-                .map(this::visitPreInstructionToDto)
-                .toList();
+        List<VisitDepartmentMedicationDto> medications = canViewClinical
+                ? visitDepartmentMedicationRepository.findByVisitDepartmentId(visitDepartment.getId())
+                        .stream().map(this::visitDepartmentMedicationToDto).toList()
+                : List.of();
+
+        List<VisitPreInstructionDto> preInstructions = canViewClinical
+                ? visitPreInstructionRepository.findByVisitDepartmentIdOrderByCreatedAtAsc(visitDepartment.getId())
+                        .stream().map(this::visitPreInstructionToDto).toList()
+                : List.of();
+
+        UUID answerId = canViewClinical ? visitDepartment.getAnswerId() : null;
 
         List<VisitDepartmentDto> childVisitDepartments = visitDepartmentRepository.findByParentVisitDepartmentId(visitDepartment.getId())
                 .stream()
@@ -1688,7 +1986,10 @@ public class VisitDepartmentService {
                 visitDepartment.getStatus(),
                 visitDepartment.getEncounterType(),
                 departmentProfileToDto(visitDepartment.getProfile()),
+                visitDepartment.getStartedAt(),
                 visitDepartment.getCompletedAt(),
+                addedBy,
+                completedBy,
                 processors,
                 products,
                 diagnostics,
@@ -1696,12 +1997,110 @@ public class VisitDepartmentService {
                 preInstructions,
                 childVisitDepartments,
                 visitDepartmentNoteService.buildNotesSummary(visitDepartment.getId(), authUser),
-                visitDepartment.getAnswerId(),
+                answerId,
                 resolveHasFinalizedConsultationAnswers(visitDepartment),
                 resolveHasBillableProducts(visitDepartment.getId()),
                 visitDepartment.getCreatedAt(),
                 visitDepartment.getUpdatedAt()
         );
+    }
+
+    private WorkerDto resolveAddedBy(VisitDepartment visitDepartment) {
+        if (visitDepartment == null) {
+            return null;
+        }
+        try {
+            if (org.hibernate.Hibernate.isInitialized(visitDepartment.getAddedBy()) && visitDepartment.getAddedBy() != null) {
+                return workerMapper.toDto(visitDepartment.getAddedBy());
+            }
+            if (visitDepartment.getId() != null) {
+                return visitDepartmentRepository.findById(visitDepartment.getId())
+                        .map(vd -> {
+                            try {
+                                return vd.getAddedBy() != null ? workerMapper.toDto(vd.getAddedBy()) : null;
+                            } catch (Exception e) {
+                                return null;
+                            }
+                        })
+                        .orElse(null);
+            }
+        } catch (Exception ex) {
+            return null;
+        }
+        return null;
+    }
+
+    private WorkerDto resolveCompletedBy(VisitDepartment visitDepartment) {
+        if (visitDepartment == null) {
+            return null;
+        }
+        try {
+            if (org.hibernate.Hibernate.isInitialized(visitDepartment.getCompletedBy()) && visitDepartment.getCompletedBy() != null) {
+                return workerMapper.toDto(visitDepartment.getCompletedBy());
+            }
+            if (visitDepartment.getId() != null) {
+                return visitDepartmentRepository.findById(visitDepartment.getId())
+                        .map(vd -> {
+                            try {
+                                return vd.getCompletedBy() != null ? workerMapper.toDto(vd.getCompletedBy()) : null;
+                            } catch (Exception e) {
+                                return null;
+                            }
+                        })
+                        .orElse(null);
+            }
+        } catch (Exception ex) {
+            return null;
+        }
+        return null;
+    }
+
+    private List<WorkerDto> resolveProcessors(VisitDepartment visitDepartment) {
+        if (visitDepartment == null) {
+            return null;
+        }
+        try {
+            if (org.hibernate.Hibernate.isInitialized(visitDepartment.getProcessors()) && visitDepartment.getProcessors() != null) {
+                return visitDepartment.getProcessors().isEmpty() ? null : visitDepartment.getProcessors().stream().map(workerMapper::toDto).toList();
+            }
+            if (visitDepartment.getId() != null) {
+                return visitDepartmentRepository.findById(visitDepartment.getId())
+                        .map(vd -> {
+                            try {
+                                return vd.getProcessors() == null || vd.getProcessors().isEmpty() ? null : vd.getProcessors().stream().map(workerMapper::toDto).toList();
+                            } catch (Exception e) {
+                                return null;
+                            }
+                        })
+                        .orElse(null);
+            }
+        } catch (Exception ex) {
+            return null;
+        }
+        return null;
+    }
+
+    private boolean canViewClinicalData(AuthenticatedUser authUser) {
+        if (authUser == null) {
+            return true;
+        }
+        if (authUser.roles() != null) {
+            if (authUser.roles().contains(RoleName.ADMIN)
+                    || authUser.roles().contains(RoleName.CLINIC_ADMIN)
+                    || authUser.roles().contains(RoleName.MANAGER)
+                    || authUser.roles().contains(RoleName.CLINICIAN)) {
+                return true;
+            }
+        }
+        if (rolePermissionService != null) {
+            return rolePermissionService.userHasAnyPermission(
+                    authUser,
+                    PermissionName.CONSULTATION_VIEW,
+                    PermissionName.CLINICAL_NOTE_VIEW,
+                    PermissionName.DIAGNOSIS_RECORD
+            );
+        }
+        return false;
     }
 
     /**
@@ -1776,8 +2175,14 @@ public class VisitDepartmentService {
      * {@code profiles: [DepartmentProfile!]!}.
      */
     private DepartmentDto departmentToDtoWithProfiles(Department department) {
+        if (department == null) {
+            return null;
+        }
+        Department loadedDept = department.getId() != null
+                ? departmentRepository.findById(department.getId()).orElse(department)
+                : department;
         List<DepartmentProfileDto> profiles = departmentProfileRepository
-                .findByDepartmentId(department.getId())
+                .findByDepartmentId(loadedDept.getId())
                 .stream()
                 .map(profile -> new DepartmentProfileDto(
                         profile.getId(),
@@ -1793,7 +2198,7 @@ public class VisitDepartmentService {
                 ))
                 .toList();
         return departmentMapper.toDtoWithDetails(
-                department, List.of(), profiles, List.of(), null
+                loadedDept, List.of(), profiles, List.of(), null
         );
     }
 
@@ -1810,12 +2215,18 @@ public class VisitDepartmentService {
     }
 
     private boolean resolveHasBillableProducts(UUID visitDepartmentId) {
+        if (visitDepartmentId == null) return false;
         List<VisitDepartmentProduct> products = visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartmentId);
-        return products.stream().anyMatch(p ->
-                p.getStatus() == VisitProductStatus.PENDING
-                || p.getStatus() == VisitProductStatus.UNPAID
-                || p.getStatus() == VisitProductStatus.CORRECTION_PENDING
-        );
+        boolean direct = products.stream()
+                .filter(p -> !p.isDeleted())
+                .anyMatch(p ->
+                        p.getStatus() == VisitProductStatus.PENDING
+                        || p.getStatus() == VisitProductStatus.UNPAID
+                        || p.getStatus() == VisitProductStatus.CORRECTION_PENDING
+                );
+        if (direct) return true;
+        List<VisitDepartment> children = visitDepartmentRepository.findByParentVisitDepartmentId(visitDepartmentId);
+        return children.stream().anyMatch(child -> resolveHasBillableProducts(child.getId()));
     }
 
     private DepartmentProfileDto departmentProfileToDto(DepartmentProfile profile) {
@@ -1848,6 +2259,8 @@ public class VisitDepartmentService {
                 item.getSource(),
                 workerMapper.toDto(item.getAddedBy()),
                 workerMapper.toDto(item.getBilledBy()),
+                workerMapper.toDto(item.getConfirmedBy()),
+                item.getBillingConfirmationStatus(),
                 workerMapper.toDto(item.getProcessor()),
                 item.getCreatedAt(),
                 item.getUpdatedAt()
@@ -1925,22 +2338,16 @@ public class VisitDepartmentService {
         if (requestedProcessorId != null) {
             Worker requestedProcessor = findProcessorById(processors, requestedProcessorId);
             if (requestedProcessor == null) {
+                requestedProcessor = workerRepository.findById(requestedProcessorId).orElse(null);
+            }
+            if (requestedProcessor == null) {
                 return ApiResponse.error("processorId must belong to the visit department processors.");
             }
             item.setProcessor(requestedProcessor);
             return null;
         }
 
-        if (visitDepartment.getParentVisitDepartment() != null) {
-            if (actingUser != null && isProcessor(processors, actingUser.getId())) {
-                item.setProcessor(actingUser);
-                return null;
-            }
-            item.setProcessor(null);
-            return null;
-        }
-
-        if (actingUser != null && isProcessor(processors, actingUser.getId())) {
+        if (actingUser != null) {
             item.setProcessor(actingUser);
             return null;
         }
@@ -2091,6 +2498,64 @@ public class VisitDepartmentService {
                 .filter(pi -> pi != null && pi.getInsuranceProvider() != null && pi.getInsuranceProvider().getId() != null)
                 .map(pi -> pi.getInsuranceProvider().getId())
                 .collect(Collectors.toSet());
+    }
+
+    @Transactional
+    public ApiResponse<VisitDepartmentDto> updateVisitDepartmentEncounterDate(
+            com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentEncounterDateInput input,
+            AuthenticatedUser authUser
+    ) {
+        if (input == null || input.visitDepartmentId() == null || input.encounterDate() == null) {
+            return ApiResponse.error("visitDepartmentId and encounterDate are required.");
+        }
+
+        Worker actingUser = resolveWorker(authUser);
+        if (actingUser == null) {
+            return ApiResponse.error("Authentication is required.");
+        }
+
+        boolean authorised = actingUser.getRoles().contains(RoleName.ADMIN)
+                || actingUser.getRoles().contains(RoleName.MANAGER);
+        if (!authorised) {
+            return ApiResponse.error("Only admin and manager can update the department encounter date.");
+        }
+
+        Optional<VisitDepartment> deptOpt = visitDepartmentRepository.findById(input.visitDepartmentId());
+        if (deptOpt.isEmpty()) {
+            return ApiResponse.error("Visit department not found.");
+        }
+
+        VisitDepartment dept = deptOpt.get();
+        if (dept.getStatus() == VisitDepartmentStatus.DEPARTMENT_EDITING) {
+            return ApiResponse.error("Cannot change encounter date while department is in billing edit mode.");
+        }
+        Visit visit = dept.getVisit();
+        if (visit != null && visit.getStatus() == VisitStatus.CANCELLED) {
+            return ApiResponse.error("Cannot change encounter date for a cancelled visit.");
+        }
+
+        java.time.LocalDateTime newEncounterDate = input.encounterDate();
+        dept.setStartedAt(newEncounterDate);
+        visitDepartmentRepository.save(dept);
+
+        // If this department has billings, clamp any billing dates that would be before encounterDate + 5 mins
+        List<DepartmentInsuranceBilling> billings = departmentInsuranceBillingRepository.findAllByVisitDepartmentId(dept.getId());
+        if (!billings.isEmpty()) {
+            java.time.LocalDateTime minBilling = newEncounterDate.plusMinutes(5);
+            for (DepartmentInsuranceBilling b : billings) {
+                if (b.getBillingDate() != null && b.getBillingDate().isBefore(minBilling)) {
+                    b.setBillingDate(minBilling);
+                }
+                b.setInvoiceUrl(null);
+                departmentInsuranceBillingRepository.save(b);
+            }
+        }
+
+        if (visit != null) {
+            meilisearchIndexService.indexVisit(visit);
+        }
+
+        return ApiResponse.success("Department encounter date updated.", visitDepartmentToDto(dept));
     }
 
     public BigDecimal normalizeQuantity(BigDecimal value) {

@@ -274,8 +274,10 @@ public class BillingCorrectionService {
                     vdp.setProduct(product);
                     vdp.setQuantity(toQuantity(add.quantity()));
                     vdp.setAddedBy(actingUser);
-                    // Freshly added, never billed -> PENDING.
+                    vdp.setSource(com.nexxserve.nexxclinic.model.VisitDepartmentProductSource.USER);
+                    // Freshly added in billing -> PENDING and PENDING_OPERATOR_CONFIRMATION
                     vdp.setStatus(VisitProductStatus.PENDING);
+                    vdp.setBillingConfirmationStatus(com.nexxserve.nexxclinic.model.BillingConfirmationStatus.PENDING_OPERATOR_CONFIRMATION);
                     if (add.processorId() != null) {
                         Worker processor = workerRepository.findById(add.processorId()).orElse(null);
                         vdp.setProcessor(processor);
@@ -301,9 +303,11 @@ public class BillingCorrectionService {
         boolean hasEditingDepartment = input.departments().stream().anyMatch(d -> {
             if (d == null || d.visitDepartmentId() == null) return false;
             return visitDepartmentRepository.findById(d.visitDepartmentId())
-                .map(vd -> vd.getStatus() == VisitDepartmentStatus.DEPARTMENT_EDITING)
+                .map(vd -> vd.getStatus() == VisitDepartmentStatus.DEPARTMENT_EDITING
+                        || (vd.getParentVisitDepartment() != null && vd.getParentVisitDepartment().getStatus() == VisitDepartmentStatus.DEPARTMENT_EDITING))
                 .orElse(false);
-        });
+        }) || visitDepartmentRepository.findByVisitId(visit.getId()).stream()
+                .anyMatch(vd -> vd.getStatus() == VisitDepartmentStatus.DEPARTMENT_EDITING);
         boolean isPreBillingVisit = visit.getStatus() == VisitStatus.IN_PROGRESS
                 || visit.getStatus() == VisitStatus.CREATED;
         if (!hasEditingDepartment && !isPreBillingVisit) {

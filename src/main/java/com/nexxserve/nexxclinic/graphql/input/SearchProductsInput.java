@@ -18,6 +18,7 @@ public record SearchProductsInput(
         @Min(value = 1, message = "size must be at least 1")
         Integer size,
 
-         UUID insuranceProviderId
+         UUID insuranceProviderId,
+         UUID visitDepartmentId
 ) {
 }

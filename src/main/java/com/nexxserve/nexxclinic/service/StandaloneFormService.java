@@ -43,6 +43,7 @@ public class StandaloneFormService {
     private final VisitRepository visitRepository;
     private final VisitDepartmentRepository visitDepartmentRepository;
     private final VisitDepartmentService visitDepartmentService;
+    private final VisitDepartmentNoteService visitDepartmentNoteService;
     private final StandaloneFormMapper mapper;
     private static final Logger log = LoggerFactory.getLogger(StandaloneFormService.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -55,6 +56,7 @@ public class StandaloneFormService {
                                  VisitRepository visitRepository,
                                  VisitDepartmentRepository visitDepartmentRepository,
                                  @Lazy VisitDepartmentService visitDepartmentService,
+                                 VisitDepartmentNoteService visitDepartmentNoteService,
                                  StandaloneFormMapper mapper) {
         this.formRepository = formRepository;
         this.versionRepository = versionRepository;
@@ -64,6 +66,7 @@ public class StandaloneFormService {
         this.visitRepository = visitRepository;
         this.visitDepartmentRepository = visitDepartmentRepository;
         this.visitDepartmentService = visitDepartmentService;
+        this.visitDepartmentNoteService = visitDepartmentNoteService;
         this.mapper = mapper;
     }
 
@@ -353,6 +356,14 @@ public class StandaloneFormService {
 
         VisitDepartment visitDept = visitDeptOpt.get();
         Visit visit = visitOpt.get();
+
+        if (visitDept.getStatus() == com.nexxserve.nexxclinic.model.VisitDepartmentStatus.FINALISED
+                || visitDept.getStatus() == com.nexxserve.nexxclinic.model.VisitDepartmentStatus.CANCELLED) {
+            return ApiResponse.error("Cannot modify forms for a department in " + visitDept.getStatus() + " status.");
+        }
+        if (visitDepartmentNoteService.hasUnreadDepartmentNotes(visitDept.getId(), authUser)) {
+            return ApiResponse.error("You have unread department notes. Please read them before continuing consultation.");
+        }
 
         StandaloneFormAnswer answer = new StandaloneFormAnswer();
         answer.setFormVersion(versionOpt.get());

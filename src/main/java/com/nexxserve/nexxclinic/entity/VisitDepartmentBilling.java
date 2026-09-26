@@ -231,4 +231,8 @@ public class VisitDepartmentBilling {
     public void setBillingNote(String billingNote) {
         this.billingNote = billingNote;
     }
+
+    public com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion getVersion() {
+        return visitBilling != null ? visitBilling.getBillingVersion() : null;
+    }
 }

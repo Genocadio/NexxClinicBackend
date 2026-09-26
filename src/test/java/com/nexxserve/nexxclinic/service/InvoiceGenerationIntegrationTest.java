@@ -311,24 +311,108 @@ class InvoiceGenerationIntegrationTest {
     }
 
     @Test
-    void generateInvoiceRejectsStaleBillingVersionWithoutTouchingSupabase() {
+    void generateInvoiceWithVisitDepartmentIdUsesLatestBillingVersion() throws Exception {
         Fixture fx = persistBilledVisit(VisitProductStatus.BILLED);
 
-        // A newer billing version exists -> the billing row under test is no longer
-        // the latest, so invoice generation must be rejected.
+        // A newer billing version exists with a new bucket
         VisitBillingVersion newer = new VisitBillingVersion();
         newer.setVisit(fx.visit());
         newer.setVersion(2);
-        visitBillingVersionRepository.save(newer);
+        newer = visitBillingVersionRepository.save(newer);
 
+        DepartmentInsuranceBilling newerBilling = new DepartmentInsuranceBilling();
+        newerBilling.setVisitDepartmentBilling(fx.billing().getVisitDepartmentBilling());
+        newerBilling.setBillingVersion(newer);
+        newerBilling.setTotalAmount(new BigDecimal("250.00"));
+        newerBilling.setPatientInsurance(fx.billing().getPatientInsurance());
+        newerBilling = departmentInsuranceBillingRepository.save(newerBilling);
+
+        String objectPath = "invoices/invoice-" + newerBilling.getId() + ".pdf";
+        stubStorage(objectPath);
+
+        // Generating by visitDepartmentId should automatically pick the latest version
+        ApiResponse<?> response = invoiceGenerator.generateInvoice(
+                fx.visitDepartment().getId(),
+                null,
+                auth(fx.actor())
+        );
+
+        assertEquals(ResponseStatus.SUCCESS, response.status());
+        assertEquals("Invoice generated successfully.", response.message());
+        assertNotNull(response.data());
+        Map<?, ?> data = (Map<?, ?>) response.data();
+        assertEquals("https://signed/" + objectPath, data.get("signedUrl"));
+
+        DepartmentInsuranceBilling reloaded = departmentInsuranceBillingRepository
+            .findById(newerBilling.getId())
+            .orElseThrow();
+        assertEquals(objectPath, reloaded.getInvoiceUrl());
+    }
+
+    @Test
+    void generateInvoiceWithBillingIdPassedAsVisitDepartmentIdResolvesSuccessfully() throws Exception {
+        Fixture fx = persistBilledVisit(VisitProductStatus.BILLED);
+        String objectPath = "invoices/invoice-" + fx.billing().getId() + ".pdf";
+        stubStorage(objectPath);
+
+        // visitDepartmentId is passed the billing ID (e.g. from legacy caller or ambiguous ID)
+        ApiResponse<?> response = invoiceGenerator.generateInvoice(
+                fx.billing().getId(),
+                null,
+                auth(fx.actor())
+        );
+
+        assertEquals(ResponseStatus.SUCCESS, response.status());
+        assertEquals("Invoice generated successfully.", response.message());
+        assertNotNull(response.data());
+    }
+
+    @Test
+    void generateInvoiceWithBothParametersSetToSameBillingIdResolvesSuccessfully() throws Exception {
+        Fixture fx = persistBilledVisit(VisitProductStatus.BILLED);
+        String objectPath = "invoices/invoice-" + fx.billing().getId() + ".pdf";
+        stubStorage(objectPath);
+
+        // Both visitDepartmentId and departmentInsuranceBillingId are populated with the billing ID
+        ApiResponse<?> response = invoiceGenerator.generateInvoice(
+                fx.billing().getId(),
+                fx.billing().getId(),
+                auth(fx.actor())
+        );
+
+        assertEquals(ResponseStatus.SUCCESS, response.status());
+        assertEquals("Invoice generated successfully.", response.message());
+        assertNotNull(response.data());
+    }
+
+    @Test
+    void generateInvoiceWithStaleBillingIdAutomaticallyResolvesLatestVersion() throws Exception {
+        Fixture fx = persistBilledVisit(VisitProductStatus.BILLED);
+
+        // A newer billing version exists
+        VisitBillingVersion newer = new VisitBillingVersion();
+        newer.setVisit(fx.visit());
+        newer.setVersion(2);
+        newer = visitBillingVersionRepository.save(newer);
+
+        DepartmentInsuranceBilling newerBilling = new DepartmentInsuranceBilling();
+        newerBilling.setVisitDepartmentBilling(fx.billing().getVisitDepartmentBilling());
+        newerBilling.setBillingVersion(newer);
+        newerBilling.setTotalAmount(new BigDecimal("300.00"));
+        newerBilling.setPatientInsurance(fx.billing().getPatientInsurance());
+        newerBilling = departmentInsuranceBillingRepository.save(newerBilling);
+
+        String objectPath = "invoices/invoice-" + newerBilling.getId() + ".pdf";
+        stubStorage(objectPath);
+
+        // Passing old billing ID should seamlessly resolve the latest version instead of failing
         ApiResponse<?> response = invoiceGenerator.generateInvoice(
                 fx.billing().getId(),
                 auth(fx.actor())
         );
 
-        assertEquals(ResponseStatus.ERROR, response.status());
-        assertTrue(response.message().contains("latest billing version"));
-        verifyNoInteractions(fileStorageService);
+        assertEquals(ResponseStatus.SUCCESS, response.status());
+        assertEquals("Invoice generated successfully.", response.message());
     }
 
     @Test
@@ -341,7 +425,7 @@ class InvoiceGenerationIntegrationTest {
         );
 
         assertEquals(ResponseStatus.ERROR, response.status());
-        assertTrue(response.message().contains("all visit products are billed"));
+        assertTrue(response.message().contains("department products are billed") || response.message().contains("products are billed"));
         verifyNoInteractions(fileStorageService);
     }
 

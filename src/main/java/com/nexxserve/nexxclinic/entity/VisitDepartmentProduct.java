@@ -66,6 +66,14 @@ public class VisitDepartmentProduct {
     private Worker billedBy;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "confirmed_by_worker_id")
+    private Worker confirmedBy;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "billing_confirmation_status", nullable = false, length = 32)
+    private com.nexxserve.nexxclinic.model.BillingConfirmationStatus billingConfirmationStatus;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "processor_worker_id")
     private Worker processor;
 
@@ -90,6 +98,9 @@ public class VisitDepartmentProduct {
         if (this.status == null) {
             this.status = VisitProductStatus.PENDING;
         }
+        if (this.billingConfirmationStatus == null) {
+            this.billingConfirmationStatus = com.nexxserve.nexxclinic.model.BillingConfirmationStatus.CONFIRMED;
+        }
         if (this.quantity == null || this.quantity.compareTo(BigDecimal.ZERO) <= 0) {
             this.quantity = BigDecimal.ONE;
         }
@@ -100,6 +111,9 @@ public class VisitDepartmentProduct {
         this.updatedAt = LocalDateTime.now();
         if (this.status == null) {
             this.status = VisitProductStatus.PENDING;
+        }
+        if (this.billingConfirmationStatus == null) {
+            this.billingConfirmationStatus = com.nexxserve.nexxclinic.model.BillingConfirmationStatus.CONFIRMED;
         }
         if (this.quantity == null || this.quantity.compareTo(BigDecimal.ZERO) <= 0) {
             this.quantity = BigDecimal.ONE;
@@ -168,6 +182,22 @@ public class VisitDepartmentProduct {
 
     public void setBilledBy(Worker billedBy) {
         this.billedBy = billedBy;
+    }
+
+    public Worker getConfirmedBy() {
+        return confirmedBy;
+    }
+
+    public void setConfirmedBy(Worker confirmedBy) {
+        this.confirmedBy = confirmedBy;
+    }
+
+    public com.nexxserve.nexxclinic.model.BillingConfirmationStatus getBillingConfirmationStatus() {
+        return billingConfirmationStatus;
+    }
+
+    public void setBillingConfirmationStatus(com.nexxserve.nexxclinic.model.BillingConfirmationStatus billingConfirmationStatus) {
+        this.billingConfirmationStatus = billingConfirmationStatus;
     }
 
     public Worker getProcessor() {

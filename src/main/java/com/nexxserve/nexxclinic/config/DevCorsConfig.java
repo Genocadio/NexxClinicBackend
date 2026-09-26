@@ -15,7 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 @Profile("default")
 public class DevCorsConfig {
 
-    @Value("${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:8080}")
+    @Value("${CORS_ALLOWED_ORIGINS:http://localhost:*,http://127.0.0.1:*,http://[::1]:*,http://192.168.*:*,http://10.*:*,https://*.med.rw,http://*.med.rw}")
     private String allowedOriginsEnv;
 
     @Bean
@@ -23,7 +23,10 @@ public class DevCorsConfig {
         CorsConfiguration configuration = new CorsConfiguration();
 
         // Parse the environment variable (comma-separated)
-        List<String> allowedOrigins = Arrays.asList(allowedOriginsEnv.split(","));
+        List<String> allowedOrigins = Arrays.stream(allowedOriginsEnv.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
 
         configuration.setAllowedOriginPatterns(allowedOrigins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));

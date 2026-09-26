@@ -172,27 +172,64 @@ public class InvoicePdfRenderer implements Closeable {
     // ═══════════════════════════════════════════════════════════════════════════
 
     private synchronized String resolveChromiumPath() {
-        if (chromiumPath != null) return chromiumPath;
+        if (chromiumPath != null && Files.isExecutable(Path.of(chromiumPath))) return chromiumPath;
 
-        String[] candidates = {
+        // 1. Explicit environment variable / system property
+        String envPath = System.getenv("CHROMIUM_PATH");
+        if (envPath != null && !envPath.isBlank()) {
+            Path p = Path.of(envPath);
+            if (Files.isExecutable(p)) {
+                chromiumPath = envPath;
+                log.info("Using Chromium from CHROMIUM_PATH: {}", chromiumPath);
+                return chromiumPath;
+            }
+        }
+
+        List<String> candidates = new ArrayList<>(List.of(
             "/usr/local/bin/chromium",
             "/usr/bin/chromium-browser",
             "/usr/bin/chromium",
             "/usr/bin/google-chrome",
             "/usr/bin/google-chrome-stable",
-        };
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+        ));
+
+        // 2. Check Playwright cache directories
+        String userHome = System.getProperty("user.home", "");
+        if (!userHome.isBlank()) {
+            Path[] playwrightRoots = {
+                Path.of(userHome, "Library", "Caches", "ms-playwright"),
+                Path.of(userHome, ".cache", "ms-playwright")
+            };
+            for (Path pwRoot : playwrightRoots) {
+                if (Files.isDirectory(pwRoot)) {
+                    try (var stream = Files.walk(pwRoot, 10)) {
+                        stream.filter(p -> {
+                            String name = p.getFileName().toString();
+                            return (name.equals("chrome") || name.equals("chromium") ||
+                                    name.equals("Google Chrome for Testing") || name.equals("Chromium") ||
+                                    name.equals("headless_shell"))
+                                    && Files.isExecutable(p) && !Files.isDirectory(p);
+                        }).findFirst().ifPresent(p -> candidates.add(0, p.toAbsolutePath().toString()));
+                    } catch (Exception ignored) {}
+                }
+            }
+        }
 
         for (String candidate : candidates) {
             Path path = Path.of(candidate);
             if (Files.isExecutable(path)) {
                 chromiumPath = candidate;
-                log.info("Using system Chromium at: {}", candidate);
+                log.info("Using Chromium at: {}", candidate);
                 return chromiumPath;
             }
         }
 
-        // Fallback: try `which` command
-        for (String name : new String[]{"chromium", "chromium-browser", "google-chrome"}) {
+        // 3. Fallback: try `which` command
+        for (String name : new String[]{"chromium", "chromium-browser", "google-chrome", "chrome"}) {
             try {
                 Process p = Runtime.getRuntime().exec(new String[]{"which", name});
                 int exit = p.waitFor();
@@ -209,7 +246,7 @@ public class InvoicePdfRenderer implements Closeable {
 
         throw new RuntimeException(
             "No Chromium binary found. Ensure Chromium is installed in the Docker image " +
-            "(check /usr/local/bin/chromium or install via apt-get)."
+            "(check /usr/local/bin/chromium or install via apt-get or npx playwright install chromium)."
         );
     }
 

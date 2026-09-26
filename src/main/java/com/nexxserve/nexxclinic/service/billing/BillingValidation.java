@@ -4,9 +4,12 @@ import com.nexxserve.nexxclinic.entity.VisitDepartment;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentBilling;
 import com.nexxserve.nexxclinic.entity.Worker;
 import com.nexxserve.nexxclinic.graphql.input.BillVisitInput;
+import com.nexxserve.nexxclinic.entity.VisitDepartmentNote;
+import com.nexxserve.nexxclinic.model.NoteType;
 import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentNoteRepository;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentNoteViewerRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
 import java.math.BigDecimal;
 import java.util.List;
@@ -30,18 +33,21 @@ public class BillingValidation {
 
     private final VisitDepartmentRepository visitDepartmentRepository;
     private final VisitDepartmentNoteRepository visitDepartmentNoteRepository;
+    private final VisitDepartmentNoteViewerRepository visitDepartmentNoteViewerRepository;
 
     public BillingValidation(
         VisitDepartmentRepository visitDepartmentRepository,
-        VisitDepartmentNoteRepository visitDepartmentNoteRepository
+        VisitDepartmentNoteRepository visitDepartmentNoteRepository,
+        VisitDepartmentNoteViewerRepository visitDepartmentNoteViewerRepository
     ) {
         this.visitDepartmentRepository = visitDepartmentRepository;
         this.visitDepartmentNoteRepository = visitDepartmentNoteRepository;
+        this.visitDepartmentNoteViewerRepository = visitDepartmentNoteViewerRepository;
     }
 
     /**
-     * Counts unread notes on any non-CANCELLED department of the visit for the
-     * given viewer. ADMIN and CLINIC_ADMIN bypass the gate. Returns 0 for a null
+     * Counts unread BILLING notes on any non-CANCELLED department of the visit for the
+     * given viewer. ADMIN, MANAGER and CLINIC_ADMIN bypass the gate. Returns 0 for a null
      * viewer so callers can fail closed on top of this.
      */
     public long countUnreadNotesForVisit(UUID visitId, Worker viewer) {
@@ -49,25 +55,35 @@ public class BillingValidation {
             return 0;
         }
 
-        // Business rule: ADMIN and CLINIC_ADMIN can bypass unread notes check for billing.
+        // Business rule: ADMIN, MANAGER and CLINIC_ADMIN can bypass unread notes check for billing.
         if (viewer.getRoles() != null && (
             viewer.getRoles().contains(RoleName.ADMIN) ||
+            viewer.getRoles().contains(RoleName.MANAGER) ||
             viewer.getRoles().contains(RoleName.CLINIC_ADMIN)
         )) {
             return 0;
         }
 
-        List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(visitId);
-        long total = 0;
-        for (VisitDepartment vd : departments) {
-            // F1 fix: notes on CANCELLED departments must not block billing of the
-            // departments that are actually being billed.
-            if (vd.getStatus() == VisitDepartmentStatus.CANCELLED) {
-                continue;
-            }
-            total += visitDepartmentNoteRepository.countNewNotesForViewer(vd.getId(), viewer.getId());
+        List<VisitDepartmentNote> notes = visitDepartmentNoteRepository.findByVisitDepartment_Visit_IdOrderByCreatedAtAsc(visitId);
+        return notes.stream()
+            .filter(n -> n.getVisitDepartment() == null || n.getVisitDepartment().getStatus() != VisitDepartmentStatus.CANCELLED)
+            .filter(n -> n.getNoteType() == NoteType.BILLING)
+            .filter(n -> isUnreadForViewer(n, viewer.getId()))
+            .count();
+    }
+
+    private boolean isUnreadForViewer(VisitDepartmentNote note, UUID viewerId) {
+        if (note.getCreatedBy() != null && viewerId.equals(note.getCreatedBy().getId())) {
+            return false;
         }
-        return total;
+        List<Worker> targets = note.getTargetUsers();
+        if (targets != null && !targets.isEmpty()) {
+            boolean inTargets = targets.stream().anyMatch(w -> viewerId.equals(w.getId()));
+            if (!inTargets) {
+                return false;
+            }
+        }
+        return !visitDepartmentNoteViewerRepository.existsByNoteIdAndViewerId(note.getId(), viewerId);
     }
 
     /**

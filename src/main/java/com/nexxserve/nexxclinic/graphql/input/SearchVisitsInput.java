@@ -3,10 +3,17 @@ package com.nexxserve.nexxclinic.graphql.input;
 import com.nexxserve.nexxclinic.model.VisitStatus;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
-import java.time.LocalDateTime;
 
 public record SearchVisitsInput(
-        LocalDateTime visitDate,
+        String visitDate,
+
+        String fromDate,
+
+        String toDate,
+
+        Integer recentDays,
+
+        Boolean activeOnly,
 
         VisitStatus status,
 

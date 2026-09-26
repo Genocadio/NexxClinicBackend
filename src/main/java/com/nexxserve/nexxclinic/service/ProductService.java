@@ -17,9 +17,11 @@ import com.nexxserve.nexxclinic.graphql.input.UpdateProductInsuranceCoverageInpu
 import com.nexxserve.nexxclinic.mappers.out.ProductMapper;
 import com.nexxserve.nexxclinic.model.DrugAdministrationFrequency;
 import com.nexxserve.nexxclinic.model.MustPrescribedBy;
+import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
 import com.nexxserve.nexxclinic.repository.InsuranceProviderRepository;
 import com.nexxserve.nexxclinic.repository.ProductInsuranceCoverageRepository;
 import com.nexxserve.nexxclinic.repository.ProductRepository;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -29,6 +31,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -47,6 +50,7 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final ProductInsuranceCoverageRepository coverageRepository;
     private final InsuranceProviderRepository insuranceProviderRepository;
+    private final VisitDepartmentProductRepository visitDepartmentProductRepository;
     private final ProductMapper productMapper;
     private final MeilisearchIndexService meilisearchIndexService;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -55,12 +59,14 @@ public class ProductService {
             ProductRepository productRepository,
             ProductInsuranceCoverageRepository coverageRepository,
             InsuranceProviderRepository insuranceProviderRepository,
+            VisitDepartmentProductRepository visitDepartmentProductRepository,
             ProductMapper productMapper,
             MeilisearchIndexService meilisearchIndexService
     ) {
         this.productRepository = productRepository;
         this.coverageRepository = coverageRepository;
         this.insuranceProviderRepository = insuranceProviderRepository;
+        this.visitDepartmentProductRepository = visitDepartmentProductRepository;
         this.productMapper = productMapper;
         this.meilisearchIndexService = meilisearchIndexService;
     }
@@ -235,7 +241,19 @@ public class ProductService {
         int page = normalizePage(input == null ? null : input.page());
         int size = normalizeSize(input == null ? null : input.size());
         UUID insuranceProviderId = input == null ? null : input.insuranceProviderId();
+        UUID visitDepartmentId = input == null ? null : input.visitDepartmentId();
         String name = input == null ? null : blankToNull(input.name());
+
+        Set<UUID> excludedProductIds = Set.of();
+        if (visitDepartmentId != null) {
+            List<VisitDepartmentProduct> existing = visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartmentId);
+            if (existing != null && !existing.isEmpty()) {
+                excludedProductIds = existing.stream()
+                        .filter(vdp -> vdp != null && vdp.getProduct() != null && vdp.getProduct().getId() != null)
+                        .map(vdp -> vdp.getProduct().getId())
+                        .collect(Collectors.toSet());
+            }
+        }
 
         // Meilisearch first (typo-tolerant, ranked); DB spec is the fallback.
         // Only invoke Meilisearch when there's at least one search param;
@@ -249,7 +267,7 @@ public class ProductService {
                         page,
                         size
                 );
-                List<ProductDto> products = loadProductsByHits(hit.ids(), insuranceProviderId);
+                List<ProductDto> products = loadProductsByHits(hit.ids(), insuranceProviderId, excludedProductIds);
                 int totalPages = size == 0 ? 0 : (int) Math.ceil((double) hit.total() / size);
                 return ApiResponse.success(
                         "Products fetched.",
@@ -280,6 +298,11 @@ public class ProductService {
             spec = spec.and((root, queryDef, builder) -> builder.equal(root.get("type"), input.type()));
         }
 
+        if (!excludedProductIds.isEmpty()) {
+            final Set<UUID> idsToExclude = excludedProductIds;
+            spec = spec.and((root, queryDef, builder) -> builder.not(root.get("id").in(idsToExclude)));
+        }
+
         Page<Product> productPage = productRepository.findAll(spec, pageable);
 
         // For each product, reload with coverages fetched (avoids lazy load issues)
@@ -301,12 +324,15 @@ public class ProductService {
     }
 
     /** Hydrates full product DTOs from Meilisearch hit ids, preserving hit order. */
-    private List<ProductDto> loadProductsByHits(List<UUID> ids, UUID insuranceProviderId) {
+    private List<ProductDto> loadProductsByHits(List<UUID> ids, UUID insuranceProviderId, Set<UUID> excludedProductIds) {
         if (ids == null || ids.isEmpty()) {
             return List.of();
         }
         List<ProductDto> products = new ArrayList<>();
         for (UUID id : ids) {
+            if (excludedProductIds != null && excludedProductIds.contains(id)) {
+                continue;
+            }
             productRepository.findByIdWithCoverages(id)
                     .ifPresent(product -> products.add(toFilteredDto(product, insuranceProviderId)));
         }

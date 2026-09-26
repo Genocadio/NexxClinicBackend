@@ -14,6 +14,10 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 
+import com.nexxserve.nexxclinic.entity.VisitDepartment;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
+import java.util.ArrayList;
+
 /**
  * Owns the immutable billing-version machinery: minting the next version for a
  * visit (with a unique-index collision retry), ordering containers by version
@@ -31,15 +35,18 @@ public class BillingVersionBuilder {
     private final VisitBillingVersionRepository visitBillingVersionRepository;
     private final VisitBillingRepository visitBillingRepository;
     private final VisitDepartmentProductRepository visitDepartmentProductRepository;
+    private final VisitDepartmentRepository visitDepartmentRepository;
 
     public BillingVersionBuilder(
         VisitBillingVersionRepository visitBillingVersionRepository,
         VisitBillingRepository visitBillingRepository,
-        VisitDepartmentProductRepository visitDepartmentProductRepository
+        VisitDepartmentProductRepository visitDepartmentProductRepository,
+        VisitDepartmentRepository visitDepartmentRepository
     ) {
         this.visitBillingVersionRepository = visitBillingVersionRepository;
         this.visitBillingRepository = visitBillingRepository;
         this.visitDepartmentProductRepository = visitDepartmentProductRepository;
+        this.visitDepartmentRepository = visitDepartmentRepository;
     }
 
     /**
@@ -117,6 +124,38 @@ public class BillingVersionBuilder {
     public boolean isVisitFullyBilled(UUID visitId) {
         List<VisitDepartmentProduct> items =
             visitDepartmentProductRepository.findByVisitDepartmentVisitIdIncludingDeleted(visitId);
+        if (items.isEmpty()) {
+            return false;
+        }
+        return items.stream().allMatch(
+            item ->
+                item.isDeleted() ||
+                item.getStatus() == VisitProductStatus.BILLED ||
+                item.getStatus() == VisitProductStatus.EXEMPTED ||
+                item.getStatus() == VisitProductStatus.PATIENT_SHARE_EXEMPTED
+        );
+    }
+
+    /**
+     * Whether every non-deleted product of the given visit department (and its child departments)
+     * is BILLED/EXEMPTED/PATIENT_SHARE_EXEMPTED.
+     */
+    public boolean isVisitDepartmentFullyBilled(UUID visitDepartmentId) {
+        if (visitDepartmentId == null) {
+            return false;
+        }
+        List<UUID> deptIds = new ArrayList<>();
+        deptIds.add(visitDepartmentId);
+        List<VisitDepartment> children = visitDepartmentRepository.findByParentVisitDepartmentId(visitDepartmentId);
+        if (children != null) {
+            for (VisitDepartment child : children) {
+                deptIds.add(child.getId());
+            }
+        }
+        List<VisitDepartmentProduct> items = new ArrayList<>();
+        for (UUID deptId : deptIds) {
+            items.addAll(visitDepartmentProductRepository.findByVisitDepartmentIdIncludingDeleted(deptId));
+        }
         if (items.isEmpty()) {
             return false;
         }

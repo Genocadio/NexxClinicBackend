@@ -1,5 +1,6 @@
 package com.nexxserve.nexxclinic.dto.out;
 
+import com.nexxserve.nexxclinic.model.BillingConfirmationStatus;
 import com.nexxserve.nexxclinic.model.VisitDepartmentProductSource;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
 import java.math.BigDecimal;
@@ -14,6 +15,8 @@ public record VisitDepartmentProductDto(
         VisitDepartmentProductSource source,
         WorkerDto addedBy,
         WorkerDto billedBy,
+        WorkerDto confirmedBy,
+        BillingConfirmationStatus billingConfirmationStatus,
         WorkerDto processor,
         LocalDateTime createdAt,
         LocalDateTime updatedAt

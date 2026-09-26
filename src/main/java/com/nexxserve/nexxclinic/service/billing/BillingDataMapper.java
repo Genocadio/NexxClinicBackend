@@ -45,7 +45,7 @@ public class BillingDataMapper {
         return data;
     }
 
-    private Map<String, Object> visitDepartmentBillingToMap(
+    public Map<String, Object> visitDepartmentBillingToMap(
         VisitDepartmentBilling billing
     ) {
         Map<String, Object> data = new HashMap<>();
@@ -79,6 +79,12 @@ public class BillingDataMapper {
         data.put("createdAt", billing.getCreatedAt());
         data.put("updatedAt", billing.getUpdatedAt());
         data.put("billingNote", billing.getBillingNote());
+        if (billing.getVisitBilling() != null && billing.getVisitBilling().getBillingVersion() != null) {
+            Map<String, Object> versionData = new HashMap<>();
+            versionData.put("id", billing.getVisitBilling().getBillingVersion().getId());
+            versionData.put("version", billing.getVisitBilling().getBillingVersion().getVersion());
+            data.put("version", versionData);
+        }
         return data;
     }
 

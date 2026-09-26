@@ -60,6 +60,22 @@ public class VisitQueryController {
         return visitService.visits(input, authUser);
     }
 
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE, RoleName.MANAGER})
+    @QueryMapping
+    public ApiResponse activeVisits(
+            @Argument Integer recentDays,
+            @Argument String patientName,
+            @Argument com.nexxserve.nexxclinic.model.VisitStatus status,
+            @Argument Integer page,
+            @Argument Integer size,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        SearchVisitsInput input = new SearchVisitsInput(
+                null, null, null, recentDays, null, status, patientName, page, size
+        );
+        return visitService.visits(input, authUser);
+    }
+
         @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse lastPatientDepartmentVisit(
