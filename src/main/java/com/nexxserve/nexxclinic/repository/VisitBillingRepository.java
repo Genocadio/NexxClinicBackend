@@ -19,4 +19,7 @@ public interface VisitBillingRepository extends JpaRepository<VisitBilling, UUID
             WHERE b.id = :id
             """)
     Optional<VisitBilling> findByIdWithVisitAndPatient(@Param("id") UUID id);
+
+    @Query("SELECT DISTINCT b.visit.id FROM VisitBilling b WHERE b.visit IS NOT NULL")
+    List<UUID> findAllBilledVisitIds();
 }

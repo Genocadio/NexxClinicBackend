@@ -67,4 +67,7 @@ public interface VisitDepartmentRepository extends JpaRepository<VisitDepartment
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT vd FROM VisitDepartment vd WHERE vd.id = :id")
     Optional<VisitDepartment> findByIdForUpdate(@Param("id") UUID id);
+
+    @Query("SELECT DISTINCT vd.visit.id FROM VisitDepartment vd WHERE vd.status = com.nexxserve.nexxclinic.model.VisitDepartmentStatus.BILLING AND vd.visit IS NOT NULL")
+    List<UUID> findVisitIdsWithBillingDepartment();
 }

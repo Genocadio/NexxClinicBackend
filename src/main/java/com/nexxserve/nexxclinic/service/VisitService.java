@@ -485,39 +485,59 @@ public class VisitService {
             );
         }
 
-        // Department-level Scoping:
-        // If caller does not have VISIT_VIEW_ALL, but has VISIT_VIEW_ASSIGNED, scope by their assigned departments
+        // Role-based Scoping:
+        // Admin, Clinic Admin, Manager, Reception, and Nurse see all visits (hasViewAll).
+        // Finance sees all visits billed or with department status BILLING.
+        // Clinician sees visits in their departments with no operator, or where they are the assigned operator.
         if (authUser != null && authUser.roles() != null) {
             boolean hasViewAll = authUser.roles().contains(RoleName.ADMIN)
                     || authUser.roles().contains(RoleName.CLINIC_ADMIN)
                     || authUser.roles().contains(RoleName.MANAGER)
                     || authUser.roles().contains(RoleName.RECEPTION)
+                    || authUser.roles().contains(RoleName.NURSE)
                     || (rolePermissionService != null && rolePermissionService.userHasAnyPermission(authUser, PermissionName.VISIT_VIEW_ALL));
 
             if (!hasViewAll) {
-                boolean hasViewAssigned = authUser.roles().contains(RoleName.CLINICIAN)
-                        || authUser.roles().contains(RoleName.NURSE)
-                        || (rolePermissionService != null && rolePermissionService.userHasAnyPermission(authUser, PermissionName.VISIT_VIEW_ASSIGNED));
+                Set<UUID> allowedVisitIds = new LinkedHashSet<>();
+                boolean roleScoped = false;
 
-                if (hasViewAssigned && authUser.userId() != null) {
+                // 1. Finance Scoping: sees all visits billed or with department status BILLING
+                if (authUser.roles().contains(RoleName.FINANCE)) {
+                    roleScoped = true;
+                    List<UUID> billedVisits = visitBillingRepository.findAllBilledVisitIds();
+                    List<UUID> billingDeptVisits = visitDepartmentRepository.findVisitIdsWithBillingDepartment();
+                    allowedVisitIds.addAll(billedVisits);
+                    allowedVisitIds.addAll(billingDeptVisits);
+                }
+
+                // 2. Clinician Scoping: sees visits with departments in their specialty if no operator yet,
+                //    or if assigned operator is current user
+                if (authUser.roles().contains(RoleName.CLINICIAN) && authUser.userId() != null) {
                     Worker worker = workerRepository.findById(authUser.userId()).orElse(null);
                     Set<UUID> userDeptIds = (worker != null && worker.getDepartments() != null)
                             ? worker.getDepartments().stream().map(com.nexxserve.nexxclinic.entity.Department::getId).collect(Collectors.toSet())
                             : Set.of();
 
                     if (!userDeptIds.isEmpty()) {
-                        Set<UUID> matchingVisitIds = new LinkedHashSet<>();
+                        roleScoped = true;
                         for (VisitDepartment vd : visitDepartmentRepository.findByDepartmentIdIn(userDeptIds)) {
-                            if (vd.getVisit() != null && vd.getVisit().getId() != null) {
-                                matchingVisitIds.add(vd.getVisit().getId());
+                            if (vd.getVisit() != null && vd.getVisit().getId() != null && vd.getStatus() != VisitDepartmentStatus.CANCELLED) {
+                                boolean isPending = vd.getStatus() == VisitDepartmentStatus.PENDING;
+                                boolean unassigned = vd.getProcessors() == null || vd.getProcessors().isEmpty();
+                                boolean isAssignedToMe = vd.getProcessors() != null && vd.getProcessors().stream().anyMatch(p -> p != null && authUser.userId().equals(p.getId()));
+                                if (isPending || unassigned || isAssignedToMe) {
+                                    allowedVisitIds.add(vd.getVisit().getId());
+                                }
                             }
                         }
-                        if (matchingVisitIds.isEmpty()) {
-                            return ApiResponse.success("Visits fetched.", List.of(), new PaginationDto(0, size, page, 0));
-                        }
-                        spec = spec.and((root, queryDef, builder) -> root.get("id").in(matchingVisitIds));
                     }
-                    // If worker has no assigned departments (floating clinician), falls back gracefully to all clinic visits
+                }
+
+                if (roleScoped) {
+                    if (allowedVisitIds.isEmpty()) {
+                        return ApiResponse.success("Visits fetched.", List.of(), new PaginationDto(0, size, page, 0));
+                    }
+                    spec = spec.and((root, queryDef, builder) -> root.get("id").in(allowedVisitIds));
                 }
             }
         }
