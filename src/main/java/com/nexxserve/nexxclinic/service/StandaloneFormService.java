@@ -17,6 +17,7 @@ import com.nexxserve.nexxclinic.model.AnswerStatus;
 import com.nexxserve.nexxclinic.model.FormStatus;
 import com.nexxserve.nexxclinic.repository.DepartmentRepository;
 import com.nexxserve.nexxclinic.repository.DepartmentStandaloneFormRepository;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
 import com.nexxserve.nexxclinic.repository.VisitRepository;
 import com.nexxserve.nexxclinic.repository.StandaloneFormAnswerRepository;
@@ -42,6 +43,7 @@ public class StandaloneFormService {
     private final DepartmentRepository departmentRepository;
     private final VisitRepository visitRepository;
     private final VisitDepartmentRepository visitDepartmentRepository;
+    private final VisitDepartmentProductRepository visitDepartmentProductRepository;
     private final VisitDepartmentService visitDepartmentService;
     private final VisitDepartmentNoteService visitDepartmentNoteService;
     private final StandaloneFormMapper mapper;
@@ -55,6 +57,7 @@ public class StandaloneFormService {
                                  DepartmentRepository departmentRepository,
                                  VisitRepository visitRepository,
                                  VisitDepartmentRepository visitDepartmentRepository,
+                                 VisitDepartmentProductRepository visitDepartmentProductRepository,
                                  @Lazy VisitDepartmentService visitDepartmentService,
                                  VisitDepartmentNoteService visitDepartmentNoteService,
                                  StandaloneFormMapper mapper) {
@@ -65,6 +68,7 @@ public class StandaloneFormService {
         this.departmentRepository = departmentRepository;
         this.visitRepository = visitRepository;
         this.visitDepartmentRepository = visitDepartmentRepository;
+        this.visitDepartmentProductRepository = visitDepartmentProductRepository;
         this.visitDepartmentService = visitDepartmentService;
         this.visitDepartmentNoteService = visitDepartmentNoteService;
         this.mapper = mapper;
@@ -381,6 +385,27 @@ public class StandaloneFormService {
 
         // Link to the specific VisitDepartment (parent or child)
         visitDept.setAnswerId(savedAnswer.getId());
+
+        List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(visitId);
+        for (VisitDepartment dept : departments) {
+            if (dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.CANCELLED
+                    && dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.COMPLETED) {
+                List<com.nexxserve.nexxclinic.entity.VisitDepartmentProduct> products = visitDepartmentProductRepository.findByVisitDepartmentId(dept.getId());
+                boolean hasUnbilled = products.stream().anyMatch(p -> !p.isDeleted() && (
+                        p.getStatus() == com.nexxserve.nexxclinic.model.VisitProductStatus.PENDING
+                        || p.getStatus() == com.nexxserve.nexxclinic.model.VisitProductStatus.UNPAID
+                        || p.getStatus() == com.nexxserve.nexxclinic.model.VisitProductStatus.CORRECTION_PENDING
+                ));
+                if (hasUnbilled) {
+                    dept.setStatus(com.nexxserve.nexxclinic.model.VisitDepartmentStatus.BILLING);
+                    if (dept.getId().equals(visitDept.getId())) {
+                        visitDept.setStatus(com.nexxserve.nexxclinic.model.VisitDepartmentStatus.BILLING);
+                    }
+                    visitDepartmentRepository.save(dept);
+                }
+            }
+        }
+
         VisitDepartment savedVisitDepartment = visitDepartmentRepository.save(visitDept);
 
         StandaloneFormAnswerDto mappedAnswerDto = mapper.toDto(savedAnswer);

@@ -1429,12 +1429,18 @@ public class VisitDepartmentService {
             return ApiResponse.error("A department that has been billed is frozen. Use editBillVisit to correct the billing.");
         }
         if (requestedStatus == VisitDepartmentStatus.COMPLETED) {
+            boolean isFinanceOrAdminOrManager = authUser != null && authUser.roles() != null
+                    && authUser.roles().stream().anyMatch(r ->
+                        r == RoleName.FINANCE || r == RoleName.ADMIN || r == RoleName.CLINIC_ADMIN || r == RoleName.MANAGER);
+            if (!isFinanceOrAdminOrManager) {
+                return ApiResponse.error("Doctors and clinical staff cannot set department status to completed.");
+            }
             List<VisitDepartmentProduct> products = visitDepartmentProductRepository
                 .findByVisitDepartmentId(department.getId());
-            boolean hasUnbilled = products.stream().anyMatch(p ->
+            boolean hasUnbilled = products.stream().anyMatch(p -> !p.isDeleted() && (
                 p.getStatus() == VisitProductStatus.PENDING
                     || p.getStatus() == VisitProductStatus.UNPAID
-                    || p.getStatus() == VisitProductStatus.CORRECTION_PENDING);
+                    || p.getStatus() == VisitProductStatus.CORRECTION_PENDING));
             if (hasUnbilled) {
                 return ApiResponse.error("Cannot complete a department with unbilled products. All products must be billed first.");
             }
@@ -1444,17 +1450,17 @@ public class VisitDepartmentService {
             boolean isAssignedProcessor = authUser != null && authUser.userId() != null
                     && department.getProcessors() != null
                     && department.getProcessors().stream().anyMatch(p -> p != null && authUser.userId().equals(p.getId()));
+            boolean isReceptionOrFinance = authUser != null && authUser.roles() != null
+                    && authUser.roles().stream().anyMatch(r ->
+                        r == RoleName.RECEPTION || r == RoleName.FINANCE || r == RoleName.ADMIN || r == RoleName.CLINIC_ADMIN || r == RoleName.MANAGER || r == RoleName.NURSE || r == RoleName.CLINICIAN);
 
-            if (currentStatus == VisitDepartmentStatus.ACTIVE) {
-                if (!isManagerOrAbove && !isAssignedProcessor) {
-                    return ApiResponse.error("Only the assigned processor or an admin/manager can cancel an active department.");
-                }
-            } else {
-                List<VisitDepartmentProduct> products = visitDepartmentProductRepository
-                        .findByVisitDepartmentIdIncludingDeleted(department.getId());
-                if (!products.isEmpty() && !isManagerOrAbove && !isAssignedProcessor) {
-                    return ApiResponse.error("Only the assigned processor or an admin/manager can cancel a department with products.");
-                }
+            List<VisitDepartmentProduct> products = visitDepartmentProductRepository
+                    .findByVisitDepartmentIdIncludingDeleted(department.getId());
+            if (!products.isEmpty() && !isManagerOrAbove && !isAssignedProcessor) {
+                return ApiResponse.error("Only the assigned processor or an admin/manager can cancel a department with products.");
+            }
+            if (products.isEmpty() && !isManagerOrAbove && !isAssignedProcessor && !isReceptionOrFinance) {
+                return ApiResponse.error("You do not have permission to cancel this department.");
             }
         }
         department.setStatus(requestedStatus);

@@ -69,6 +69,9 @@ class VisitDepartmentLifecycleLockingIntegrationTest {
     private VisitDepartmentBillingRepository visitDepartmentBillingRepository;
 
     @Autowired
+    private VisitService visitService;
+
+    @Autowired
     private WorkerRepository workerRepository;
 
     @Autowired
@@ -505,7 +508,20 @@ class VisitDepartmentLifecycleLockingIntegrationTest {
                 authUser
         );
 
-        // Nurse (not assigned processor, not manager) cannot cancel active department
+        // Add product to active department
+        visitDepartmentService.addVisitDepartmentProduct(
+                new com.nexxserve.nexxclinic.graphql.input.CreateVisitDepartmentProductInput(
+                        visit.getId(),
+                        dept2Id,
+                        product.getId(),
+                        null,
+                        BigDecimal.ONE,
+                        null
+                ),
+                authUser
+        );
+
+        // Nurse (not assigned processor, not manager) cannot cancel active department with products
         ApiResponse nurseCancelActiveRes = visitDepartmentService.updateVisitDepartmentStatus(
                 new com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentStatusInput(activeDeptId, VisitDepartmentStatus.CANCELLED),
                 nurseAuth
@@ -749,5 +765,121 @@ class VisitDepartmentLifecycleLockingIntegrationTest {
         assertTrue(visitBillingItemRepository.findByVisitDepartmentProductId(vdp1.getId()).isEmpty(), "Product billing items should be deleted");
         assertTrue(visitDepartmentProductSnapshotRepository.findByVisitDepartmentId(dept1Id).isEmpty(), "Snapshots should be deleted");
         assertTrue(consultationAnswerRepository.findByVisitIdAndDepartmentIdOrderByUpdatedAtDesc(visit.getId(), dept1.getId()).isEmpty(), "Consultation answers should be deleted");
+    }
+
+    @Test
+    void testDoctorCannotSetDepartmentStatusToCompleted() {
+        Visit testVisit = new Visit();
+        testVisit.setPatient(patient);
+        testVisit.setStatus(VisitStatus.IN_PROGRESS);
+        testVisit.setVisitDate(LocalDateTime.now());
+        testVisit = visitRepository.save(testVisit);
+
+        Department testDept = new Department();
+        testDept.setName("Clinician Complete Test " + UUID.randomUUID());
+        testDept = departmentRepository.save(testDept);
+
+        ApiResponse<VisitDto> addDeptRes = visitDepartmentService.addVisitDepartment(
+                testVisit.getId(),
+                testDept.getId(),
+                null,
+                EncounterType.OUTPATIENT,
+                clinicianWorker.getId(),
+                authUser
+        );
+        assertEquals(ResponseStatus.SUCCESS, addDeptRes.status());
+        UUID visitDeptId = addDeptRes.data().departments().get(0).id();
+
+        // Clinician tries to set COMPLETED -> should be rejected
+        ApiResponse clinicianCompleteRes = visitDepartmentService.updateVisitDepartmentStatus(
+                new com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentStatusInput(visitDeptId, VisitDepartmentStatus.COMPLETED),
+                authUser // authUser has RoleName.CLINICIAN
+        );
+        assertEquals(ResponseStatus.ERROR, clinicianCompleteRes.status());
+        assertTrue(clinicianCompleteRes.message().contains("Doctors and clinical staff cannot set department status to completed"));
+    }
+
+    @Test
+    void testConsultationSaveSetsBillingOnlyWhenUnbilledProductsExist() {
+        Visit testVisit = new Visit();
+        testVisit.setPatient(patient);
+        testVisit.setStatus(VisitStatus.IN_PROGRESS);
+        testVisit.setVisitDate(LocalDateTime.now());
+        testVisit = visitRepository.save(testVisit);
+
+        Department testDept = new Department();
+        testDept.setName("Unbilled Check Dept " + UUID.randomUUID());
+        testDept = departmentRepository.save(testDept);
+
+        ApiResponse<VisitDto> addDeptRes = visitDepartmentService.addVisitDepartment(
+                testVisit.getId(),
+                testDept.getId(),
+                null,
+                EncounterType.OUTPATIENT,
+                clinicianWorker.getId(),
+                authUser
+        );
+        assertEquals(ResponseStatus.SUCCESS, addDeptRes.status());
+        UUID visitDeptId = addDeptRes.data().departments().get(0).id();
+
+        // Set to ACTIVE
+        visitDepartmentService.updateVisitDepartmentStatus(
+                new com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentStatusInput(visitDeptId, VisitDepartmentStatus.ACTIVE),
+                authUser
+        );
+
+        // Case 1: No products exist. Completing consultation should NOT change status (remains ACTIVE, not BILLING, not COMPLETED)
+        DepartmentForm testForm = new DepartmentForm();
+        testForm.setDepartment(testDept);
+        testForm.setTitle("Form " + UUID.randomUUID());
+        testForm.setStatus(FormStatus.FINAL);
+        testForm.setCurrentVersionNumber("1.0.0");
+        testForm.setFormData("{}");
+        testForm = departmentFormRepository.save(testForm);
+
+        DepartmentFormVersion version = new DepartmentFormVersion();
+        version.setForm(testForm);
+        version.setVersionNumber("1.0.0");
+        version.setTitle(testForm.getTitle());
+        version.setFormData("{}");
+        version.setStatus(FormStatus.FINAL);
+        version = departmentFormVersionRepository.save(version);
+
+        com.nexxserve.nexxclinic.graphql.input.ConsultationAnswersInput input =
+                new com.nexxserve.nexxclinic.graphql.input.ConsultationAnswersInput(
+                        UUID.randomUUID(),
+                        testVisit.getId(),
+                        patient.getId(),
+                        testDept.getId(),
+                        testForm.getId(),
+                        "1.0.0",
+                        AnswerStatus.FINAL,
+                        "{\"field\":\"value\"}"
+                );
+
+        ApiResponse<VisitDto> completeRes = visitService.completeVisit(input, true, authUser);
+        assertEquals(ResponseStatus.SUCCESS, completeRes.status());
+
+        VisitDepartment deptAfterNoProd = visitDepartmentRepository.findById(visitDeptId).orElseThrow();
+        assertEquals(VisitDepartmentStatus.ACTIVE, deptAfterNoProd.getStatus(), "Should remain ACTIVE when no products exist");
+
+        // Case 2: Unbilled product added. Completing consultation (or draft save) should change status to BILLING
+        visitDepartmentService.addVisitDepartmentProduct(
+                new com.nexxserve.nexxclinic.graphql.input.CreateVisitDepartmentProductInput(
+                        testVisit.getId(),
+                        testDept.getId(),
+                        product.getId(),
+                        null,
+                        BigDecimal.ONE,
+                        null
+                ),
+                authUser
+        );
+
+        ApiResponse<VisitDto> draftSaveRes = visitService.completeVisit(input, false, authUser);
+        assertEquals(ResponseStatus.SUCCESS, draftSaveRes.status());
+
+        VisitDepartment deptAfterUnbilled = visitDepartmentRepository.findById(visitDeptId).orElseThrow();
+        assertEquals(VisitDepartmentStatus.BILLING, deptAfterUnbilled.getStatus(), "Should transition to BILLING when unbilled product exists");
     }
 }

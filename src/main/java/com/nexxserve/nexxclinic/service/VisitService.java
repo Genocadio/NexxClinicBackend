@@ -809,24 +809,27 @@ public class VisitService {
             return answerResponse;
         }
 
-        // Only a FINAL submission hands the departments to finance (BILLING). Draft
-        // saves (finalAnswer = false) must NOT freeze clinical/product work — otherwise
-        // the BILLING guards in VisitDepartmentService would block clinicians from
-        // adding products, diagnosis or medication mid-consultation.
-        if (!finalAnswer) {
-            return ApiResponse.success("Consultation answers saved.", visitToDto(visit));
-        }
-
+        // Both final and draft consultation saves set department status to BILLING if there are
+        // unbilled products. If all products are billed or no products exist, no status change is made
+        // (departments are never transitioned to COMPLETED by consultation save).
         List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(input.visitId());
         for (VisitDepartment dept : departments) {
-            if (dept.getStatus() != VisitDepartmentStatus.CANCELLED) {
-                dept.setStatus(VisitDepartmentStatus.BILLING);
-                visitDepartmentRepository.save(dept);
+            if (dept.getStatus() != VisitDepartmentStatus.CANCELLED && dept.getStatus() != VisitDepartmentStatus.COMPLETED) {
+                List<VisitDepartmentProduct> products = visitDepartmentProductRepository.findByVisitDepartmentId(dept.getId());
+                boolean hasUnbilled = products.stream().anyMatch(p -> !p.isDeleted() && (
+                        p.getStatus() == VisitProductStatus.PENDING
+                        || p.getStatus() == VisitProductStatus.UNPAID
+                        || p.getStatus() == VisitProductStatus.CORRECTION_PENDING
+                ));
+                if (hasUnbilled) {
+                    dept.setStatus(VisitDepartmentStatus.BILLING);
+                    visitDepartmentRepository.save(dept);
+                }
             }
         }
 
         Visit saved = visitRepository.save(visit);
-        return ApiResponse.success("Visit submitted for billing.", visitToDto(saved));
+        return ApiResponse.success(finalAnswer ? "Visit submitted for billing." : "Consultation answers saved.", visitToDto(saved));
     }
 
     @Transactional

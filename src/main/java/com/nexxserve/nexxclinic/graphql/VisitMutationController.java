@@ -177,7 +177,7 @@ public class VisitMutationController {
         return visitService.unlinkVisitInsurances(visitId, insuranceIds, authUser);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE, RoleName.MANAGER})
     @MutationMapping
     public ApiResponse updateVisitDepartmentStatus(
             @Argument @Valid UpdateVisitDepartmentStatusInput input,
