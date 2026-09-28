@@ -228,7 +228,7 @@ public class BillingProductServiceIntegrationTest {
         // Check department product is in BILLED status
         VisitDepartmentProduct billedVdp = visitDepartmentProductRepository.findById(vdp.getId()).orElseThrow();
         assertEquals(product.getId(), billedVdp.getProduct().getId());
-        assertEquals(new BigDecimal("2.0000"), billedVdp.getQuantity());
+        assertEquals(0, new BigDecimal("2.0000").compareTo(billedVdp.getQuantity()));
         assertEquals(VisitProductStatus.BILLED, billedVdp.getStatus());
 
         // Check billing item exists
@@ -387,7 +387,7 @@ public class BillingProductServiceIntegrationTest {
         var refreshedProducts = visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartment.getId());
         assertEquals(1, refreshedProducts.size());
         VisitDepartmentProduct refreshedVdp = refreshedProducts.get(0);
-        assertEquals(new BigDecimal("3.0000"), refreshedVdp.getQuantity());
+        assertEquals(0, new BigDecimal("3.0000").compareTo(refreshedVdp.getQuantity()));
         assertEquals(VisitProductStatus.BILLED, refreshedVdp.getStatus());
         assertNotNull(refreshedVdp.getBillingConfirmationStatus());
     }

@@ -96,6 +96,9 @@ class VisitDepartmentLifecycleLockingIntegrationTest {
     private VisitDepartmentProductSnapshotRepository visitDepartmentProductSnapshotRepository;
 
     @Autowired
+    private com.nexxserve.nexxclinic.repository.VisitBillingVersionRepository visitBillingVersionRepository;
+
+    @Autowired
     private VisitBillingPaymentRepository visitBillingPaymentRepository;
 
     private Patient patient;
@@ -725,6 +728,7 @@ class VisitDepartmentLifecycleLockingIntegrationTest {
                 new com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion();
         billingVersion.setVisit(visit);
         billingVersion.setVersion(1);
+        billingVersion = visitBillingVersionRepository.save(billingVersion);
 
         com.nexxserve.nexxclinic.entity.billing.VisitDepartmentProductSnapshot snapshot =
                 new com.nexxserve.nexxclinic.entity.billing.VisitDepartmentProductSnapshot();
@@ -735,7 +739,7 @@ class VisitDepartmentLifecycleLockingIntegrationTest {
         snapshot.setUnitPrice(BigDecimal.valueOf(10.0));
         snapshot.setStatus(VisitProductStatus.BILLED);
         snapshot.setBillingVersion(billingVersion);
-        // Note: we can test snapshot deletion if persisted with version
+        visitDepartmentProductSnapshotRepository.save(snapshot);
 
 
         // 5. Verify non-admin/manager cannot remove the department

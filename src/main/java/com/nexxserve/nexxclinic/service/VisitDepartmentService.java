@@ -444,9 +444,11 @@ public class VisitDepartmentService {
         // product-removal paths). Map to the parent so the response stays valid.
         VisitDepartment mapped = deleteChildVisitDepartmentIfEmpty(saved);
         visitPriceEstimateService.recomputeEstimates(saved.getVisit().getId());
+        UUID targetDeptId = mapped != null ? mapped.getId() : saved.getId();
+        VisitDepartment freshDept = visitDepartmentRepository.findById(targetDeptId).orElse(saved);
         return ApiResponse.success(
             "Visit department profile changed.",
-            visitDepartmentToDto(mapped == null ? saved : mapped)
+            visitDepartmentToDto(freshDept)
         );
     }
 
@@ -874,7 +876,8 @@ public class VisitDepartmentService {
                 // Delete payments directly tied to this department billing
                 List<VisitBillingPayment> payments = visitBillingPaymentRepository.findByVisitDepartmentBillingId(db.getId());
                 if (!payments.isEmpty()) {
-                    visitBillingPaymentRepository.deleteAllInBatch(payments);
+                    visitBillingPaymentRepository.deleteAll(payments);
+                    visitBillingPaymentRepository.flush();
                 }
 
                 // Delete insurance billings (buckets) and their items & payments
@@ -884,23 +887,27 @@ public class VisitDepartmentService {
                     List<VisitBillingPayment> dibPayments =
                             visitBillingPaymentRepository.findByDepartmentInsuranceBillingId(dib.getId());
                     if (!dibPayments.isEmpty()) {
-                        visitBillingPaymentRepository.deleteAllInBatch(dibPayments);
+                        visitBillingPaymentRepository.deleteAll(dibPayments);
+                        visitBillingPaymentRepository.flush();
                     }
 
                     List<VisitBillingItem> items =
                             visitBillingItemRepository.findByDepartmentInsuranceBillingId(dib.getId());
                     if (!items.isEmpty()) {
-                        visitBillingItemRepository.deleteAllInBatch(items);
+                        visitBillingItemRepository.deleteAll(items);
+                        visitBillingItemRepository.flush();
                     }
                 }
 
                 if (!insBillings.isEmpty()) {
-                    departmentInsuranceBillingRepository.deleteAllInBatch(insBillings);
+                    departmentInsuranceBillingRepository.deleteAll(insBillings);
+                    departmentInsuranceBillingRepository.flush();
                 }
             }
 
             if (!deptBillings.isEmpty()) {
-                visitDepartmentBillingRepository.deleteAllInBatch(deptBillings);
+                visitDepartmentBillingRepository.deleteAll(deptBillings);
+                visitDepartmentBillingRepository.flush();
             }
 
             // Also clean up any remaining VisitBillingItem pointing directly to this department's products
@@ -918,6 +925,7 @@ public class VisitDepartmentService {
                 long remainingCount = visitDepartmentBillingRepository.countByVisitBillingId(vb.getId());
                 if (remainingCount == 0) {
                     visitBillingRepository.delete(vb);
+                    visitBillingRepository.flush();
                 }
             }
         } catch (Exception e) {
@@ -1303,10 +1311,13 @@ public class VisitDepartmentService {
             VisitDepartment affectedDepartment = item.getVisitDepartment();
             visitPriceEstimateService.deleteEstimateByVisitDepartmentProductId(item.getId());
             visitDepartmentProductRepository.delete(item);
+            visitDepartmentProductRepository.flush();
             reopenVisitIfCompleted(visit);
             visitPriceEstimateService.recomputeEstimates(visit.getId());
             VisitDepartment mappedDepartment = deleteChildVisitDepartmentIfEmpty(affectedDepartment);
-            return ApiResponse.success("Visit department product removed.", visitDepartmentToDto(mappedDepartment == null ? affectedDepartment : mappedDepartment));
+            UUID targetDepartmentId = mappedDepartment != null ? mappedDepartment.getId() : affectedDepartment.getId();
+            VisitDepartment freshDepartment = visitDepartmentRepository.findById(targetDepartmentId).orElse(affectedDepartment);
+            return ApiResponse.success("Visit department product removed.", visitDepartmentToDto(freshDepartment));
         }
 
         item.setQuantity(input.quantity());
@@ -1360,11 +1371,14 @@ public class VisitDepartmentService {
         }
         visitPriceEstimateService.deleteEstimateByVisitDepartmentProductId(item.getId());
         visitDepartmentProductRepository.delete(item);
+        visitDepartmentProductRepository.flush();
         reopenVisitIfCompleted(visit);
         visitPriceEstimateService.recomputeEstimates(visit.getId());
 
         VisitDepartment mappedDepartment = deleteChildVisitDepartmentIfEmpty(affectedDepartment);
-        return ApiResponse.success("Visit department product removed.", visitDepartmentToDto(mappedDepartment == null ? affectedDepartment : mappedDepartment));
+        UUID targetDepartmentId = mappedDepartment != null ? mappedDepartment.getId() : affectedDepartment.getId();
+        VisitDepartment freshDepartment = visitDepartmentRepository.findById(targetDepartmentId).orElse(affectedDepartment);
+        return ApiResponse.success("Visit department product removed.", visitDepartmentToDto(freshDepartment));
     }
 
     @Transactional

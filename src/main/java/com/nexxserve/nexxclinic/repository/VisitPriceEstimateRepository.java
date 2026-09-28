@@ -29,16 +29,16 @@ public interface VisitPriceEstimateRepository extends JpaRepository<VisitPriceEs
      * subsequent {@code saveAll} starts with a clean slate.
      */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
-    @Query("DELETE FROM VisitPriceEstimate e WHERE e.visit.id = :visitId")
-    void deleteByVisitId(UUID visitId);
+    @Query(value = "DELETE FROM visit_price_estimates WHERE visit_id = :visitId", nativeQuery = true)
+    void deleteByVisitId(@org.springframework.data.repository.query.Param("visitId") UUID visitId);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
-    @Query("DELETE FROM VisitPriceEstimate e WHERE e.visitDepartmentProduct.visitDepartment.id = :visitDepartmentId")
-    void deleteByVisitDepartmentId(UUID visitDepartmentId);
+    @Query(value = "DELETE FROM visit_price_estimates WHERE visit_department_product_id IN (SELECT id FROM visit_department_products WHERE visit_department_id = :visitDepartmentId)", nativeQuery = true)
+    void deleteByVisitDepartmentId(@org.springframework.data.repository.query.Param("visitDepartmentId") UUID visitDepartmentId);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
-    @Query("DELETE FROM VisitPriceEstimate e WHERE e.visitDepartmentProduct.id = :visitDepartmentProductId")
-    void deleteByVisitDepartmentProductId(UUID visitDepartmentProductId);
+    @Query(value = "DELETE FROM visit_price_estimates WHERE visit_department_product_id = :visitDepartmentProductId", nativeQuery = true)
+    void deleteByVisitDepartmentProductId(@org.springframework.data.repository.query.Param("visitDepartmentProductId") UUID visitDepartmentProductId);
 
     @Query("SELECT COALESCE(SUM(e.lineTotal), 0) FROM VisitPriceEstimate e WHERE e.visit.id = :visitId")
     java.math.BigDecimal sumLineTotalByVisitId(UUID visitId);
