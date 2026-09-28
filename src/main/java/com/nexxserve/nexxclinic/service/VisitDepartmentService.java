@@ -2461,13 +2461,14 @@ public class VisitDepartmentService {
         if (!visitDepartmentDiagnosisRepository.findByVisitDepartmentId(visitDepartment.getId()).isEmpty()
                 || !visitDepartmentMedicationRepository.findByVisitDepartmentId(visitDepartment.getId()).isEmpty()
                 || !visitPreInstructionRepository.findByVisitDepartmentIdOrderByCreatedAtAsc(visitDepartment.getId()).isEmpty()
-                || !visitDepartmentNoteServiceHasNotes(visitDepartment.getId())
+                || visitDepartmentNoteServiceHasNotes(visitDepartment.getId())
                 || visitDepartmentBillingRepository.existsByVisitDepartmentId(visitDepartment.getId())) {
             return visitDepartment;
         }
 
         VisitDepartment parent = visitDepartment.getParentVisitDepartment();
         visitDepartmentRepository.delete(visitDepartment);
+        visitDepartmentRepository.flush();
         return parent;
     }
 
