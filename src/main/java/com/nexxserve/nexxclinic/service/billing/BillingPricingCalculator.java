@@ -408,7 +408,8 @@ public class BillingPricingCalculator {
             insurance.getInsuranceProvider().getId(),
             prefetchedCoverages
         );
-        if (coverage == null || !coverage.isCovered()) {
+        if (coverage == null || !coverage.isCovered() || coverage.isNotPaid()
+            || (coverage.getCost() != null && coverage.getCost().compareTo(BigDecimal.ZERO) <= 0)) {
             return null;
         }
         return insurance;

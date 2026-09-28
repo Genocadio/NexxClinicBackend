@@ -36,7 +36,8 @@ public interface VisitPriceEstimateRepository extends JpaRepository<VisitPriceEs
     @Query("DELETE FROM VisitPriceEstimate e WHERE e.visitDepartmentProduct.visitDepartment.id = :visitDepartmentId")
     void deleteByVisitDepartmentId(UUID visitDepartmentId);
 
-    /** Delete a specific estimate by its visit department product ID. */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("DELETE FROM VisitPriceEstimate e WHERE e.visitDepartmentProduct.id = :visitDepartmentProductId")
     void deleteByVisitDepartmentProductId(UUID visitDepartmentProductId);
 
     @Query("SELECT COALESCE(SUM(e.lineTotal), 0) FROM VisitPriceEstimate e WHERE e.visit.id = :visitId")

@@ -419,6 +419,9 @@ public class VisitDepartmentService {
                     );
                 }
             }
+            for (VisitDepartmentProduct p : profileProducts) {
+                visitPriceEstimateService.deleteEstimateByVisitDepartmentProductId(p.getId());
+            }
             visitDepartmentProductRepository.deleteAll(profileProducts);
         }
 
@@ -1298,6 +1301,7 @@ public class VisitDepartmentService {
                 return ApiResponse.error("Cannot remove a product that has billing history. Use editBillVisit to correct the billing instead.");
             }
             VisitDepartment affectedDepartment = item.getVisitDepartment();
+            visitPriceEstimateService.deleteEstimateByVisitDepartmentProductId(item.getId());
             visitDepartmentProductRepository.delete(item);
             reopenVisitIfCompleted(visit);
             visitPriceEstimateService.recomputeEstimates(visit.getId());
@@ -1354,6 +1358,7 @@ public class VisitDepartmentService {
         if (!billingItems.isEmpty()) {
             return ApiResponse.error("Cannot remove a product that has billing history. Use editBillVisit to correct the billing instead.");
         }
+        visitPriceEstimateService.deleteEstimateByVisitDepartmentProductId(item.getId());
         visitDepartmentProductRepository.delete(item);
         reopenVisitIfCompleted(visit);
         visitPriceEstimateService.recomputeEstimates(visit.getId());

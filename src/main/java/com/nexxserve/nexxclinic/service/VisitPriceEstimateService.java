@@ -211,6 +211,13 @@ public class VisitPriceEstimateService {
         visitPriceEstimateRepository.deleteByVisitDepartmentId(visitDepartmentId);
     }
 
+    @Transactional
+    public void deleteEstimateByVisitDepartmentProductId(UUID visitDepartmentProductId) {
+        if (visitDepartmentProductId != null) {
+            visitPriceEstimateRepository.deleteByVisitDepartmentProductId(visitDepartmentProductId);
+        }
+    }
+
     /**
      * Fetch all pre-billing price estimates for a visit.
      */
@@ -268,7 +275,8 @@ public class VisitPriceEstimateService {
             ProductInsuranceCoverage coverage = lookupProductCoverage(
                 productId, providerId, productCoverages
             );
-            if (coverage == null || !coverage.isCovered() || coverage.isNotPaid()) continue;
+            if (coverage == null || !coverage.isCovered() || coverage.isNotPaid()
+                || (coverage.getCost() != null && coverage.getCost().compareTo(BigDecimal.ZERO) <= 0)) continue;
 
             // Resolve the patient share percentage
             ResolvedShare resolved = resolvePatientShare(
