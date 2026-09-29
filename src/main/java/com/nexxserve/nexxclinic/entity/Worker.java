@@ -65,14 +65,15 @@ public class Worker {
     @JoinColumn(name = "department_id")
     private Department department;
 
-        @ManyToMany(fetch = FetchType.EAGER)
-        @JoinTable(
-            name = "worker_departments",
-            joinColumns = @JoinColumn(name = "worker_id"),
-            inverseJoinColumns = @JoinColumn(name = "department_id")
-        )
-        @OrderBy("name ASC")
-        private Set<Department> departments = new LinkedHashSet<>();
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "worker_departments",
+        joinColumns = @JoinColumn(name = "worker_id"),
+        inverseJoinColumns = @JoinColumn(name = "department_id")
+    )
+    @OrderBy("name ASC")
+    @org.hibernate.annotations.BatchSize(size = 50)
+    private Set<Department> departments = new LinkedHashSet<>();
 
     @Column(length = 120)
     private String passwordHash;
@@ -97,10 +98,11 @@ public class Worker {
     @Column(nullable = false)
     private Integer maxActiveSessions;
 
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "worker_roles", joinColumns = @JoinColumn(name = "worker_id"))
     @Enumerated(EnumType.STRING)
     @Column(name = "role_name")
+    @org.hibernate.annotations.BatchSize(size = 50)
     private Set<RoleName> roles = new LinkedHashSet<>();
 
     @Column(nullable = false, updatable = false)

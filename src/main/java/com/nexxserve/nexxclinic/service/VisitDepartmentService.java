@@ -2030,9 +2030,23 @@ public class VisitDepartmentService {
         );
     }
 
-    private WorkerDto resolveAddedBy(VisitDepartment visitDepartment) {
+    public WorkerDto resolveAddedBy(VisitDepartment visitDepartment) {
+        return resolveAddedBy(visitDepartment, null);
+    }
+
+    /**
+     * @param preloaded workers already mapped for the current page; when it covers
+     *                 the target worker no lazy proxy is touched at all
+     */
+    public WorkerDto resolveAddedBy(
+            VisitDepartment visitDepartment,
+            PreloadedWorkers preloaded) {
         if (visitDepartment == null) {
             return null;
+        }
+        WorkerDto preloadedDto = preloaded == null ? null : preloaded.find(visitDepartment.getAddedBy());
+        if (preloadedDto != null) {
+            return preloadedDto;
         }
         try {
             if (org.hibernate.Hibernate.isInitialized(visitDepartment.getAddedBy()) && visitDepartment.getAddedBy() != null) {
@@ -2055,9 +2069,22 @@ public class VisitDepartmentService {
         return null;
     }
 
-    private WorkerDto resolveCompletedBy(VisitDepartment visitDepartment) {
+    public WorkerDto resolveCompletedBy(VisitDepartment visitDepartment) {
+        return resolveCompletedBy(visitDepartment, null);
+    }
+
+    /**
+     * @see #resolveAddedBy(VisitDepartment, PreloadedWorkers)
+     */
+    public WorkerDto resolveCompletedBy(
+            VisitDepartment visitDepartment,
+            PreloadedWorkers preloaded) {
         if (visitDepartment == null) {
             return null;
+        }
+        WorkerDto preloadedDto = preloaded == null ? null : preloaded.find(visitDepartment.getCompletedBy());
+        if (preloadedDto != null) {
+            return preloadedDto;
         }
         try {
             if (org.hibernate.Hibernate.isInitialized(visitDepartment.getCompletedBy()) && visitDepartment.getCompletedBy() != null) {
@@ -2080,11 +2107,36 @@ public class VisitDepartmentService {
         return null;
     }
 
-    private List<WorkerDto> resolveProcessors(VisitDepartment visitDepartment) {
+    public List<WorkerDto> resolveProcessors(VisitDepartment visitDepartment) {
+        return resolveProcessors(visitDepartment, null);
+    }
+
+    /**
+     * @see #resolveAddedBy(VisitDepartment, Map)
+     */
+    public List<WorkerDto> resolveProcessors(
+            VisitDepartment visitDepartment,
+            PreloadedWorkers preloaded) {
         if (visitDepartment == null) {
             return null;
         }
         try {
+            // A pre-loaded entry covers the department's processors without
+            // touching the lazy collection. An entry that maps to an empty list
+            // means "genuinely no processors" and must not fall through, or we
+            // would initialise the collection just to rediscover that.
+            if (preloaded != null) {
+                List<UUID> ids = preloaded.processorIdsByVisitDepartmentId().get(visitDepartment.getId());
+                if (ids != null) {
+                    if (ids.isEmpty()) {
+                        return null;
+                    }
+                    return ids.stream()
+                            .map(preloaded.workerDtos()::get)
+                            .filter(java.util.Objects::nonNull)
+                            .toList();
+                }
+            }
             if (org.hibernate.Hibernate.isInitialized(visitDepartment.getProcessors()) && visitDepartment.getProcessors() != null) {
                 return visitDepartment.getProcessors().isEmpty() ? null : visitDepartment.getProcessors().stream().map(workerMapper::toDto).toList();
             }
@@ -2105,7 +2157,32 @@ public class VisitDepartmentService {
         return null;
     }
 
-    private boolean canViewClinicalData(AuthenticatedUser authUser) {
+    /**
+     * Workers pre-loaded for one page of visit departments.
+     *
+     * <p>{@code processorIdsByVisitDepartmentId} preserves the per-department
+     * grouping (and the collection's iteration order) that a flat
+     * {@code Map<UUID, WorkerDto>} cannot express, so the processors collection
+     * never has to be initialised. A department that is <em>absent</em> from the
+     * map was not part of the batch; a department mapped to an <em>empty</em> list
+     * genuinely has no processors.
+     */
+    public record PreloadedWorkers(
+            Map<UUID, WorkerDto> workerDtos,
+            Map<UUID, List<UUID>> processorIdsByVisitDepartmentId) {
+
+        public static final PreloadedWorkers EMPTY =
+                new PreloadedWorkers(Map.of(), Map.of());
+
+        public WorkerDto find(Worker worker) {
+            if (worker == null || worker.getId() == null) {
+                return null;
+            }
+            return workerDtos.get(worker.getId());
+        }
+    }
+
+    public boolean canViewClinicalData(AuthenticatedUser authUser) {
         if (authUser == null) {
             return true;
         }
@@ -2193,6 +2270,223 @@ public class VisitDepartmentService {
     }
 
     /**
+     * Batch-load {@link DepartmentProfileDto} keyed by profile ID in just two
+     * queries, instead of the two-per-profile cost of
+     * {@link #departmentProfileToDto(DepartmentProfile)}.
+     *
+     * <p>{@link VisitService#visitsToDtos} maps {@code VisitDepartmentDto.profile}
+     * for every department on the page. Reading it through
+     * {@code departmentProfileToDto} initialised a lazy {@code DepartmentProfile}
+     * proxy and then issued a {@code findByProfileId} per department, even though
+     * the page loader had already fetched the same profiles and product links a
+     * few queries earlier.
+     *
+     * <p>Profile IDs are read off the proxies without forcing initialisation
+     * (Hibernate serves the identifier from the proxy's own state), so this
+     * method costs 2 queries no matter how many departments reference profiles.
+     *
+     * @return map of profile ID → fully-populated DepartmentProfileDto
+     */
+    public java.util.Map<UUID, DepartmentProfileDto> loadProfileDtosById(
+            java.util.Collection<UUID> profileIds) {
+        java.util.Set<UUID> ids = profileIds.stream()
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        if (ids.isEmpty()) {
+            return java.util.Map.of();
+        }
+
+        // 1 query: the profiles themselves
+        List<DepartmentProfile> profiles = departmentProfileRepository.findAllById(ids);
+
+        // 1 query: every product link for those profiles
+        java.util.Map<UUID, List<DepartmentProfileProduct>> productsByProfile =
+                departmentProfileProductRepository.findByProfileIdIn(ids).stream()
+                        .collect(java.util.stream.Collectors.groupingBy(
+                                link -> link.getProfile().getId()));
+
+        java.util.Map<UUID, DepartmentProfileDto> result = new java.util.HashMap<>(profiles.size());
+        for (DepartmentProfile profile : profiles) {
+            result.put(profile.getId(), new DepartmentProfileDto(
+                    profile.getId(),
+                    profile.getName(),
+                    profile.getEncounterType(),
+                    profile.isDefault(),
+                    productsByProfile.getOrDefault(profile.getId(), java.util.List.of()).stream()
+                            .map(link -> productMapper.toDto(link.getProduct()))
+                            .toList(),
+                    profile.getCreatedAt(),
+                    profile.getUpdatedAt()));
+        }
+        return result;
+    }
+
+    /**
+     * Resolve a visit department's profile from a pre-loaded map, falling back to
+     * the per-department query when the profile was not pre-loaded (e.g. a
+     * profile created between the two reads).
+     */
+    public DepartmentProfileDto resolveProfileDto(
+            DepartmentProfile profile,
+            java.util.Map<UUID, DepartmentProfileDto> preloadedProfileDtos) {
+        if (profile == null) {
+            return null;
+        }
+        if (preloadedProfileDtos != null && profile.getId() != null) {
+            DepartmentProfileDto preloaded = preloadedProfileDtos.get(profile.getId());
+            if (preloaded != null) {
+                return preloaded;
+            }
+        }
+        return departmentProfileToDto(profile);
+    }
+
+    /**
+     * Batch-load the worker DTOs referenced by a page of visit departments so
+     * {@link #resolveAddedBy}, {@link #resolveCompletedBy} and
+     * {@link #resolveProcessors} never touch a lazy proxy.
+     *
+     * <p>Each of those resolvers used to initialise up to three lazy references
+     * per department (addedBy, completedBy, the processors collection), and every
+     * initialised {@code Worker} then dragged its two EAGER collections
+     * ({@code roles}, {@code departments}). On a 20-visit page that was hundreds
+     * of queries for a handful of distinct workers.
+     *
+     * <p>Costs exactly 2 queries regardless of how many departments are passed:
+     * one for the processor IDs off the join table, one {@code findAllById} for
+     * the workers themselves.
+     *
+     * @param visitDepartments departments on the page
+     */
+    public PreloadedWorkers loadPreloadedWorkers(java.util.Collection<VisitDepartment> visitDepartments) {
+        return loadPreloadedWorkers(visitDepartments, List.of(), List.of(), List.of());
+    }
+
+    /**
+     * Batch-load the worker DTOs referenced by a page of visit departments so
+     * {@link #resolveAddedBy}, {@link #resolveCompletedBy},
+     * {@link #resolveProcessors} and {@link #visitDepartmentProductToDto} never
+     * touch a lazy proxy.
+     *
+     * <p>Each of those resolvers used to initialise up to three lazy references
+     * per department (addedBy, completedBy, the processors collection), and every
+     * initialised {@code Worker} then dragged its two EAGER collections
+     * ({@code roles}, {@code departments}). On a 20-visit page that was hundreds
+     * of queries for a handful of distinct workers.
+     *
+     * <p>Costs a fixed 2 queries regardless of page size: one for the processor
+     * IDs off the join table, one {@code findAllById} for the workers themselves.
+     *
+     * @param visitDepartments departments on the page
+     * @param products         department products on the page (4 worker refs each)
+     * @param preInstructions  pre-instructions on the page (3 worker refs each)
+     * @param extraWorkers     any other workers already loaded for the page
+     */
+    public PreloadedWorkers loadPreloadedWorkers(
+            java.util.Collection<VisitDepartment> visitDepartments,
+            java.util.Collection<VisitDepartmentProduct> products,
+            java.util.Collection<VisitPreInstruction> preInstructions,
+            java.util.Collection<Worker> extraWorkers) {
+        java.util.Set<UUID> vdIds = visitDepartments.stream()
+                .filter(java.util.Objects::nonNull)
+                .map(VisitDepartment::getId)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        if (vdIds.isEmpty() && products.isEmpty() && preInstructions.isEmpty() && extraWorkers.isEmpty()) {
+            return PreloadedWorkers.EMPTY;
+        }
+
+        // 1 query: processor IDs straight off the join table. The processors
+        // collection is a lazy collection, so reading it would initialise one
+        // query per department.
+        java.util.Map<UUID, List<UUID>> processorIdsByVdId = new java.util.HashMap<>();
+        for (VisitDepartment vd : visitDepartments) {
+            if (vd.getId() != null) {
+                // Seed every requested department with a mutable list, so a
+                // department with no processors maps to an empty list (not
+                // absent) and does not fall through to the lazy path.
+                processorIdsByVdId.putIfAbsent(vd.getId(), new java.util.ArrayList<>());
+            }
+        }
+        if (!vdIds.isEmpty()) {
+            for (Object[] row : visitDepartmentRepository
+                    .findProcessorPairsByVisitDepartmentIdIn(vdIds)) {
+                UUID vdId = (UUID) row[0];
+                UUID workerId = (UUID) row[1];
+                if (vdId != null && workerId != null) {
+                    processorIdsByVdId.computeIfAbsent(vdId, k -> new java.util.ArrayList<>()).add(workerId);
+                }
+            }
+        }
+
+        // Collect every worker ID without initialising any ManyToOne proxy —
+        // Hibernate serves getId() from the proxy's own state.
+        java.util.Set<UUID> workerIds = new java.util.LinkedHashSet<>();
+        for (VisitDepartment vd : visitDepartments) {
+            if (vd == null) {
+                continue;
+            }
+            if (vd.getAddedBy() != null && vd.getAddedBy().getId() != null) {
+                workerIds.add(vd.getAddedBy().getId());
+            }
+            if (vd.getCompletedBy() != null && vd.getCompletedBy().getId() != null) {
+                workerIds.add(vd.getCompletedBy().getId());
+            }
+        }
+        processorIdsByVdId.values().forEach(workerIds::addAll);
+        for (VisitDepartmentProduct p : products) {
+            if (p == null) {
+                continue;
+            }
+            addWorkerId(workerIds, p.getAddedBy());
+            addWorkerId(workerIds, p.getBilledBy());
+            addWorkerId(workerIds, p.getConfirmedBy());
+            addWorkerId(workerIds, p.getProcessor());
+        }
+        for (VisitPreInstruction pre : preInstructions) {
+            if (pre == null) {
+                continue;
+            }
+            addWorkerId(workerIds, pre.getAddedBy());
+            for (VisitPreInstructionProductRequest req : pre.getProducts()) {
+                if (req != null) {
+                    addWorkerId(workerIds, req.getRequestedBy());
+                    addWorkerId(workerIds, req.getProcessedBy());
+                }
+            }
+        }
+        for (Worker w : extraWorkers) {
+            addWorkerId(workerIds, w);
+        }
+
+        return new PreloadedWorkers(loadWorkerDtosById(workerIds), processorIdsByVdId);
+    }
+
+    private static void addWorkerId(java.util.Set<UUID> target, Worker worker) {
+        if (worker != null && worker.getId() != null) {
+            target.add(worker.getId());
+        }
+    }
+
+    /**
+     * Map a set of worker IDs to DTOs in a single {@code findAllById}, so the
+     * same worker referenced from many products/departments is mapped once.
+     */
+    public java.util.Map<UUID, WorkerDto> loadWorkerDtosById(java.util.Collection<UUID> workerIds) {
+        java.util.Set<UUID> ids = workerIds.stream()
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        if (ids.isEmpty()) {
+            return java.util.Map.of();
+        }
+        java.util.Map<UUID, WorkerDto> result = new java.util.HashMap<>();
+        for (Worker worker : workerRepository.findAllById(ids)) {
+            result.put(worker.getId(), workerMapper.toDto(worker));
+        }
+        return result;
+    }
+
+    /**
      * Map a Department entity to DepartmentDto, including profiles.
      * The simple {@code departmentMapper.toDto()} ignores profiles (MapStruct
      * {@code @Mapping(ignore=true)}), which causes a GraphQL
@@ -2254,7 +2548,7 @@ public class VisitDepartmentService {
         return children.stream().anyMatch(child -> resolveHasBillableProducts(child.getId()));
     }
 
-    private DepartmentProfileDto departmentProfileToDto(DepartmentProfile profile) {
+    public DepartmentProfileDto departmentProfileToDto(DepartmentProfile profile) {
         if (profile == null) {
             return null;
         }
@@ -2272,9 +2566,27 @@ public class VisitDepartmentService {
         );
     }
 
-    private VisitDepartmentProductDto visitDepartmentProductToDto(
+    /**
+     * @deprecated the {@code visitInsuranceProviderIds} argument was never read;
+     * use {@link #visitDepartmentProductToDto(VisitDepartmentProduct, PreloadedWorkers)}
+     */
+    @Deprecated
+    public VisitDepartmentProductDto visitDepartmentProductToDto(
             VisitDepartmentProduct item,
             Set<UUID> visitInsuranceProviderIds
+    ) {
+        return visitDepartmentProductToDto(item, PreloadedWorkers.EMPTY);
+    }
+
+    /**
+     * @param preloaded workers already mapped for the current page. A product row
+     *                 carries four worker references, so on a full page this mapper
+     *                 runs hundreds of times over a handful of distinct workers;
+     *                 without the map each call initialised a lazy proxy.
+     */
+    public VisitDepartmentProductDto visitDepartmentProductToDto(
+            VisitDepartmentProduct item,
+            PreloadedWorkers preloaded
     ) {
         return new VisitDepartmentProductDto(
                 item.getId(),
@@ -2282,17 +2594,36 @@ public class VisitDepartmentService {
                 item.getQuantity(),
                 item.getStatus(),
                 item.getSource(),
-                workerMapper.toDto(item.getAddedBy()),
-                workerMapper.toDto(item.getBilledBy()),
-                workerMapper.toDto(item.getConfirmedBy()),
+                workerDto(item.getAddedBy(), preloaded),
+                workerDto(item.getBilledBy(), preloaded),
+                workerDto(item.getConfirmedBy(), preloaded),
                 item.getBillingConfirmationStatus(),
-                workerMapper.toDto(item.getProcessor()),
+                workerDto(item.getProcessor(), preloaded),
                 item.getCreatedAt(),
                 item.getUpdatedAt()
         );
     }
 
-    private VisitDepartmentDiagnosisDto visitDepartmentDiagnosisToDto(VisitDepartmentDiagnosis item) {
+    /**
+     * Map a worker for a DTO slot: reuse the page's pre-mapped DTO when the
+     * worker was pre-loaded, otherwise fall back to the lazy proxy. Returns null
+     * for a null worker, matching the previous {@code workerMapper.toDto(null)}
+     * behaviour.
+     */
+    private WorkerDto workerDto(Worker worker, PreloadedWorkers preloaded) {
+        if (worker == null) {
+            return null;
+        }
+        if (preloaded != null) {
+            WorkerDto cached = preloaded.find(worker);
+            if (cached != null) {
+                return cached;
+            }
+        }
+        return workerMapper.toDto(worker);
+    }
+
+    public VisitDepartmentDiagnosisDto visitDepartmentDiagnosisToDto(VisitDepartmentDiagnosis item) {
         return new VisitDepartmentDiagnosisDto(
                 item.getId(),
                 item.getDiagnosisName(),
@@ -2301,7 +2632,7 @@ public class VisitDepartmentService {
         );
     }
 
-    private VisitDepartmentMedicationDto visitDepartmentMedicationToDto(VisitDepartmentMedication item) {
+    public VisitDepartmentMedicationDto visitDepartmentMedicationToDto(VisitDepartmentMedication item) {
         return new VisitDepartmentMedicationDto(
                 item.getId(),
                 item.getMedicationName(),
@@ -2310,7 +2641,17 @@ public class VisitDepartmentService {
         );
     }
 
-    private VisitPreInstructionDto visitPreInstructionToDto(VisitPreInstruction pre) {
+    public VisitPreInstructionDto visitPreInstructionToDto(VisitPreInstruction pre) {
+        return visitPreInstructionToDto(pre, null);
+    }
+
+    /**
+     * @param preloaded workers already mapped for the current page, see
+     *                 {@link #visitDepartmentProductToDto(VisitDepartmentProduct, PreloadedWorkers)}
+     */
+    public VisitPreInstructionDto visitPreInstructionToDto(
+            VisitPreInstruction pre,
+            PreloadedWorkers preloaded) {
         List<VisitPreInstructionMedicationRequestDto> medications = pre.getMedications().stream()
                 .map(m -> new VisitPreInstructionMedicationRequestDto(
                         m.getId(),
@@ -2329,9 +2670,9 @@ public class VisitDepartmentService {
                         item.getId(),
                         productMapper.toDto(item.getProduct()),
                         item.getQuantity(),
-                        workerMapper.toDto(item.getRequestedBy()),
+                        workerDto(item.getRequestedBy(), preloaded),
                         item.getStatus(),
-                        workerMapper.toDto(item.getProcessedBy()),
+                        workerDto(item.getProcessedBy(), preloaded),
                         item.getCreatedAt(),
                         item.getUpdatedAt()
                 )).toList();
@@ -2340,7 +2681,7 @@ public class VisitDepartmentService {
                 pre.getId(),
                 pre.getType(),
                 pre.getNote(),
-                workerMapper.toDto(pre.getAddedBy()),
+                workerDto(pre.getAddedBy(), preloaded),
                 pre.getCreatedAt(),
                 medications,
                 products

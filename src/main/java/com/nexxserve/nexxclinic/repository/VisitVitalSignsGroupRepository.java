@@ -7,4 +7,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface VisitVitalSignsGroupRepository extends JpaRepository<VisitVitalSignsGroup, UUID> {
     List<VisitVitalSignsGroup> findByVisitIdOrderByCreatedAtAsc(UUID visitId);
+    List<VisitVitalSignsGroup> findByVisitIdInOrderByCreatedAtAsc(java.util.Collection<UUID> visitIds);
 }

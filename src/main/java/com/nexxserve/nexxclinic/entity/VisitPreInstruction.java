@@ -46,9 +46,11 @@ public class VisitPreInstruction {
     private LocalDateTime createdAt;
 
     @OneToMany(mappedBy = "preInstruction", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @org.hibernate.annotations.BatchSize(size = 50)
     private List<VisitPreInstructionMedication> medications = new ArrayList<>();
 
     @OneToMany(mappedBy = "preInstruction", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @org.hibernate.annotations.BatchSize(size = 50)
     private List<VisitPreInstructionProductRequest> products = new ArrayList<>();
 
     @PrePersist

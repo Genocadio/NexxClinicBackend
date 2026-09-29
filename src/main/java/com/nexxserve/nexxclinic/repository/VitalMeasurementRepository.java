@@ -7,4 +7,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface VitalMeasurementRepository extends JpaRepository<VitalMeasurement, UUID> {
     List<VitalMeasurement> findByGroupIdOrderByCreatedAtAsc(UUID groupId);
+    List<VitalMeasurement> findByGroupIdInOrderByCreatedAtAsc(java.util.Collection<UUID> groupIds);
 }

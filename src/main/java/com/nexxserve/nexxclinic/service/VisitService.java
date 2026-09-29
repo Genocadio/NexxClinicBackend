@@ -27,6 +27,13 @@ import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
 import com.nexxserve.nexxclinic.model.VisitStatus;
+import com.nexxserve.nexxclinic.entity.Department;
+import com.nexxserve.nexxclinic.entity.VisitDepartmentDiagnosis;
+import com.nexxserve.nexxclinic.entity.VisitDepartmentMedication;
+import com.nexxserve.nexxclinic.entity.VisitPreInstruction;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentDiagnosisRepository;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentMedicationRepository;
+import com.nexxserve.nexxclinic.repository.VisitPreInstructionRepository;
 import com.nexxserve.nexxclinic.repository.DepartmentRepository;
 import com.nexxserve.nexxclinic.repository.PatientInsuranceRepository;
 import com.nexxserve.nexxclinic.repository.PatientRepository;
@@ -69,6 +76,9 @@ public class VisitService {
     private final VisitInsuranceRepository visitInsuranceRepository;
     private final VisitDepartmentRepository visitDepartmentRepository;
     private final VisitDepartmentProductRepository visitDepartmentProductRepository;
+    private final VisitDepartmentDiagnosisRepository visitDepartmentDiagnosisRepository;
+    private final VisitDepartmentMedicationRepository visitDepartmentMedicationRepository;
+    private final VisitPreInstructionRepository visitPreInstructionRepository;
     private final VisitBillingRepository visitBillingRepository;
     private final VisitDepartmentNoteRepository visitDepartmentNoteRepository;
     private final VisitVitalSignsGroupRepository visitVitalSignsGroupRepository;
@@ -99,6 +109,9 @@ public class VisitService {
             VisitInsuranceRepository visitInsuranceRepository,
             VisitDepartmentRepository visitDepartmentRepository,
             VisitDepartmentProductRepository visitDepartmentProductRepository,
+            VisitDepartmentDiagnosisRepository visitDepartmentDiagnosisRepository,
+            VisitDepartmentMedicationRepository visitDepartmentMedicationRepository,
+            VisitPreInstructionRepository visitPreInstructionRepository,
             VisitBillingRepository visitBillingRepository,
             VisitDepartmentNoteRepository visitDepartmentNoteRepository,
             VisitVitalSignsGroupRepository visitVitalSignsGroupRepository,
@@ -126,6 +139,9 @@ public class VisitService {
         this.visitInsuranceRepository = visitInsuranceRepository;
         this.visitDepartmentRepository = visitDepartmentRepository;
         this.visitDepartmentProductRepository = visitDepartmentProductRepository;
+        this.visitDepartmentDiagnosisRepository = visitDepartmentDiagnosisRepository;
+        this.visitDepartmentMedicationRepository = visitDepartmentMedicationRepository;
+        this.visitPreInstructionRepository = visitPreInstructionRepository;
         this.visitBillingRepository = visitBillingRepository;
         this.visitDepartmentNoteRepository = visitDepartmentNoteRepository;
         this.visitVitalSignsGroupRepository = visitVitalSignsGroupRepository;
@@ -552,7 +568,7 @@ public class VisitService {
         }
 
         Page<Visit> visitPage = visitRepository.findAll(spec, pageable);
-        List<VisitDto> visits = visitPage.getContent().stream().map(visit -> visitToDto(visit, Set.of(), authUser)).toList();
+        List<VisitDto> visits = visitsToDtos(visitPage.getContent(), Set.of(), authUser);
 
         return ApiResponse.success("Visits fetched.", visits, new PaginationDto(visitPage.getTotalElements(), visitPage.getSize(), visitPage.getNumber(), visitPage.getTotalPages()));
     }
@@ -637,9 +653,7 @@ public class VisitService {
         }
 
         Page<Visit> visitPage = visitRepository.findAll(spec, pageable);
-        List<VisitDto> visits = visitPage.getContent().stream()
-                .map(visit -> visitToDto(visit, departmentIds, authUser))
-                .toList();
+        List<VisitDto> visits = visitsToDtos(visitPage.getContent(), departmentIds, authUser);
 
         return ApiResponse.success("Patient history fetched.", visits, new PaginationDto(visitPage.getTotalElements(), visitPage.getSize(), visitPage.getNumber(), visitPage.getTotalPages()));
     }
@@ -1453,69 +1467,446 @@ public class VisitService {
     }
 
     public VisitDto visitToDto(Visit visit, Set<UUID> departmentIds, AuthenticatedUser authUser) {
-        if (visit != null && visit.getId() != null && billingProductService != null) {
+        if (visit == null) {
+            return null;
+        }
+        if (visit.getId() != null && billingProductService != null) {
             billingProductService.syncBilledProductsToVisitDepartments(visit.getId());
         }
+        List<VisitDto> list = visitsToDtos(List.of(visit), departmentIds, authUser);
+        return list.isEmpty() ? null : list.get(0);
+    }
 
-        Set<UUID> visitInsuranceProviderIds = resolveVisitInsuranceProviderIds(visit.getId());
-        List<PatientInsuranceDto> linkedInsurances = visitInsuranceRepository.findByVisitId(visit.getId())
-                .stream()
-                .map(link -> patientInsuranceMapper.toDto(link.getPatientInsurance()))
-                .toList();
+    public List<VisitDto> visitsToDtos(List<Visit> visits, AuthenticatedUser authUser) {
+        return visitsToDtos(visits, Set.of(), authUser);
+    }
 
-        List<VisitDepartment> resolvedVds = resolveVisitDepartmentsForResponse(visit.getId(), departmentIds);
-        java.util.Map<UUID, com.nexxserve.nexxclinic.dto.out.DepartmentDto> preloadedDeptDtos =
-                visitDepartmentService.loadDepartmentDtosWithProfiles(
-                        resolvedVds.stream().map(VisitDepartment::getDepartment).toList());
-
-        List<VisitDepartmentDto> departments = resolvedVds
-                .stream()
-                .map(vd -> visitDepartmentService.visitDepartmentToDto(vd, visitInsuranceProviderIds, new java.util.LinkedHashSet<>(), authUser, preloadedDeptDtos))
-                .toList();
-
-        List<VisitVitalSignsGroupDto> vitalSigns = visitVitalSignsGroupRepository.findByVisitIdOrderByCreatedAtAsc(visit.getId())
-                .stream()
-                .map(this::visitVitalSignsGroupToDto)
-                .toList();
-
-        // Compute quickBillEligible: ≤1 linked insurance AND 0 unread notes
-        // AND ≤1 unbilled department (so quick-bill is only for simple visits)
-        boolean hasOneOrFewerInsurances = linkedInsurances.size() <= 1;
-        boolean noUnreadNotes = true;
-        if (authUser != null && authUser.userId() != null) {
-            long unreadNotes = visitDepartmentNoteRepository.countUnreadNotesForVisit(visit.getId(), authUser.userId());
-            noUnreadNotes = unreadNotes == 0;
+    public List<VisitDto> visitsToDtos(List<Visit> visits, Set<UUID> departmentFilterIds, AuthenticatedUser authUser) {
+        if (visits == null || visits.isEmpty()) {
+            return List.of();
         }
-        // Count departments that still have unbilled products
-        List<VisitDepartment> visitDepartments = visitDepartmentRepository.findByVisitId(visit.getId());
-        long unbilledDeptCount = 0;
-        for (VisitDepartment dept : visitDepartments) {
-            List<VisitDepartmentProduct> products = visitDepartmentProductRepository.findByVisitDepartmentId(dept.getId());
-            boolean hasUnbilled = products.stream().anyMatch(p ->
-                    p.getStatus() == VisitProductStatus.PENDING
-                    || p.getStatus() == VisitProductStatus.UNPAID
-                    || p.getStatus() == VisitProductStatus.CORRECTION_PENDING
+
+        List<UUID> visitIds = visits.stream().map(Visit::getId).filter(Objects::nonNull).toList();
+        if (visitIds.isEmpty()) {
+            return List.of();
+        }
+
+        Set<UUID> patientIds = visits.stream()
+                .map(v -> v.getPatient() != null ? v.getPatient().getId() : null)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        // Visit.patient is a lazy @ManyToOne. PatientInsurance's @EntityGraph only
+        // covers patients that actually have an insurance row, so a patient with
+        // no insurance stayed an uninitialised proxy and patientMapper.toDto()
+        // initialised it one at a time — one query per distinct patient on the
+        // page. Resolve them in one shot instead.
+        Map<UUID, Patient> patientsById = patientIds.isEmpty()
+                ? Map.of()
+                : patientRepository.findAllById(patientIds).stream()
+                        .filter(p -> p.getId() != null)
+                        .collect(Collectors.toMap(Patient::getId, p -> p, (a, b) -> a));
+
+        Map<UUID, List<PatientInsurance>> patientInsurancesByPatientId = patientIds.isEmpty()
+                ? Map.of()
+                : patientInsuranceRepository.findByPatientIdIn(patientIds).stream()
+                        .filter(pi -> pi.getPatient() != null && pi.getPatient().getId() != null)
+                        .collect(Collectors.groupingBy(pi -> pi.getPatient().getId()));
+
+        List<VisitInsurance> allVisitInsurances = visitInsuranceRepository.findByVisitIdIn(visitIds);
+        Map<UUID, List<VisitInsurance>> visitInsurancesByVisitId = allVisitInsurances.stream()
+                .filter(vi -> vi.getVisit() != null && vi.getVisit().getId() != null)
+                .collect(Collectors.groupingBy(vi -> vi.getVisit().getId()));
+
+        Map<UUID, Set<UUID>> visitInsuranceProviderIdsByVisitId = allVisitInsurances.stream()
+                .filter(vi -> vi.getVisit() != null && vi.getVisit().getId() != null
+                        && vi.getPatientInsurance() != null
+                        && vi.getPatientInsurance().getInsuranceProvider() != null
+                        && vi.getPatientInsurance().getInsuranceProvider().getId() != null)
+                .collect(Collectors.groupingBy(
+                        vi -> vi.getVisit().getId(),
+                        Collectors.mapping(vi -> vi.getPatientInsurance().getInsuranceProvider().getId(), Collectors.toSet())
+                ));
+
+        List<VisitDepartment> allVisitDepartments = visitDepartmentRepository.findByVisitIdIn(visitIds);
+        Map<UUID, List<VisitDepartment>> allVdsByVisitId = allVisitDepartments.stream()
+                .filter(vd -> vd.getVisit() != null && vd.getVisit().getId() != null)
+                .collect(Collectors.groupingBy(vd -> vd.getVisit().getId()));
+
+        Map<UUID, List<VisitDepartment>> topLevelVdsByVisitId = allVisitDepartments.stream()
+                .filter(vd -> vd.getVisit() != null && vd.getVisit().getId() != null && vd.getParentVisitDepartment() == null)
+                .collect(Collectors.groupingBy(vd -> vd.getVisit().getId()));
+
+        Map<UUID, List<VisitDepartment>> childVdsByParentId = allVisitDepartments.stream()
+                .filter(vd -> vd.getParentVisitDepartment() != null && vd.getParentVisitDepartment().getId() != null)
+                .collect(Collectors.groupingBy(vd -> vd.getParentVisitDepartment().getId()));
+
+        Set<UUID> allVdIds = allVisitDepartments.stream().map(VisitDepartment::getId).filter(Objects::nonNull).collect(Collectors.toSet());
+
+        List<Department> departmentsToLoad = allVisitDepartments.stream()
+                .map(VisitDepartment::getDepartment)
+                .filter(Objects::nonNull)
+                .toList();
+        Map<UUID, DepartmentDto> preloadedDeptDtos = visitDepartmentService.loadDepartmentDtosWithProfiles(departmentsToLoad);
+
+        // The applied-profile DTOs, keyed by profile ID. Previously each
+        // department re-fetched its own profile + product links via
+        // departmentProfileToDto, which is 2 queries per department.
+        Map<UUID, DepartmentProfileDto> preloadedProfileDtos = visitDepartmentService.loadProfileDtosById(
+                allVisitDepartments.stream()
+                        .map(VisitDepartment::getProfile)
+                        .filter(Objects::nonNull)
+                        .map(p -> p.getId())
+                        .filter(Objects::nonNull)
+                        .toList());
+
+        Map<UUID, List<VisitDepartmentProduct>> productsByVdId = allVdIds.isEmpty()
+                ? Map.of()
+                : visitDepartmentProductRepository.findByVisitDepartmentIdIn(allVdIds).stream()
+                        .filter(p -> p.getVisitDepartment() != null && p.getVisitDepartment().getId() != null)
+                        .collect(Collectors.groupingBy(p -> p.getVisitDepartment().getId()));
+
+        boolean canViewClinical = visitDepartmentService.canViewClinicalData(authUser);
+
+        Map<UUID, List<VisitDepartmentDiagnosis>> diagnosesByVdId = (canViewClinical && !allVdIds.isEmpty())
+                ? visitDepartmentDiagnosisRepository.findByVisitDepartmentIdIn(allVdIds).stream()
+                        .filter(d -> d.getVisitDepartment() != null && d.getVisitDepartment().getId() != null)
+                        .collect(Collectors.groupingBy(d -> d.getVisitDepartment().getId()))
+                : Map.of();
+
+        Map<UUID, List<VisitDepartmentMedication>> medicationsByVdId = (canViewClinical && !allVdIds.isEmpty())
+                ? visitDepartmentMedicationRepository.findByVisitDepartmentIdIn(allVdIds).stream()
+                        .filter(m -> m.getVisitDepartment() != null && m.getVisitDepartment().getId() != null)
+                        .collect(Collectors.groupingBy(m -> m.getVisitDepartment().getId()))
+                : Map.of();
+
+        List<VisitPreInstruction> allPreInstructions = (canViewClinical && !allVdIds.isEmpty())
+                ? visitPreInstructionRepository.findByVisitDepartmentIdInOrderByCreatedAtAsc(allVdIds)
+                : List.of();
+        Map<UUID, List<VisitPreInstruction>> preInstructionsByVdId = allPreInstructions.stream()
+                .filter(pi -> pi.getVisitDepartment() != null && pi.getVisitDepartment().getId() != null)
+                .collect(Collectors.groupingBy(pi -> pi.getVisitDepartment().getId()));
+
+        Map<UUID, Long> totalNotesByVdId = allVdIds.isEmpty()
+                ? Map.of()
+                : visitDepartmentNoteRepository.countTotalNotesForDepartments(allVdIds).stream()
+                        .collect(Collectors.toMap(r -> (UUID) r[0], r -> ((Number) r[1]).longValue(), (a, b) -> a));
+
+        Map<UUID, Long> newNotesByVdId = (authUser != null && authUser.userId() != null && !allVdIds.isEmpty())
+                ? visitDepartmentNoteRepository.countNewNotesForDepartments(allVdIds, authUser.userId()).stream()
+                        .collect(Collectors.toMap(r -> (UUID) r[0], r -> ((Number) r[1]).longValue(), (a, b) -> a))
+                : Map.of();
+
+        Map<UUID, Long> unreadNotesByVisitId = (authUser != null && authUser.userId() != null && !visitIds.isEmpty())
+                ? visitDepartmentNoteRepository.countUnreadNotesForVisits(visitIds, authUser.userId()).stream()
+                        .collect(Collectors.toMap(r -> (UUID) r[0], r -> ((Number) r[1]).longValue(), (a, b) -> a))
+                : Map.of();
+
+        Set<UUID> answerIds = allVisitDepartments.stream()
+                .map(VisitDepartment::getAnswerId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<UUID, ConsultationAnswer> answersById = answerIds.isEmpty()
+                ? Map.of()
+                : consultationAnswerRepository.findAllById(answerIds).stream()
+                        .collect(Collectors.toMap(ConsultationAnswer::getId, a -> a, (a, b) -> a));
+
+        List<VisitVitalSignsGroup> allVitalGroups = visitVitalSignsGroupRepository.findByVisitIdInOrderByCreatedAtAsc(visitIds);
+        Set<UUID> allGroupIds = allVitalGroups.stream().map(VisitVitalSignsGroup::getId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<UUID, List<VitalMeasurement>> measurementsByGroupId = allGroupIds.isEmpty()
+                ? Map.of()
+                : vitalMeasurementRepository.findByGroupIdInOrderByCreatedAtAsc(allGroupIds).stream()
+                        .filter(m -> m.getGroup() != null && m.getGroup().getId() != null)
+                        .collect(Collectors.groupingBy(m -> m.getGroup().getId()));
+
+        // Every worker referenced anywhere on this page (department addedBy /
+        // completedBy / processors, product operator refs, pre-instruction refs,
+        // vital-sign author) in one findAllById. Without this each reference
+        // initialised its own lazy proxy, and every initialised Worker dragged
+        // its roles and departments collections with it.
+        VisitDepartmentService.PreloadedWorkers preloadedWorkers = visitDepartmentService.loadPreloadedWorkers(
+                allVisitDepartments,
+                productsByVdId.values().stream().flatMap(List::stream).toList(),
+                allPreInstructions,
+                allVitalGroups.stream().map(VisitVitalSignsGroup::getAddedBy).filter(Objects::nonNull).toList());
+
+        Map<UUID, List<VisitVitalSignsGroupDto>> vitalSignsByVisitId = new HashMap<>();
+        for (VisitVitalSignsGroup group : allVitalGroups) {
+            if (group.getVisit() == null || group.getVisit().getId() == null) continue;
+            List<VitalMeasurementDto> measurementDtos = measurementsByGroupId.getOrDefault(group.getId(), List.of())
+                    .stream()
+                    .map(this::vitalMeasurementToDto)
+                    .toList();
+            VisitVitalSignsGroupDto groupDto = new VisitVitalSignsGroupDto(
+                    group.getId(),
+                    group.getCreatedAt(),
+                    resolveWorkerDto(group.getAddedBy(), preloadedWorkers),
+                    measurementDtos
             );
-            if (hasUnbilled) unbilledDeptCount++;
+            vitalSignsByVisitId.computeIfAbsent(group.getVisit().getId(), k -> new ArrayList<>()).add(groupDto);
         }
-        boolean hasOneOrFewerUnbilledDepts = unbilledDeptCount <= 1;
-        boolean quickBillEligible = hasOneOrFewerInsurances && noUnreadNotes && hasOneOrFewerUnbilledDepts
-                && visit.getStatus() != VisitStatus.COMPLETED
-                && visit.getStatus() != VisitStatus.CANCELLED;
 
-        return new VisitDto(
-                visit.getId(),
-                patientMapper.toDto(visit.getPatient(), patientInsuranceRepository.findByPatientId(visit.getPatient().getId())),
-                visit.getStatus(),
-                visit.getVisitDate(),
-                linkedInsurances,
-                departments,
-                vitalSigns,
-                visit.getEstimatedTotal(),
-                visit.getEstimatedInsurancePay(),
-                visit.getEstimatedPatientPay(),
-                quickBillEligible
+        List<VisitDto> result = new ArrayList<>(visits.size());
+        for (Visit visit : visits) {
+            UUID visitId = visit.getId();
+            Set<UUID> providerIds = visitInsuranceProviderIdsByVisitId.getOrDefault(visitId, Set.of());
+
+            List<PatientInsuranceDto> linkedInsurances = visitInsurancesByVisitId.getOrDefault(visitId, List.of())
+                    .stream()
+                    .map(link -> patientInsuranceMapper.toDto(link.getPatientInsurance()))
+                    .toList();
+
+            List<VisitDepartment> targetVds;
+            if (departmentFilterIds != null && !departmentFilterIds.isEmpty()) {
+                targetVds = allVdsByVisitId.getOrDefault(visitId, List.of()).stream()
+                        .filter(vd -> vd.getDepartment() != null && departmentFilterIds.contains(vd.getDepartment().getId()))
+                        .toList();
+            } else {
+                targetVds = topLevelVdsByVisitId.getOrDefault(visitId, List.of());
+            }
+
+            List<VisitDepartmentDto> departments = targetVds.stream()
+                    .map(vd -> mapPreloadedVisitDepartmentDto(
+                            vd,
+                            providerIds,
+                            new LinkedHashSet<>(),
+                            authUser,
+                            preloadedDeptDtos,
+                            preloadedProfileDtos,
+                            preloadedWorkers,
+                            childVdsByParentId,
+                            productsByVdId,
+                            diagnosesByVdId,
+                            medicationsByVdId,
+                            preInstructionsByVdId,
+                            totalNotesByVdId,
+                            newNotesByVdId,
+                            answersById,
+                            canViewClinical
+                    ))
+                    .toList();
+
+            List<VisitVitalSignsGroupDto> vitalSigns = vitalSignsByVisitId.getOrDefault(visitId, List.of());
+
+            // Compute quickBillEligible: <= 1 linked insurance AND 0 unread notes
+            // AND <= 1 unbilled department (so quick-bill is only for simple visits)
+            boolean hasOneOrFewerInsurances = linkedInsurances.size() <= 1;
+            long unreadNotes = unreadNotesByVisitId.getOrDefault(visitId, 0L);
+            boolean noUnreadNotes = (unreadNotes == 0);
+
+            long unbilledDeptCount = 0;
+            List<VisitDepartment> visitDepartments = allVdsByVisitId.getOrDefault(visitId, List.of());
+            for (VisitDepartment dept : visitDepartments) {
+                List<VisitDepartmentProduct> products = productsByVdId.getOrDefault(dept.getId(), List.of());
+                boolean hasUnbilled = products.stream().anyMatch(p ->
+                        p.getStatus() == VisitProductStatus.PENDING
+                        || p.getStatus() == VisitProductStatus.UNPAID
+                        || p.getStatus() == VisitProductStatus.CORRECTION_PENDING
+                );
+                if (hasUnbilled) unbilledDeptCount++;
+            }
+            boolean hasOneOrFewerUnbilledDepts = unbilledDeptCount <= 1;
+            boolean quickBillEligible = hasOneOrFewerInsurances && noUnreadNotes && hasOneOrFewerUnbilledDepts
+                    && visit.getStatus() != VisitStatus.COMPLETED
+                    && visit.getStatus() != VisitStatus.CANCELLED;
+
+            // Read the initialised Patient out of the preloaded map rather than
+            // off the entity: visit.getPatient() is still an uninitialised proxy,
+            // and re-pointing the association via setPatient() would mark every
+            // managed Visit dirty and fire an UPDATE per row on flush.
+            Patient patient = visit.getPatient() == null || visit.getPatient().getId() == null
+                    ? visit.getPatient()
+                    : patientsById.getOrDefault(visit.getPatient().getId(), visit.getPatient());
+
+            List<PatientInsurance> patientInsurances = patient != null && patient.getId() != null
+                    ? patientInsurancesByPatientId.getOrDefault(patient.getId(), List.of())
+                    : List.of();
+
+            result.add(new VisitDto(
+                    visit.getId(),
+                    patientMapper.toDto(patient, patientInsurances),
+                    visit.getStatus(),
+                    visit.getVisitDate(),
+                    linkedInsurances,
+                    departments,
+                    vitalSigns,
+                    visit.getEstimatedTotal(),
+                    visit.getEstimatedInsurancePay(),
+                    visit.getEstimatedPatientPay(),
+                    quickBillEligible
+            ));
+        }
+
+        return result;
+    }
+
+    private VisitDepartmentDto mapPreloadedVisitDepartmentDto(
+            VisitDepartment visitDepartment,
+            Set<UUID> visitInsuranceProviderIds,
+            Set<UUID> visitedDepartmentIds,
+            AuthenticatedUser authUser,
+            Map<UUID, DepartmentDto> preloadedDeptDtos,
+            Map<UUID, DepartmentProfileDto> preloadedProfileDtos,
+            VisitDepartmentService.PreloadedWorkers preloadedWorkers,
+            Map<UUID, List<VisitDepartment>> childVdsByParentId,
+            Map<UUID, List<VisitDepartmentProduct>> productsByVdId,
+            Map<UUID, List<VisitDepartmentDiagnosis>> diagnosesByVdId,
+            Map<UUID, List<VisitDepartmentMedication>> medicationsByVdId,
+            Map<UUID, List<VisitPreInstruction>> preInstructionsByVdId,
+            Map<UUID, Long> totalNotesByVdId,
+            Map<UUID, Long> newNotesByVdId,
+            Map<UUID, ConsultationAnswer> answersById,
+            boolean canViewClinical
+    ) {
+        if (visitDepartment == null) {
+            return null;
+        }
+
+        DepartmentDto departmentDto = visitDepartment.getDepartment() != null
+                ? preloadedDeptDtos.get(visitDepartment.getDepartment().getId())
+                : null;
+
+        if (visitedDepartmentIds.contains(visitDepartment.getId())) {
+            return new VisitDepartmentDto(
+                    visitDepartment.getId(),
+                    departmentDto,
+                    visitDepartment.getStatus(),
+                    visitDepartment.getEncounterType(),
+                    visitDepartmentService.resolveProfileDto(visitDepartment.getProfile(), preloadedProfileDtos),
+                    visitDepartment.getStartedAt(),
+                    visitDepartment.getCompletedAt(),
+                    visitDepartmentService.resolveAddedBy(visitDepartment, preloadedWorkers),
+                    visitDepartmentService.resolveCompletedBy(visitDepartment, preloadedWorkers),
+                    visitDepartmentService.resolveProcessors(visitDepartment, preloadedWorkers),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    new VisitDepartmentNotesSummaryDto(
+                            totalNotesByVdId.getOrDefault(visitDepartment.getId(), 0L).intValue(),
+                            newNotesByVdId.getOrDefault(visitDepartment.getId(), 0L).intValue()
+                    ),
+                    visitDepartment.getAnswerId(),
+                    false,
+                    false,
+                    visitDepartment.getCreatedAt(),
+                    visitDepartment.getUpdatedAt()
+            );
+        }
+
+        visitedDepartmentIds.add(visitDepartment.getId());
+
+        List<WorkerDto> processors = visitDepartmentService.resolveProcessors(visitDepartment, preloadedWorkers);
+        WorkerDto addedBy = visitDepartmentService.resolveAddedBy(visitDepartment, preloadedWorkers);
+        WorkerDto completedBy = visitDepartmentService.resolveCompletedBy(visitDepartment, preloadedWorkers);
+
+        List<VisitDepartmentProductDto> products = productsByVdId.getOrDefault(visitDepartment.getId(), List.of())
+                .stream()
+                .map(item -> visitDepartmentService.visitDepartmentProductToDto(item, preloadedWorkers))
+                .toList();
+
+        List<VisitDepartmentDiagnosisDto> diagnostics = canViewClinical
+                ? diagnosesByVdId.getOrDefault(visitDepartment.getId(), List.of()).stream().map(visitDepartmentService::visitDepartmentDiagnosisToDto).toList()
+                : List.of();
+
+        List<VisitDepartmentMedicationDto> medications = canViewClinical
+                ? medicationsByVdId.getOrDefault(visitDepartment.getId(), List.of()).stream().map(visitDepartmentService::visitDepartmentMedicationToDto).toList()
+                : List.of();
+
+        List<VisitPreInstructionDto> preInstructions = canViewClinical
+                ? preInstructionsByVdId.getOrDefault(visitDepartment.getId(), List.of()).stream().map(pi -> visitDepartmentService.visitPreInstructionToDto(pi, preloadedWorkers)).toList()
+                : List.of();
+
+        UUID answerId = canViewClinical ? visitDepartment.getAnswerId() : null;
+
+        List<VisitDepartment> children = childVdsByParentId.getOrDefault(visitDepartment.getId(), List.of());
+        List<VisitDepartmentDto> childVisitDepartments = children.stream()
+                .map(child -> mapPreloadedVisitDepartmentDto(
+                        child,
+                        visitInsuranceProviderIds,
+                        new LinkedHashSet<>(visitedDepartmentIds),
+                        authUser,
+                        preloadedDeptDtos,
+                        preloadedProfileDtos,
+                        preloadedWorkers,
+                        childVdsByParentId,
+                        productsByVdId,
+                        diagnosesByVdId,
+                        medicationsByVdId,
+                        preInstructionsByVdId,
+                        totalNotesByVdId,
+                        newNotesByVdId,
+                        answersById,
+                        canViewClinical
+                ))
+                .toList();
+
+        ConsultationAnswer ans = visitDepartment.getAnswerId() != null ? answersById.get(visitDepartment.getAnswerId()) : null;
+        boolean hasFinalized = ans != null && (ans.getStatus() == AnswerStatus.FINAL || ans.getStatus() == AnswerStatus.SUBMITTED);
+
+        boolean directBillable = productsByVdId.getOrDefault(visitDepartment.getId(), List.of()).stream()
+                .filter(p -> !p.isDeleted())
+                .anyMatch(p ->
+                        p.getStatus() == VisitProductStatus.PENDING
+                        || p.getStatus() == VisitProductStatus.UNPAID
+                        || p.getStatus() == VisitProductStatus.CORRECTION_PENDING
+                );
+        boolean childBillable = children.stream().anyMatch(child ->
+                productsByVdId.getOrDefault(child.getId(), List.of()).stream()
+                        .filter(p -> !p.isDeleted())
+                        .anyMatch(p ->
+                                p.getStatus() == VisitProductStatus.PENDING
+                                || p.getStatus() == VisitProductStatus.UNPAID
+                                || p.getStatus() == VisitProductStatus.CORRECTION_PENDING
+                        )
         );
+        boolean hasBillable = directBillable || childBillable;
+
+        return new VisitDepartmentDto(
+                visitDepartment.getId(),
+                departmentDto,
+                visitDepartment.getStatus(),
+                visitDepartment.getEncounterType(),
+                visitDepartmentService.resolveProfileDto(visitDepartment.getProfile(), preloadedProfileDtos),
+                visitDepartment.getStartedAt(),
+                visitDepartment.getCompletedAt(),
+                addedBy,
+                completedBy,
+                processors,
+                products,
+                diagnostics,
+                medications,
+                preInstructions,
+                childVisitDepartments,
+                new VisitDepartmentNotesSummaryDto(
+                        totalNotesByVdId.getOrDefault(visitDepartment.getId(), 0L).intValue(),
+                        newNotesByVdId.getOrDefault(visitDepartment.getId(), 0L).intValue()
+                ),
+                answerId,
+                hasFinalized,
+                hasBillable,
+                visitDepartment.getCreatedAt(),
+                visitDepartment.getUpdatedAt()
+        );
+    }
+
+    /**
+     * Reuse a page-level pre-mapped worker DTO when available, so the many
+     * worker references across a page of visits are mapped once each instead of
+     * once per reference.
+     */
+    private WorkerDto resolveWorkerDto(Worker worker, VisitDepartmentService.PreloadedWorkers preloaded) {
+        if (worker == null) {
+            return null;
+        }
+        if (preloaded != null) {
+            WorkerDto cached = preloaded.find(worker);
+            if (cached != null) {
+                return cached;
+            }
+        }
+        return workerMapper.toDto(worker);
     }
 
     private VisitVitalSignsGroupDto visitVitalSignsGroupToDto(VisitVitalSignsGroup group) {
@@ -1635,14 +2026,8 @@ public class VisitService {
         }
         Map<UUID, Visit> byId = new HashMap<>();
         visitRepository.findAllById(ids).forEach(v -> byId.put(v.getId(), v));
-        List<VisitDto> ordered = new ArrayList<>();
-        for (UUID id : ids) {
-            Visit visit = byId.get(id);
-            if (visit != null) {
-                ordered.add(visitToDto(visit, Set.of(), authUser));
-            }
-        }
-        return ordered;
+        List<Visit> orderedVisits = ids.stream().map(byId::get).filter(Objects::nonNull).toList();
+        return visitsToDtos(orderedVisits, Set.of(), authUser);
     }
 
     private int normalizePage(Integer page) {

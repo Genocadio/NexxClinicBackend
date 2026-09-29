@@ -37,6 +37,7 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Facade over Meilisearch for the {@code products}, {@code patients} and
@@ -501,7 +502,14 @@ public class MeilisearchIndexService {
      * Rebuilds the given index (or all three when {@code uid} is null) from the
      * database. Used by the admin reindex mutation and on startup when an index
      * is empty.
+     *
+     * <p>Must stay {@code @Transactional}: the document builders read lazy
+     * collections ({@code Worker.roles} / {@code Worker.departments}, visit
+     * departments, patient insurances) on detached entities. Without a session
+     * the {@code catch} below would swallow a {@code LazyInitializationException}
+     * and silently leave the index half-built.
      */
+    @Transactional(readOnly = true)
     public void reindex(String uid) {
         if (!isEnabled()) {
             return;

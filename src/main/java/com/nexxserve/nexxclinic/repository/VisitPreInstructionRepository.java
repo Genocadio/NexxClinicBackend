@@ -8,4 +8,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface VisitPreInstructionRepository extends JpaRepository<VisitPreInstruction, UUID> {
     List<VisitPreInstruction> findByVisitIdOrderByCreatedAtAsc(UUID visitId);
     List<VisitPreInstruction> findByVisitDepartmentIdOrderByCreatedAtAsc(UUID visitDepartmentId);
+    List<VisitPreInstruction> findByVisitDepartmentIdInOrderByCreatedAtAsc(java.util.Collection<UUID> visitDepartmentIds);
 }

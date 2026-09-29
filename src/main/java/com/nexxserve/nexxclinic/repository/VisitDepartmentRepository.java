@@ -16,9 +16,29 @@ public interface VisitDepartmentRepository extends JpaRepository<VisitDepartment
 
     List<VisitDepartment> findByVisitId(UUID visitId);
 
+    List<VisitDepartment> findByVisitIdIn(Collection<UUID> visitIds);
+
     List<VisitDepartment> findByVisitIdAndParentVisitDepartmentIsNull(UUID visitId);
 
     List<VisitDepartment> findByParentVisitDepartmentId(UUID parentVisitDepartmentId);
+
+    List<VisitDepartment> findByParentVisitDepartmentIdIn(Collection<UUID> parentVisitDepartmentIds);
+
+    /**
+     * Resolve the processor worker IDs for many visit departments in one query,
+     * straight off the {@code visit_department_processors} join table.
+     *
+     * <p>Reading {@code VisitDepartment.getProcessors()} instead would initialise a
+     * lazy collection per department; this keeps the visit-read path at a fixed
+     * query count regardless of how many departments a page contains.
+     *
+     * @return rows of {@code [visitDepartmentId, processorWorkerId]}, in the
+     *         join table's natural order
+     */
+    @Query("SELECT vd.id, p.id FROM VisitDepartment vd JOIN vd.processors p "
+            + "WHERE vd.id IN :visitDepartmentIds")
+    List<Object[]> findProcessorPairsByVisitDepartmentIdIn(
+            @Param("visitDepartmentIds") Collection<UUID> visitDepartmentIds);
 
     List<VisitDepartment> findByDepartmentIdIn(Collection<UUID> departmentIds);
 

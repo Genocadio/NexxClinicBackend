@@ -9,4 +9,5 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface VisitDepartmentMedicationRepository extends JpaRepository<VisitDepartmentMedication, UUID> {
     List<VisitDepartmentMedication> findByVisitDepartmentId(UUID visitDepartmentId);
+    List<VisitDepartmentMedication> findByVisitDepartmentIdIn(java.util.Collection<UUID> visitDepartmentIds);
 }

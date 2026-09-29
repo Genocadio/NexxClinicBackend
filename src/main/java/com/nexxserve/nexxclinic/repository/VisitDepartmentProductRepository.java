@@ -13,6 +13,9 @@ public interface VisitDepartmentProductRepository extends JpaRepository<VisitDep
     @Query("SELECT v FROM VisitDepartmentProduct v WHERE v.visitDepartment.id = :visitDepartmentId AND v.deleted = false")
     List<VisitDepartmentProduct> findByVisitDepartmentId(@Param("visitDepartmentId") UUID visitDepartmentId);
 
+    @Query("SELECT v FROM VisitDepartmentProduct v WHERE v.visitDepartment.id IN :visitDepartmentIds AND v.deleted = false")
+    List<VisitDepartmentProduct> findByVisitDepartmentIdIn(@Param("visitDepartmentIds") java.util.Collection<UUID> visitDepartmentIds);
+
     @Query("SELECT v FROM VisitDepartmentProduct v WHERE v.visitDepartment.id = :visitDepartmentId AND v.product.id = :productId AND v.deleted = false")
     Optional<VisitDepartmentProduct> findByVisitDepartmentIdAndProductId(@Param("visitDepartmentId") UUID visitDepartmentId, @Param("productId") UUID productId);
 

@@ -9,6 +9,8 @@ public interface VisitInsuranceRepository extends JpaRepository<VisitInsurance, 
 
     List<VisitInsurance> findByVisitId(UUID visitId);
 
+    List<VisitInsurance> findByVisitIdIn(java.util.Collection<UUID> visitIds);
+
     void deleteByVisitId(UUID visitId);
 
     boolean existsByVisitIdAndPatientInsuranceId(UUID visitId, UUID patientInsuranceId);

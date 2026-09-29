@@ -53,4 +53,43 @@ public interface VisitDepartmentNoteRepository extends JpaRepository<VisitDepart
             @Param("visitId") UUID visitId,
             @Param("viewerId") UUID viewerId
     );
+
+    @Query("""
+            SELECT n.visitDepartment.visit.id, COUNT(n) FROM VisitDepartmentNote n
+            WHERE n.visitDepartment.visit.id IN :visitIds
+            AND (n.createdBy IS NULL OR n.createdBy.id <> :viewerId)
+            AND NOT EXISTS (
+                SELECT v FROM VisitDepartmentNoteViewer v
+                WHERE v.note = n AND v.viewer.id = :viewerId
+            )
+            GROUP BY n.visitDepartment.visit.id
+            """)
+    List<Object[]> countUnreadNotesForVisits(
+            @Param("visitIds") java.util.Collection<UUID> visitIds,
+            @Param("viewerId") UUID viewerId
+    );
+
+    @Query("""
+            SELECT n.visitDepartment.id, COUNT(n) FROM VisitDepartmentNote n
+            WHERE n.visitDepartment.id IN :visitDepartmentIds
+            GROUP BY n.visitDepartment.id
+            """)
+    List<Object[]> countTotalNotesForDepartments(
+            @Param("visitDepartmentIds") java.util.Collection<UUID> visitDepartmentIds
+    );
+
+    @Query("""
+            SELECT n.visitDepartment.id, COUNT(n) FROM VisitDepartmentNote n
+            WHERE n.visitDepartment.id IN :visitDepartmentIds
+            AND (n.createdBy IS NULL OR n.createdBy.id <> :viewerId)
+            AND NOT EXISTS (
+                SELECT v FROM VisitDepartmentNoteViewer v
+                WHERE v.note = n AND v.viewer.id = :viewerId
+            )
+            GROUP BY n.visitDepartment.id
+            """)
+    List<Object[]> countNewNotesForDepartments(
+            @Param("visitDepartmentIds") java.util.Collection<UUID> visitDepartmentIds,
+            @Param("viewerId") UUID viewerId
+    );
 }
