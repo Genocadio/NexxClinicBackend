@@ -44,8 +44,7 @@ public class Product {
     @Column(nullable = false, length = 64)
     private ProductUnit unit;
 
-    @Lob
-    @Column(nullable = false)
+    @Column(columnDefinition = "TEXT", nullable = false)
     private String metadata;
 
     @Column(precision = 19, scale = 2)
