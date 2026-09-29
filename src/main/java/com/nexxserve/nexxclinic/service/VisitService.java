@@ -461,6 +461,15 @@ public class VisitService {
             }
         } else if (activeOnly) {
             spec = spec.and((root, queryDef, builder) -> root.get("status").in(VisitStatus.CREATED, VisitStatus.IN_PROGRESS));
+        } else if (statusFilter != null) {
+            // When querying a specific status (e.g. COMPLETED), allow full historical pagination
+            // unless recentDays is explicitly provided.
+            if (input != null && input.recentDays() != null && input.recentDays() > 0) {
+                LocalDateTime cutoff = LocalDateTime.now().minusDays(input.recentDays()).toLocalDate().atStartOfDay();
+                spec = spec.and((root, queryDef, builder) -> builder.greaterThanOrEqualTo(root.get("visitDate"), cutoff));
+            }
+        } else if (input != null && input.recentDays() != null && input.recentDays() == 0) {
+            // Explicit recentDays == 0 means "all historical visits, no date cutoff"
         } else {
             // Default rolling operational window:
             // 1. All open / in-progress visits regardless of date.
