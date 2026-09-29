@@ -21,7 +21,7 @@ public class BillEditingMutationController {
         this.billEditingService = billEditingService;
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.FINANCE})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.MANAGER})
     @MutationMapping
     public ApiResponse startBillEditing(
             @Argument("visitDepartmentId") UUID visitDepartmentId,
@@ -30,7 +30,7 @@ public class BillEditingMutationController {
         return billEditingService.startBillEditing(visitDepartmentId, authUser);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.FINANCE})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.MANAGER})
     @MutationMapping
     public ApiResponse completeBillEditing(
             @Argument("visitDepartmentId") UUID visitDepartmentId,
@@ -39,7 +39,7 @@ public class BillEditingMutationController {
         return billEditingService.completeBillEditing(visitDepartmentId, authUser);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.FINANCE})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.MANAGER})
     @MutationMapping
     public ApiResponse cancelBillEditing(
             @Argument("visitDepartmentId") UUID visitDepartmentId,
@@ -48,4 +48,5 @@ public class BillEditingMutationController {
     ) {
         return billEditingService.cancelBillEditing(visitDepartmentId, addedProductIds, authUser);
     }
+
 }

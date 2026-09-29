@@ -949,6 +949,13 @@ type PaginatedVisitResponse implements ApiResponse {
   pagination: PaginationInfo
 }
 
+type UserReportsResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: JSON
+  pagination: PaginationInfo
+}
+
 type ConditionalRendering {
   dependsOn: String!
   condition: ConditionalCondition!
@@ -1844,6 +1851,7 @@ type Query {
   roles: RoleListResponse!
   role(id: ID, name: String): RoleResponse!
   permissions: PermissionListResponse!
+  getUserReports(fromDate: String, toDate: String, period: String, workerId: ID): UserReportsResponse!
 }
 
 type Mutation {

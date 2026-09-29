@@ -91,6 +91,10 @@ public class BillEditingService {
             return ApiResponse.error("Authentication is required.");
         }
 
+        if (!isManagerOrAdmin(authUser, actor)) {
+            return ApiResponse.error("Only administrators and managers can enable billing edit mode.");
+        }
+
         VisitDepartment dept = visitDepartmentRepository.findByIdForUpdate(visitDepartmentId)
             .orElse(null);
         if (dept == null) {
@@ -167,6 +171,10 @@ public class BillEditingService {
             return ApiResponse.error("Authentication is required.");
         }
 
+        if (!isManagerOrAdmin(authUser, actor)) {
+            return ApiResponse.error("Only administrators and managers can complete billing edit mode.");
+        }
+
         VisitDepartment dept = visitDepartmentRepository.findByIdForUpdate(visitDepartmentId)
             .orElse(null);
         if (dept == null) {
@@ -212,6 +220,11 @@ public class BillEditingService {
         if (actor == null) {
             return ApiResponse.error("Authentication is required.");
         }
+
+        if (!isManagerOrAdmin(authUser, actor)) {
+            return ApiResponse.error("Only administrators and managers can cancel billing edit mode.");
+        }
+
 
         VisitDepartment dept = visitDepartmentRepository.findByIdForUpdate(visitDepartmentId)
             .orElse(null);
@@ -355,4 +368,21 @@ public class BillEditingService {
         }
         return workerRepository.findById(authUser.userId()).orElse(null);
     }
+
+    private boolean isManagerOrAdmin(AuthenticatedUser authUser, Worker actor) {
+        if (authUser != null && authUser.roles() != null) {
+            if (authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.ADMIN)
+                    || authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.MANAGER)
+                    || authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.CLINIC_ADMIN)) {
+                return true;
+            }
+        }
+        if (actor != null && actor.getRoles() != null) {
+            return actor.getRoles().contains(com.nexxserve.nexxclinic.model.RoleName.ADMIN)
+                    || actor.getRoles().contains(com.nexxserve.nexxclinic.model.RoleName.MANAGER)
+                    || actor.getRoles().contains(com.nexxserve.nexxclinic.model.RoleName.CLINIC_ADMIN);
+        }
+        return false;
+    }
 }
+
