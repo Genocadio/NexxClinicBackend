@@ -118,6 +118,7 @@ public class ProductService {
         product.setPrivateRhicPrice(input.privateRhicPrice());
         product.setClinicPrice(input.clinicPrice());
         product.setNotPaid(input.notPaid() != null && input.notPaid());
+        product.setQuantifiable(input.quantifiable() == null || input.quantifiable());
 
         Product saved = productRepository.save(product);
 
@@ -208,6 +209,10 @@ public class ProductService {
 
         if (input.notPaid() != null) {
             product.setNotPaid(input.notPaid());
+        }
+
+        if (input.quantifiable() != null) {
+            product.setQuantifiable(input.quantifiable());
         }
 
         Product saved = productRepository.save(product);
@@ -373,6 +378,7 @@ public class ProductService {
                 product.getPrivateRhicPrice(),
                 product.getClinicPrice(),
                 product.isNotPaid(),
+                product.isQuantifiable(),
                 coverages,
                 product.getCreatedAt(),
                 product.getUpdatedAt()

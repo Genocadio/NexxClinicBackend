@@ -44,6 +44,8 @@ public record CreateProductInput(
 
         Boolean notPaid,
 
+        Boolean quantifiable,
+
         List<@Valid CreateProductInsuranceCoverageInput> insuranceCoverages
 ) {
 }

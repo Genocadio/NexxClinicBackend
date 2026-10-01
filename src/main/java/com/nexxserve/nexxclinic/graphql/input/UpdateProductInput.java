@@ -35,6 +35,8 @@ public record UpdateProductInput(
 
         Boolean notPaid,
 
+        Boolean quantifiable,
+
         List<@Valid UpdateProductInsuranceCoverageInput> insuranceCoverages
 ) {
 }

@@ -59,6 +59,9 @@ public class Product {
     @Column(nullable = false)
     private boolean notPaid;
 
+    @Column(nullable = false)
+    private boolean quantifiable = true;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -179,6 +182,14 @@ public class Product {
 
     public void setNotPaid(boolean notPaid) {
         this.notPaid = notPaid;
+    }
+
+    public boolean isQuantifiable() {
+        return quantifiable;
+    }
+
+    public void setQuantifiable(boolean quantifiable) {
+        this.quantifiable = quantifiable;
     }
 
     public LocalDateTime getCreatedAt() {

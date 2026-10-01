@@ -512,6 +512,7 @@ type Product {
   privateRhicPrice: Float
   clinicPrice: Float
   notPaid: Boolean!
+  quantifiable: Boolean!
   insuranceCoverages: [ProductInsuranceCoverage!]
   createdAt: String!
   updatedAt: String!
@@ -1350,6 +1351,7 @@ input CreateProductInput {
   privateRhicPrice: Float
   clinicPrice: Float
   notPaid: Boolean
+  quantifiable: Boolean
   insuranceCoverages: [CreateProductInsuranceCoverageInput!]
 }
 
@@ -1364,6 +1366,7 @@ input UpdateProductInput {
   privateRhicPrice: Float
   clinicPrice: Float
   notPaid: Boolean
+  quantifiable: Boolean
   insuranceCoverages: [UpdateProductInsuranceCoverageInput!]
 }
 

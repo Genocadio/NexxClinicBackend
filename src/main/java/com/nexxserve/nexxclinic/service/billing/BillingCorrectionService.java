@@ -208,7 +208,10 @@ public class BillingCorrectionService {
                         return ApiResponse.error("quantity must be greater than 0.");
                     }
                     if (upd.quantity() != null) {
-                        vdp.setQuantity(toQuantity(upd.quantity()));
+                        BigDecimal qty = (vdp.getProduct() != null && !vdp.getProduct().isQuantifiable())
+                            ? BigDecimal.ONE
+                            : toQuantity(upd.quantity());
+                        vdp.setQuantity(qty);
                     }
                     // On correction, mark as CORRECTION_PENDING (was BILLED/EXEMPTED/
                     // PATIENT_SHARE_EXEMPTED) so billing can re-evaluate. Transient:
@@ -253,7 +256,8 @@ public class BillingCorrectionService {
                     if (existing != null) {
                         // Un-delete + update: this product was billed in a previous
                         // version, so mark it CORRECTION_PENDING.
-                        existing.setQuantity(toQuantity(add.quantity()));
+                        BigDecimal qty = product.isQuantifiable() ? toQuantity(add.quantity()) : BigDecimal.ONE;
+                        existing.setQuantity(qty);
                         existing.setStatus(VisitProductStatus.CORRECTION_PENDING);
                         existing.setBilledBy(null);
                         existing.setDeleted(false);
@@ -272,7 +276,8 @@ public class BillingCorrectionService {
                     VisitDepartmentProduct vdp = new VisitDepartmentProduct();
                     vdp.setVisitDepartment(vd);
                     vdp.setProduct(product);
-                    vdp.setQuantity(toQuantity(add.quantity()));
+                    BigDecimal qty = product.isQuantifiable() ? toQuantity(add.quantity()) : BigDecimal.ONE;
+                    vdp.setQuantity(qty);
                     vdp.setAddedBy(actingUser);
                     vdp.setSource(com.nexxserve.nexxclinic.model.VisitDepartmentProductSource.USER);
                     // Freshly added in billing -> PENDING and PENDING_OPERATOR_CONFIRMATION

@@ -688,10 +688,13 @@ public class VisitDepartmentService {
                 continue;
             }
 
+            Product product = productOptional.get();
             VisitDepartmentProduct item = new VisitDepartmentProduct();
             item.setVisitDepartment(savedChild);
-            item.setProduct(productOptional.get());
-            item.setQuantity(normalizeQuantity(BigDecimal.valueOf(productInput.quantity())));
+            item.setProduct(product);
+            item.setQuantity(product.isQuantifiable()
+                    ? normalizeQuantity(BigDecimal.valueOf(productInput.quantity()))
+                    : BigDecimal.ONE);
             item.setStatus(VisitProductStatus.PENDING);
 
             ApiResponse processorError = assignVisitDepartmentProductProcessor(savedChild, item, actingUser, input.processorId());
@@ -1166,14 +1169,17 @@ public class VisitDepartmentService {
             .findFirst()
             .orElse(null);
 
+        Product product = productOptional.get();
         if (item == null) {
             item = new VisitDepartmentProduct();
             item.setVisitDepartment(visitDepartment);
-            item.setProduct(productOptional.get());
+            item.setProduct(product);
         }
 
         item.setDeleted(false);
-        item.setQuantity(normalizeQuantity(input.quantity()));
+        item.setQuantity(product.isQuantifiable()
+                ? normalizeQuantity(input.quantity())
+                : BigDecimal.ONE);
         item.setStatus(requestedStatus);
 
         Worker actingUser = resolveWorker(authUser);
@@ -1277,6 +1283,9 @@ public class VisitDepartmentService {
         }
 
         VisitDepartmentProduct item = itemOptional.get();
+        if (item.getProduct() != null && !item.getProduct().isQuantifiable()) {
+            return ApiResponse.error("Quantity cannot be modified for non-quantifiable products.");
+        }
         Visit visit = item.getVisitDepartment().getVisit();
         VisitDepartmentStatus deptStatus = item.getVisitDepartment().getStatus();
         boolean isDeptEditing = deptStatus == VisitDepartmentStatus.DEPARTMENT_EDITING;
