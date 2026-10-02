@@ -1053,13 +1053,13 @@ public class WorkerService {
         data.put("username", worker.getUsername());
         data.put("accountStatus", worker.getAccountStatus());
         data.put("active", worker.isActive());
-        data.put("roles", worker.getRoles());
+        data.put("roles", worker.getRoles() == null ? List.of() : new ArrayList<>(worker.getRoles()));
         data.put("autoReset", worker.isAutoReset());
         data.put("resetPeriodDays", worker.getResetPeriodDays());
         data.put("lastPasswordChange", worker.getLastPasswordChange());
         data.put("nextResetDate", worker.getNextResetDate());
         data.put("mustChangeOnNextLogin", worker.isMustChangeOnNextLogin());
-        data.put("departments", worker.getDepartments().stream().map(this::departmentToMap).toList());
+        data.put("departments", worker.getDepartments() == null ? List.of() : worker.getDepartments().stream().map(this::departmentToMap).toList());
         data.put("department", departmentToMap(worker.getDepartment()));
         data.put("maxActiveSessions", sessionTokenService.resolveEffectiveMaxSessions(worker));
         data.put("activeSessions", sessionTokenService.countActiveRefreshSessionsForUser(worker.getId()));
@@ -1179,7 +1179,7 @@ public class WorkerService {
         data.put("refreshToken", bundle.refreshToken());
         data.put("user", workerToMap(worker));
         data.put("userId", worker.getId());
-        data.put("roles", worker.getRoles());
+        data.put("roles", worker.getRoles() == null ? List.of() : new ArrayList<>(worker.getRoles()));
         data.put("mustChangeOnNextLogin", worker.isMustChangeOnNextLogin());
         data.put("maxActiveSessions", sessionTokenService.resolveEffectiveMaxSessions(worker));
         data.put("activeSessions", sessionTokenService.countActiveRefreshSessionsForUser(worker.getId()));

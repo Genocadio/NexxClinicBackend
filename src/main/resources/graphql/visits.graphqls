@@ -35,6 +35,11 @@ input AddVisitVitalSignsInput {
   vitalSigns: [AddVisitVitalSignItemInput!]!
 }
 
+input UpdateVisitVitalSignsInput {
+  groupId: String!
+  vitalSigns: [AddVisitVitalSignItemInput!]!
+}
+
 input AddVisitPreInstructionMedicationInput {
   medName: String!
   dosage: String
@@ -82,6 +87,11 @@ extend type Mutation {
   Each vital sign item must include measurementName, value, and unit.
   """
   addVisitVitalSigns(input: AddVisitVitalSignsInput!): VisitResponse!
+
+  """
+  Update vital sign measurements for an existing vital signs group within 10 minutes of creation.
+  """
+  updateVisitVitalSigns(input: UpdateVisitVitalSignsInput!): VisitResponse!
 
   """
   Add pre-instructions to a visit. Items can be of type `NOTE` or `MEDICATION`.

@@ -12,6 +12,7 @@ import com.nexxserve.nexxclinic.entity.VitalMeasurement;
 import com.nexxserve.nexxclinic.entity.Worker;
 import com.nexxserve.nexxclinic.graphql.input.AddVisitVitalSignItemInput;
 import com.nexxserve.nexxclinic.graphql.input.AddVisitVitalSignsInput;
+import com.nexxserve.nexxclinic.graphql.input.UpdateVisitVitalSignsInput;
 import com.nexxserve.nexxclinic.graphql.input.ChangeVisitDateInput;
 import com.nexxserve.nexxclinic.graphql.input.ConsultationAnswersInput;
 import com.nexxserve.nexxclinic.graphql.input.CreateVisitDepartmentInput;
@@ -1276,6 +1277,65 @@ public class VisitService {
 
         vitalMeasurementRepository.saveAll(measurements);
         return ApiResponse.success("Vital signs added to visit.", visitToDto(visit));
+    }
+
+    @Transactional
+    public ApiResponse<VisitDto> updateVisitVitalSigns(UpdateVisitVitalSignsInput input, AuthenticatedUser authUser) {
+        if (input == null || input.groupId() == null || input.vitalSigns() == null || input.vitalSigns().isEmpty()) {
+            return ApiResponse.error("groupId and vitalSigns are required.");
+        }
+
+        Optional<VisitVitalSignsGroup> groupOptional = visitVitalSignsGroupRepository.findById(input.groupId());
+        if (groupOptional.isEmpty()) {
+            return ApiResponse.error("Vital signs group not found.");
+        }
+
+        VisitVitalSignsGroup group = groupOptional.get();
+        Visit visit = group.getVisit();
+        if (visit == null) {
+            return ApiResponse.error("Associated visit not found.");
+        }
+
+        if (visit.getStatus() == VisitStatus.COMPLETED) {
+            return ApiResponse.error("Cannot edit vital signs for a completed visit.");
+        }
+        if (visit.getStatus() == VisitStatus.CANCELLED) {
+            return ApiResponse.error("Cannot edit vital signs for a cancelled visit.");
+        }
+
+        boolean alreadyBilled = !visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visit.getId()).isEmpty();
+        if (alreadyBilled) {
+            return ApiResponse.error("Cannot edit vital signs for a visit that has already been billed.");
+        }
+
+        if (group.getCreatedAt() != null && group.getCreatedAt().isBefore(java.time.LocalDateTime.now().minusMinutes(10))) {
+            return ApiResponse.error("Vital signs can only be edited within 10 minutes of creation.");
+        }
+
+        vitalMeasurementRepository.deleteByGroupId(group.getId());
+
+        List<VitalMeasurement> measurements = new ArrayList<>();
+        for (AddVisitVitalSignItemInput vitalSignInput : input.vitalSigns()) {
+            if (vitalSignInput == null
+                    || vitalSignInput.measurementName() == null
+                    || vitalSignInput.measurementName().isBlank()
+                    || vitalSignInput.value() == null
+                    || vitalSignInput.value().isBlank()
+                    || vitalSignInput.unit() == null
+                    || vitalSignInput.unit().isBlank()) {
+                return ApiResponse.error("measurementName, value and unit are required for each vital sign.");
+            }
+
+            VitalMeasurement item = new VitalMeasurement();
+            item.setGroup(group);
+            item.setMeasurementName(vitalSignInput.measurementName().trim());
+            item.setValue(vitalSignInput.value().trim());
+            item.setUnit(vitalSignInput.unit().trim());
+            measurements.add(item);
+        }
+
+        vitalMeasurementRepository.saveAll(measurements);
+        return ApiResponse.success("Vital signs updated successfully.", visitToDto(visit));
     }
 
     // ─────────────────────────────────────────────────────────────

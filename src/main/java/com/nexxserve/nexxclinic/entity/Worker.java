@@ -98,7 +98,7 @@ public class Worker {
     @Column(nullable = false)
     private Integer maxActiveSessions;
 
-    @ElementCollection(fetch = FetchType.LAZY)
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "worker_roles", joinColumns = @JoinColumn(name = "worker_id"))
     @Enumerated(EnumType.STRING)
     @Column(name = "role_name")

@@ -11,6 +11,7 @@ import com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentProductQuanti
 import com.nexxserve.nexxclinic.graphql.input.AddDiagnosisInput;
 import com.nexxserve.nexxclinic.graphql.input.AddMedicationInput;
 import com.nexxserve.nexxclinic.graphql.input.AddVisitVitalSignsInput;
+import com.nexxserve.nexxclinic.graphql.input.UpdateVisitVitalSignsInput;
 import com.nexxserve.nexxclinic.graphql.input.AddVisitPreInstructionsInput;
 import com.nexxserve.nexxclinic.graphql.input.AddVisitDepartmentNoteInput;
 import com.nexxserve.nexxclinic.graphql.input.AddChildVisitDepartmentInput;
@@ -331,6 +332,15 @@ public class VisitMutationController {
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         return visitService.addVisitVitalSigns(input, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
+    public ApiResponse updateVisitVitalSigns(
+            @Argument @Valid UpdateVisitVitalSignsInput input,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitService.updateVisitVitalSigns(input, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
