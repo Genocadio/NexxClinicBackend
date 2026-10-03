@@ -60,7 +60,8 @@ public class ClinicProfileService {
         }
 
         ClinicProfile profile = resolveClinicProfile();
-        boolean isNewProfile = isProfileIncomplete(profile);
+        boolean isMetadataOnlyUpdate = input.metadata() != null && input.name() == null && input.tinNumber() == null && input.contacts() == null;
+        boolean isNewProfile = !isMetadataOnlyUpdate && isProfileIncomplete(profile);
 
         if (input.name() != null) profile.setName(blankToNull(input.name()));
         if (input.username() != null) profile.setUsername(blankToNull(input.username()));

@@ -139,16 +139,20 @@ public class ReportsService {
             workerRoleNames = authUser.roles().stream().map(Enum::name).collect(Collectors.toSet());
         }
 
-        boolean hasReception = isAdminOrManager || workerRoleNames.contains("RECEPTION");
-        boolean hasClinician = isAdminOrManager || workerRoleNames.contains("CLINICIAN");
-        boolean hasNurse = isAdminOrManager || workerRoleNames.contains("NURSE");
-        boolean hasFinance = isAdminOrManager || workerRoleNames.contains("FINANCE");
+        boolean hasReception = workerRoleNames.contains("RECEPTION");
+        boolean hasClinician = workerRoleNames.contains("CLINICIAN");
+        boolean hasNurse = workerRoleNames.contains("NURSE");
+        boolean hasFinance = workerRoleNames.contains("FINANCE");
 
         List<String> allowedTabs = new ArrayList<>();
         if (hasClinician) allowedTabs.add("clinician");
         if (hasFinance) allowedTabs.add("finance");
         if (hasNurse) allowedTabs.add("nurse");
         if (hasReception) allowedTabs.add("reception");
+
+        if (allowedTabs.isEmpty()) {
+            return ApiResponse.error("You do not have permission to view reports.");
+        }
 
         LocalDateTime startDateTime = startDate.atStartOfDay();
         LocalDateTime endDateTime = endDate.atTime(LocalTime.MAX);
@@ -473,7 +477,7 @@ public class ReportsService {
                 for (VisitVitalSignsGroupDto vs : visit.vitalSigns()) {
                     String vsTime = vs.createdAt() != null ? vs.createdAt().toString() : visitDate;
                     boolean isAddedByWorker = vs.addedBy() != null && isUserMatch(vs.addedBy().id(), workerId);
-                    if ((isAddedByWorker || isAdminOrManager) && isWithinDateRange(vsTime, fromDate, toDate)) {
+                    if (isAddedByWorker && isWithinDateRange(vsTime, fromDate, toDate)) {
                         vitalsRecordedCount++;
                         patientTouchedByWorker = true;
                         bumpActivityTimeline(timelineMap, vsTime, "nurse", isDailyView);
@@ -510,7 +514,7 @@ public class ReportsService {
                     boolean isTriage = deptName.toLowerCase().contains("triage");
 
                     boolean isDeptAddedByWorker = dept.addedBy() != null && isUserMatch(dept.addedBy().id(), workerId);
-                    if ((isDeptAddedByWorker || isAdminOrManager) && isWithinDateRange(deptTime, fromDate, toDate)) {
+                    if (isDeptAddedByWorker && isWithinDateRange(deptTime, fromDate, toDate)) {
                         departmentsDispatchedCount++;
                         patientTouchedByWorker = true;
                         if (!patientId.isEmpty()) receptionPatientsSet.add(patientId);
@@ -565,7 +569,7 @@ public class ReportsService {
                         }
                     }
 
-                    if ((isClinicianOnDept || isAdminOrManager) && isDeptInPeriod) {
+                    if (isClinicianOnDept && isDeptInPeriod) {
                         consultationsCount++;
                         patientTouchedByWorker = true;
                         if (!patientId.isEmpty()) clinicianPatientsSet.add(patientId);
@@ -781,7 +785,7 @@ public class ReportsService {
                     }
 
                     // Triage encounter for nurses
-                    if (isTriage && (isClinicianOnDept || isDeptAddedByWorker || isAdminOrManager) && isWithinDateRange(deptTime, fromDate, toDate)) {
+                    if (isTriage && (isClinicianOnDept || isDeptAddedByWorker) && isWithinDateRange(deptTime, fromDate, toDate)) {
                         triageEncountersCount++;
                         Map<String, Object> tAct = new HashMap<>();
                         tAct.put("id", "triage-" + dept.id());
@@ -810,11 +814,10 @@ public class ReportsService {
                                     ? toDouble(prodBillingItem.get("unitPriceSnapshot"))
                                     : (prod.product() != null && prod.product().clinicPrice() != null ? prod.product().clinicPrice().doubleValue() : 0);
                             double lineTotal = qty * unitPrice;
-                            boolean isBilledByWorker = (prod.billedBy() != null && isUserMatch(prod.billedBy().id(), workerId)) || isAdminOrManager;
+                            boolean isBilledByWorker = prod.billedBy() != null && isUserMatch(prod.billedBy().id(), workerId);
                             boolean isClinicianApproved = (prod.addedBy() != null && isUserMatch(prod.addedBy().id(), workerId)) ||
                                     (prod.processor() != null && isUserMatch(prod.processor().id(), workerId)) ||
-                                    (isClinicianOnDept && dept.completedBy() != null && isUserMatch(dept.completedBy().id(), workerId)) ||
-                                    isAdminOrManager;
+                                    (isClinicianOnDept && dept.completedBy() != null && isUserMatch(dept.completedBy().id(), workerId));
 
                             if (isClinicianApproved && isWithinDateRange(prodTime, fromDate, toDate)) {
                                 patientTouchedByWorker = true;
@@ -962,7 +965,7 @@ public class ReportsService {
                         String bTime = deptTime;
                         boolean isBilledInPeriod = isWithinDateRange(bTime, fromDate, toDate);
 
-                        if ((hasWorkerBilledOnDept || isAdminOrManager) && isBilledInPeriod) {
+                        if (hasWorkerBilledOnDept && isBilledInPeriod) {
                             if (dept.id() != null) billedDepartmentsSet.add(dept.id().toString());
 
                             Object paymentsObj = deptBilling.get("payments");

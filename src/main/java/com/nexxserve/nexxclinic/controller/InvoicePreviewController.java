@@ -27,7 +27,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.annotation.Profile;
+import com.nexxserve.nexxclinic.repository.ClinicProfileRepository;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -37,24 +37,26 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Dev-only endpoint that generates sample invoice PDFs for visual layout
- * verification across all paper sizes.
+ * Endpoint that generates sample invoice PDFs for visual layout
+ * verification across all paper sizes in Admin Settings.
  *
  * <p>Endpoints:
  * <ul>
  *   <li>{@code GET /api/invoices/preview/{size}} — single paper size (letter, a4p, a4l, pos)</li>
  *   <li>{@code GET /api/invoices/preview/all} — all 4 sizes bundled in a ZIP</li>
  * </ul>
- *
- * <p><b>NOT for production</b> — the mock data is hardcoded and the endpoints
- * require no authentication.</p>
  */
 @RestController
 @RequestMapping("/api/invoices/preview")
-@Profile("default")
 public class InvoicePreviewController {
 
     private static final Logger log = LoggerFactory.getLogger(InvoicePreviewController.class);
+
+    private final ClinicProfileRepository clinicProfileRepository;
+
+    public InvoicePreviewController(ClinicProfileRepository clinicProfileRepository) {
+        this.clinicProfileRepository = clinicProfileRepository;
+    }
 
     // ─── Single paper-size preview ────────────────────────────────────────────
 
@@ -62,7 +64,8 @@ public class InvoicePreviewController {
     public ResponseEntity<byte[]> previewSingle(@PathVariable String size) {
         PaperSize ps = PaperSize.from(size);
         try {
-            byte[] pdf = generatePreviewPdf(ps);
+            ClinicProfile clinic = clinicProfileRepository.findFirstByOrderByCreatedAtAsc().orElse(null);
+            byte[] pdf = generatePreviewPdf(ps, clinic);
             return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                     "inline; filename=\"invoice-preview-" + ps.key() + ".pdf\"")
@@ -82,13 +85,14 @@ public class InvoicePreviewController {
     @GetMapping("/all")
     public ResponseEntity<byte[]> previewAll() {
         try {
+            ClinicProfile clinic = clinicProfileRepository.findFirstByOrderByCreatedAtAsc().orElse(null);
             Path zipFile = Files.createTempFile("invoice-previews-", ".zip");
             try {
                 // Use java.util.zip for zero extra dependencies
                 try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(
                         Files.newOutputStream(zipFile))) {
                     for (PaperSize ps : PaperSize.values()) {
-                        byte[] pdf = generatePreviewPdf(ps);
+                        byte[] pdf = generatePreviewPdf(ps, clinic);
                         java.util.zip.ZipEntry entry = new java.util.zip.ZipEntry(
                             "invoice-preview-" + ps.key() + ".pdf");
                         zos.putNextEntry(entry);
@@ -118,19 +122,22 @@ public class InvoicePreviewController {
     //  MOCK DATA BUILDER
     // ═══════════════════════════════════════════════════════════════════════════
 
-    private static byte[] generatePreviewPdf(PaperSize paperSize) throws IOException {
+    private static byte[] generatePreviewPdf(PaperSize paperSize, ClinicProfile customClinic) throws IOException {
         // ── Clinic ────────────────────────────────────────────────────────────
-        ClinicProfile clinic = new ClinicProfile();
-        clinic.setName("NexxMed Medical Center");
-        clinic.setAddress("KN 5 Rd, Kigali, Rwanda — P.O. Box 1234");
-        clinic.setTinNumber("RW12345678");
-        ClinicContact phone = new ClinicContact();
-        phone.setContactType(ClinicContactType.PHONE);
-        phone.setValue("+250 788 123 456");
-        ClinicContact email = new ClinicContact();
-        email.setContactType(ClinicContactType.EMAIL);
-        email.setValue("billing@nexxmed.rw");
-        clinic.setContacts(List.of(phone, email));
+        ClinicProfile clinic = customClinic;
+        if (clinic == null || clinic.getName() == null || clinic.getName().isBlank()) {
+            clinic = new ClinicProfile();
+            clinic.setName("NexxMed Medical Center");
+            clinic.setAddress("KN 5 Rd, Kigali, Rwanda — P.O. Box 1234");
+            clinic.setTinNumber("RW12345678");
+            ClinicContact phone = new ClinicContact();
+            phone.setContactType(ClinicContactType.PHONE);
+            phone.setValue("+250 788 123 456");
+            ClinicContact email = new ClinicContact();
+            email.setContactType(ClinicContactType.EMAIL);
+            email.setValue("billing@nexxmed.rw");
+            clinic.setContacts(List.of(phone, email));
+        }
 
         // ── Patient ───────────────────────────────────────────────────────────
         Patient patient = new Patient();

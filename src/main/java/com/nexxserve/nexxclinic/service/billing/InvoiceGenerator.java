@@ -2,6 +2,7 @@ package com.nexxserve.nexxclinic.service.billing;
 
 import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
+import com.nexxserve.nexxclinic.entity.ClinicMetadata;
 import com.nexxserve.nexxclinic.entity.ClinicProfile;
 import com.nexxserve.nexxclinic.entity.DepartmentInsuranceBilling;
 import com.nexxserve.nexxclinic.entity.Visit;
@@ -62,7 +63,7 @@ public class InvoiceGenerator {
     private final TransactionTemplate transactionTemplate;
     private final TransactionTemplate readOnlyTransactionTemplate;
     private final int signedUrlExpirySeconds;
-    private final PaperSize invoicePaperSize;
+    private final PaperSize defaultInvoicePaperSize;
 
     private static final Logger log = LoggerFactory.getLogger(InvoiceGenerator.class);
 
@@ -97,8 +98,8 @@ public class InvoiceGenerator {
         this.readOnlyTransactionTemplate = new TransactionTemplate(transactionManager);
         this.readOnlyTransactionTemplate.setReadOnly(true);
         this.signedUrlExpirySeconds = signedUrlExpirySeconds;
-        this.invoicePaperSize = PaperSize.from(paperSizeKey);
-        log.info("Invoice paper size set to: {} (scale={})", this.invoicePaperSize.key(), this.invoicePaperSize.scale());
+        this.defaultInvoicePaperSize = PaperSize.from(paperSizeKey);
+        log.info("Default invoice paper size configured to: {} (scale={})", this.defaultInvoicePaperSize.key(), this.defaultInvoicePaperSize.scale());
     }
 
     public ApiResponse generateInvoice(
@@ -413,6 +414,28 @@ public class InvoiceGenerator {
     }
 
     /**
+     * Resolves the effective invoice paper size:
+     * 1. Checks ClinicProfile metadata (key "invoice_paper_size", "paper_size", etc.)
+     * 2. Falls back to defaultInvoicePaperSize from application properties.
+     */
+    public PaperSize resolveInvoicePaperSize(ClinicProfile clinicProfile) {
+        if (clinicProfile != null && clinicProfile.getMetadata() != null) {
+            for (ClinicMetadata m : clinicProfile.getMetadata()) {
+                if (m.getKey() != null) {
+                    String key = m.getKey().trim().toLowerCase();
+                    if ("invoice_paper_size".equals(key) || "invoice_paper".equals(key) || "paper_size".equals(key) || "paper".equals(key)) {
+                        String val = m.getValue();
+                        if (val != null && !val.isBlank()) {
+                            return PaperSize.from(val);
+                        }
+                    }
+                }
+            }
+        }
+        return this.defaultInvoicePaperSize;
+    }
+
+    /**
      * Phase-2 helper (runs OUTSIDE any DB transaction): renders the invoice PDF to a
      * temp file and uploads it to Supabase Storage. Returns the uploaded object path.
      * Persisting the path is the caller's job ({@link #persistInvoiceUrl}).
@@ -422,6 +445,14 @@ public class InvoiceGenerator {
     ) throws IOException {
         DepartmentInsuranceBilling billing = snapshot.billing();
         ClinicProfile clinicProfile = snapshot.clinicProfile();
+        PaperSize effectivePaperSize = resolveInvoicePaperSize(clinicProfile);
+
+        log.debug(
+            "Rendering invoice PDF for billing {} with effective paper size {} (default was {})",
+            billing.getId(),
+            effectivePaperSize.key(),
+            defaultInvoicePaperSize.key()
+        );
 
         // Render PDF to a temp file
         Path tempFile = Files.createTempFile("invoice-", ".pdf");
@@ -431,7 +462,7 @@ public class InvoiceGenerator {
                 billing,
                 snapshot.items(),
                 clinicProfile,
-                invoicePaperSize
+                effectivePaperSize
             );
 
             // Upload to Supabase Storage  data/{invoices}/{clinicName?}/invoice-{id}.pdf
