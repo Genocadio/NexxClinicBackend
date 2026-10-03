@@ -12,12 +12,13 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-PORT=8080
+PORT="${SERVER_PORT:-8085}"
 SESSION="nexxclinic-backend"
 LOG_FILE="/tmp/nexxclinic-backend.log"
 JAR_FILE="build/libs/nexxclinic-0.0.1-SNAPSHOT.jar"
 
 # ── env ──────────────────────────────────────────────────────────────────────
+export SERVER_PORT="$PORT"
 export DB_URL="${DB_URL:-jdbc:postgresql://localhost:5432/nexxclinic}"
 export DB_USER="${DB_USER:-nexxclinic_user}"
 export DB_PASSWORD="${DB_PASSWORD:-nexxclinic_pass}"

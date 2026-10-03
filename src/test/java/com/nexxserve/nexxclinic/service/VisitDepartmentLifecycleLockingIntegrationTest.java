@@ -886,4 +886,109 @@ class VisitDepartmentLifecycleLockingIntegrationTest {
         VisitDepartment deptAfterUnbilled = visitDepartmentRepository.findById(visitDeptId).orElseThrow();
         assertEquals(VisitDepartmentStatus.BILLING, deptAfterUnbilled.getStatus(), "Should transition to BILLING when unbilled product exists");
     }
+
+    @Test
+    void testUncancelDepartmentOnActiveVisitAndBlockedOnTerminalVisit() {
+        // Setup reception worker
+        Worker receptionWorker = new Worker();
+        receptionWorker.setFirstName("Receptionist");
+        receptionWorker.setLastName("User");
+        receptionWorker.setUsername("rec_" + UUID.randomUUID());
+        receptionWorker.setEmail("rec_" + UUID.randomUUID() + "@clinic.test");
+        receptionWorker.setPasswordHash("hash");
+        receptionWorker.setAccountStatus(AccountStatus.ACTIVE);
+        receptionWorker.setRoles(Set.of(RoleName.RECEPTION));
+        receptionWorker = workerRepository.save(receptionWorker);
+
+        AuthenticatedUser receptionAuth = new AuthenticatedUser(
+                receptionWorker.getId(),
+                receptionWorker.getUsername(),
+                Set.of(RoleName.RECEPTION),
+                "mock-token",
+                Instant.now()
+        );
+
+        Patient patient = new Patient();
+        patient.setFirstName("Test");
+        patient.setLastName("Patient " + UUID.randomUUID());
+        patient.setFullName("Test Patient");
+        patient.setGender(Gender.MALE);
+        patient.setDateOfBirth(LocalDate.of(1990, 1, 1));
+        patient = patientRepository.save(patient);
+
+        Visit activeVisit = new Visit();
+        activeVisit.setPatient(patient);
+        activeVisit.setStatus(VisitStatus.CREATED);
+        activeVisit.setVisitDate(LocalDateTime.now());
+        activeVisit = visitRepository.save(activeVisit);
+
+        Department dept = new Department();
+        dept.setName("Test Dept " + UUID.randomUUID());
+        dept = departmentRepository.save(dept);
+
+        // 1. Add department to visit
+        ApiResponse<VisitDto> addRes = visitDepartmentService.addVisitDepartment(
+                activeVisit.getId(),
+                dept.getId(),
+                null,
+                EncounterType.OUTPATIENT,
+                null,
+                receptionAuth
+        );
+        assertEquals(ResponseStatus.SUCCESS, addRes.status());
+        UUID visitDeptId = addRes.data().departments().get(0).id();
+
+        // 2. Cancel the department
+        ApiResponse cancelRes = visitDepartmentService.updateVisitDepartmentStatus(
+                new com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentStatusInput(visitDeptId, VisitDepartmentStatus.CANCELLED),
+                receptionAuth
+        );
+        assertEquals(ResponseStatus.SUCCESS, cancelRes.status());
+        VisitDepartment cancelledDept = visitDepartmentRepository.findById(visitDeptId).orElseThrow();
+        assertEquals(VisitDepartmentStatus.CANCELLED, cancelledDept.getStatus());
+
+        // 3. Receptionist un-cancels the department back to PENDING
+        ApiResponse uncancelRes = visitDepartmentService.updateVisitDepartmentStatus(
+                new com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentStatusInput(visitDeptId, VisitDepartmentStatus.PENDING),
+                receptionAuth
+        );
+        assertEquals(ResponseStatus.SUCCESS, uncancelRes.status(), "Receptionist can uncancel department on active visit");
+        VisitDepartment uncancelledDept = visitDepartmentRepository.findById(visitDeptId).orElseThrow();
+        assertEquals(VisitDepartmentStatus.PENDING, uncancelledDept.getStatus());
+        assertNull(uncancelledDept.getCompletedAt(), "completedAt should be cleared");
+        assertNull(uncancelledDept.getCompletedBy(), "completedBy should be cleared");
+
+        // 4. Cancel it again, and test re-adding it via addVisitDepartment
+        visitDepartmentService.updateVisitDepartmentStatus(
+                new com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentStatusInput(visitDeptId, VisitDepartmentStatus.CANCELLED),
+                receptionAuth
+        );
+        assertEquals(VisitDepartmentStatus.CANCELLED, visitDepartmentRepository.findById(visitDeptId).orElseThrow().getStatus());
+
+        ApiResponse<VisitDto> reAddRes = visitDepartmentService.addVisitDepartment(
+                activeVisit.getId(),
+                dept.getId(),
+                null,
+                EncounterType.OUTPATIENT,
+                null,
+                receptionAuth
+        );
+        assertEquals(ResponseStatus.SUCCESS, reAddRes.status(), "Re-adding cancelled department should revive and clean it");
+        assertEquals(VisitDepartmentStatus.PENDING, visitDepartmentRepository.findById(visitDeptId).orElseThrow().getStatus());
+
+        // 5. Cancel department and cancel the visit -> uncancel should be rejected
+        visitDepartmentService.updateVisitDepartmentStatus(
+                new com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentStatusInput(visitDeptId, VisitDepartmentStatus.CANCELLED),
+                receptionAuth
+        );
+        activeVisit.setStatus(VisitStatus.CANCELLED);
+        visitRepository.save(activeVisit);
+
+        ApiResponse uncancelOnCancelledVisitRes = visitDepartmentService.updateVisitDepartmentStatus(
+                new com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentStatusInput(visitDeptId, VisitDepartmentStatus.PENDING),
+                receptionAuth
+        );
+        assertEquals(ResponseStatus.ERROR, uncancelOnCancelledVisitRes.status(), "Cannot uncancel on cancelled visit");
+        assertTrue(uncancelOnCancelledVisitRes.message().contains("Cannot re-enable a department on a CANCELLED visit"));
+    }
 }

@@ -195,8 +195,63 @@ public class VisitDepartmentService {
             return ApiResponse.error("Department not found.");
         }
 
-        if (visitDepartmentRepository.existsByVisitIdAndDepartmentId(visitId, departmentId)) {
-            return ApiResponse.error("Department is already added to this visit.");
+        Optional<VisitDepartment> existingOpt = visitDepartmentRepository.findByVisitIdAndDepartmentId(visitId, departmentId);
+        if (existingOpt.isPresent()) {
+            VisitDepartment existing = existingOpt.get();
+            if (existing.getStatus() == VisitDepartmentStatus.CANCELLED) {
+                // Re-enable and clean previous state for the cancelled department
+                Department department = existing.getDepartment();
+                DepartmentProfile profile = null;
+                if (profileId != null) {
+                    if (department.isSupportRequests()) {
+                        return ApiResponse.error("Profiles can only be set on departments that do not support requests.");
+                    }
+                    profile = resolveProfileForDepartment(departmentId, profileId);
+                    if (profile == null) {
+                        return ApiResponse.error("Profile not found or does not belong to this department.");
+                    }
+                }
+                existing.setProfile(profile);
+                existing.setAddedBy(resolveWorker(authUser));
+                if (profile != null && profile.getEncounterType() != null) {
+                    existing.setEncounterType(profile.getEncounterType());
+                } else if (encounterType != null) {
+                    existing.setEncounterType(encounterType);
+                } else {
+                    existing.setEncounterType(com.nexxserve.nexxclinic.model.EncounterType.OUTPATIENT);
+                }
+                existing.setStatus(VisitDepartmentStatus.PENDING);
+                existing.setStartedAt(null);
+                existing.setCompletedAt(null);
+                existing.setCompletedBy(null);
+                existing.setBillingEditSourceStatus(null);
+
+                if (processorId != null) {
+                    Optional<Worker> processorOptional = workerRepository.findById(processorId);
+                    if (processorOptional.isEmpty()) {
+                        return ApiResponse.error("Processor not found.");
+                    }
+                    addProcessorToVisitDepartment(existing, processorOptional.get());
+                }
+
+                VisitDepartment saved = visitDepartmentRepository.saveAndFlush(existing);
+
+                if (profile != null) {
+                    Worker actingUser = resolveWorker(authUser);
+                    ApiResponse applyError = applyProfileProducts(saved, profile, actingUser);
+                    if (applyError != null) {
+                        org.springframework.transaction.interceptor.TransactionAspectSupport
+                            .currentTransactionStatus()
+                            .setRollbackOnly();
+                        return applyError;
+                    }
+                }
+
+                Visit refreshed = visitRepository.findById(visitId).orElse(visit);
+                return ApiResponse.success("Department re-enabled and added to visit.", visitService.visitToDto(refreshed, null, authUser));
+            } else {
+                return ApiResponse.error("Department is already added to this visit.");
+            }
         }
 
         Department department = departmentOptional.get();
@@ -1447,9 +1502,33 @@ public class VisitDepartmentService {
                 && requestedStatus != VisitDepartmentStatus.CANCELLED) {
             return ApiResponse.error("FINANCE can only mark a department COMPLETED or CANCELLED.");
         }
-        if (currentStatus == VisitDepartmentStatus.COMPLETED
-                || currentStatus == VisitDepartmentStatus.CANCELLED) {
-            return ApiResponse.error("A " + currentStatus + " department is terminal and cannot be changed.");
+        if (currentStatus == VisitDepartmentStatus.COMPLETED) {
+            return ApiResponse.error("A COMPLETED department is terminal and cannot be changed.");
+        }
+        if (currentStatus == VisitDepartmentStatus.CANCELLED) {
+            Visit visit = department.getVisit();
+            if (visit != null && (visit.getStatus() == VisitStatus.CANCELLED
+                    || visit.getStatus() == VisitStatus.COMPLETED
+                    || visit.getStatus() == VisitStatus.FINALISED)) {
+                return ApiResponse.error("Cannot re-enable a department on a " + visit.getStatus() + " visit.");
+            }
+            boolean canUncancel = authUser != null && authUser.roles() != null
+                    && authUser.roles().stream().anyMatch(r ->
+                        r == RoleName.RECEPTION || r == RoleName.ADMIN || r == RoleName.CLINIC_ADMIN
+                                || r == RoleName.MANAGER || r == RoleName.NURSE || r == RoleName.CLINICIAN);
+            if (!canUncancel) {
+                return ApiResponse.error("You do not have permission to re-enable this department.");
+            }
+            if (requestedStatus != VisitDepartmentStatus.PENDING && requestedStatus != VisitDepartmentStatus.ACTIVE) {
+                return ApiResponse.error("A cancelled department can only be re-enabled to PENDING or ACTIVE status.");
+            }
+            // Clean previous state
+            department.setCompletedAt(null);
+            department.setCompletedBy(null);
+            department.setBillingEditSourceStatus(null);
+            if (requestedStatus == VisitDepartmentStatus.PENDING) {
+                department.setStartedAt(null);
+            }
         }
         if (currentStatus == VisitDepartmentStatus.BILLING
                 && requestedStatus != VisitDepartmentStatus.COMPLETED

@@ -281,8 +281,10 @@ public class WorkerService {
             return ApiResponse.error("Your account is not activated yet.");
         }
 
-        if (worker.getPasswordHash() == null || worker.getPasswordHash().isBlank()) {
-            logger.info("Initial password setup required for user: {}", worker.getId());
+        if (worker.getPasswordHash() == null || worker.getPasswordHash().isBlank() || worker.isMustChangeOnNextLogin()) {
+            logger.info("Password setup / reset required for user: {}", worker.getId());
+            // Clear any lingering rate limits for user
+            loginRateLimiterService.recordSuccessfulAttempt(input.identifier());
             // S8 fix: Map.of throws NullPointerException on any null value. Build the
             // response map null-safely so a partially-populated worker can never 500.
             Map<String, Object> data = new LinkedHashMap<>();
@@ -292,7 +294,7 @@ public class WorkerService {
             data.put("user", workerToMap(worker));
             return new ApiResponse<>(
                     com.nexxserve.nexxclinic.model.ResponseStatus.PARTIAL_SUCCESS,
-                    "Password not set. Complete initial password setup.",
+                    "Password reset required. Complete password setup to continue.",
                     data
             );
         }
@@ -327,8 +329,8 @@ public class WorkerService {
             return ApiResponse.error("Only active users can set initial password.");
         }
 
-        if (worker.getPasswordHash() != null && !worker.getPasswordHash().isBlank()) {
-            return ApiResponse.error("Initial password already set. Use normal login.");
+        if (worker.getPasswordHash() != null && !worker.getPasswordHash().isBlank() && !worker.isMustChangeOnNextLogin()) {
+            return ApiResponse.error("Password already set. Use normal login.");
         }
 
         ApiResponse passwordPolicyError = passwordPolicyService.validateNewPassword(worker, input.newPassword());
@@ -355,6 +357,12 @@ public class WorkerService {
         } catch (Exception e) {
             logger.warn("Could not persist password history for user {}: {}", saved.getId(), e.getMessage());
         }
+
+        // Clear rate limiter tracking for all identifiers of this user
+        if (saved.getUsername() != null) loginRateLimiterService.reset(saved.getUsername());
+        if (saved.getEmail() != null) loginRateLimiterService.reset(saved.getEmail());
+        if (saved.getPhoneNumber() != null) loginRateLimiterService.reset(saved.getPhoneNumber());
+
         try {
             sessionTokenService.issueSession(saved);
         } catch (Exception e) {
@@ -363,7 +371,7 @@ public class WorkerService {
             logger.warn("Could not issue session after initial password setup for user {}: {}", saved.getId(), e.getMessage());
         }
 
-        return ApiResponse.success("Initial password set successfully.", true);
+        return ApiResponse.success("Password set successfully.", true);
     }
 
     @Transactional
@@ -830,10 +838,22 @@ public class WorkerService {
 
         Worker worker = workerOptional.get();
         worker.setMustChangeOnNextLogin(true);
+        worker.setPasswordHash(null);
         if (worker.isAutoReset() && worker.getResetPeriodDays() != null) {
             worker.setNextResetDate(LocalDateTime.now());
         }
         workerRepository.save(worker);
+
+        // Reset rate limiter for the user across all identifiers (username, email, phone)
+        if (worker.getUsername() != null) {
+            loginRateLimiterService.reset(worker.getUsername());
+        }
+        if (worker.getEmail() != null) {
+            loginRateLimiterService.reset(worker.getEmail());
+        }
+        if (worker.getPhoneNumber() != null) {
+            loginRateLimiterService.reset(worker.getPhoneNumber());
+        }
 
         boolean revokeSessions = input.revokeSessions() == null || Boolean.TRUE.equals(input.revokeSessions());
         if (revokeSessions) {

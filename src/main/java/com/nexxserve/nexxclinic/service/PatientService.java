@@ -224,7 +224,8 @@ public class PatientService {
                 spec = spec.and((root, query, cb) ->
                         cb.or(
                                 cb.like(cb.lower(root.get("fullName")), "%" + token + "%"),
-                                cb.like(cb.lower(root.get("patientIdentifier")), "%" + token + "%")
+                                cb.like(cb.lower(root.get("patientIdentifier")), "%" + token + "%"),
+                                cb.like(cb.lower(root.get("nationalIdNumber")), "%" + token + "%")
                         )
                 );
             }

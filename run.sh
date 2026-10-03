@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 cd "$(dirname "$0")"
+export SERVER_PORT="8085"
 export DB_URL="jdbc:postgresql://localhost:5432/nexxclinic"
 export DB_USER="nexxclinic_user"
 export DB_PASSWORD="nexxclinic_pass"
