@@ -67,7 +67,8 @@ public final class InvoicePdfGenerator {
             DepartmentInsuranceBilling billing,
             List<Map<String, Object>> items,
             ClinicProfile clinicProfile,
-            PaperSize paperSize
+            PaperSize paperSize,
+            String copyType
     ) throws IOException {
         if (renderer == null || mapper == null) {
             throw new IllegalStateException(
@@ -78,7 +79,7 @@ public final class InvoicePdfGenerator {
 
         String paperKey = paperSize != null ? paperSize.key() : "letter";
 
-        InvoiceView view = mapper.map(billing, items, clinicProfile);
+        InvoiceView view = mapper.map(billing, items, clinicProfile, copyType);
 
         byte[] pdfBytes;
         if (paperSize == PaperSize.A4L) {
@@ -92,7 +93,17 @@ public final class InvoicePdfGenerator {
             out.write(pdfBytes);
         }
 
-        log.debug("Invoice PDF written to {} ({} bytes, paper={})", invoiceFile, pdfBytes.length, paperKey);
+        log.debug("Invoice PDF written to {} ({} bytes, paper={}, copyType={})", invoiceFile, pdfBytes.length, paperKey, copyType);
+    }
+
+    public static void createInvoicePdf(
+            Path invoiceFile,
+            DepartmentInsuranceBilling billing,
+            List<Map<String, Object>> items,
+            ClinicProfile clinicProfile,
+            PaperSize paperSize
+    ) throws IOException {
+        createInvoicePdf(invoiceFile, billing, items, clinicProfile, paperSize, "DEFAULT");
     }
 
     /** Legacy overload — defaults to US Letter. */
@@ -102,6 +113,6 @@ public final class InvoicePdfGenerator {
             List<Map<String, Object>> items,
             ClinicProfile clinicProfile
     ) throws IOException {
-        createInvoicePdf(invoiceFile, billing, items, clinicProfile, PaperSize.LETTER);
+        createInvoicePdf(invoiceFile, billing, items, clinicProfile, PaperSize.LETTER, "DEFAULT");
     }
 }

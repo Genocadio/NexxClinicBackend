@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-push:
@@ -24,4 +29,8 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
-          tags: genoyves/nexclinic:latest
+          tags: |
+            genoyves/nexclinic:latest
+            genoyves/nexclinic:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

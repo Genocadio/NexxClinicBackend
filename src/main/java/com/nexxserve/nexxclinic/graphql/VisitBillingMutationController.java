@@ -72,9 +72,10 @@ public class VisitBillingMutationController {
     public ApiResponse generateInvoice(
             @Argument(name = "visitDepartmentId") UUID visitDepartmentId,
             @Argument(name = "departmentInsuranceBillingId") UUID departmentInsuranceBillingId,
+            @Argument(name = "copyType") String copyType,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return invoiceGenerator.generateInvoice(visitDepartmentId, departmentInsuranceBillingId, authUser);
+        return invoiceGenerator.generateInvoice(visitDepartmentId, departmentInsuranceBillingId, copyType, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.MANAGER})

@@ -20,13 +20,32 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.thymeleaf.spring6.SpringTemplateEngine;
+import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver;
+import com.nexxserve.nexxclinic.service.invoice.InvoicePdfRenderer;
+import com.nexxserve.nexxclinic.service.invoice.InvoiceViewMapper;
 
 class InvoicePdfGeneratorTest {
 
     @TempDir
     Path tempDir;
+
+    @BeforeEach
+    void setUp() {
+        ClassLoaderTemplateResolver resolver = new ClassLoaderTemplateResolver();
+        resolver.setPrefix("templates/");
+        resolver.setSuffix(".html");
+        resolver.setTemplateMode(org.thymeleaf.templatemode.TemplateMode.HTML);
+        resolver.setCharacterEncoding("UTF-8");
+        SpringTemplateEngine engine = new SpringTemplateEngine();
+        engine.setTemplateResolver(resolver);
+        InvoicePdfRenderer renderer = new InvoicePdfRenderer(engine);
+        InvoiceViewMapper mapper = new InvoiceViewMapper();
+        InvoicePdfGenerator.init(renderer, mapper);
+    }
 
     @Test
     void createInvoicePdf_writesPdfWithClinicProfileAndTableLayout() throws Exception {

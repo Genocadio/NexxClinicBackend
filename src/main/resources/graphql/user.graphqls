@@ -1969,7 +1969,7 @@ type Mutation {
   Invalidates the existing invoice so a fresh PDF is generated on next access.
   """
   updateBillingDate(input: UpdateBillingDateInput!): DepartmentInsuranceBillingResponse!
-  generateInvoice(visitDepartmentId: ID, departmentInsuranceBillingId: ID): InvoiceResponse!
+  generateInvoice(visitDepartmentId: ID, departmentInsuranceBillingId: ID, copyType: String): InvoiceResponse!
   flushSoftDeletedVisitProducts(visitId: ID!): BooleanResponse!
   cancelVisit(visitId: ID!): VisitResponse!
   """

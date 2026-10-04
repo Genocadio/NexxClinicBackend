@@ -52,15 +52,30 @@
         font-size: calc(9px * var(--scale));
         color: var(--c-mid);
       }
+      .invoice-badge-wrap {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+      }
       .invoice-badge {
         background: var(--c-primary);
         color: var(--c-white);
         font-weight: bold;
-        font-size: calc(18px * var(--scale));
-        letter-spacing: 2px;
-        padding: calc(14px * var(--scale)) calc(20px * var(--scale));
+        font-size: calc(14px * var(--scale));
+        letter-spacing: 1.5px;
+        padding: calc(10px * var(--scale)) calc(16px * var(--scale));
         text-align: center;
         min-width: calc(140px * var(--scale));
+        border-radius: calc(3px * var(--scale));
+      }
+      .invoice-copy-subtitle {
+        font-size: calc(9px * var(--scale));
+        color: var(--c-mid);
+        font-weight: 600;
+        letter-spacing: 0.8px;
+        text-transform: uppercase;
+        margin-top: calc(4px * var(--scale));
+        text-align: right;
       }
 
       .inv-meta {
@@ -226,13 +241,16 @@
            th:text="${c.label} + ': ' + ${c.value}">P.O. Box: 000</p>
         <p class="clinic-tin" th:if="${billing.clinic.tinNumber}" th:text="'TIN: ' + ${billing.clinic.tinNumber}">TIN</p>
       </div>
-      <div class="invoice-badge">INVOICE</div>
+      <div class="invoice-badge-wrap">
+        <div class="invoice-badge" th:text="${billing.invoiceTitle} ?: 'INVOICE'">INVOICE</div>
+        <div class="invoice-copy-subtitle" th:if="${billing.copySubtitle}" th:text="${billing.copySubtitle}">Insurer Copy</div>
+      </div>
     </div>
 
     <!-- 2. Meta / Bill-To -->
     <div class="inv-meta">
       <div class="col">
-        <div class="meta-label">BILL TO</div>
+        <div class="meta-label" th:text="${billing.copyType == 'INSURANCE' ? 'INSURED PATIENT' : 'BILL TO'}">BILL TO</div>
         <div class="meta-bold" th:text="${billing.patientName}">Patient Name</div>
         <div class="meta-kv" th:if="${billing.patientPhone}">
           <span class="k">Phone: </span><span class="v" th:text="${billing.patientPhone}"></span>
@@ -270,7 +288,9 @@
       <thead>
         <tr>
           <th>#</th><th>Description</th><th>Qty</th><th>Unit Price</th>
-          <th>Ins. Covered</th><th>Patient Payable</th><th>Total</th>
+          <th>Ins. Covered</th>
+          <th th:text="${billing.copyType == 'INSURANCE' ? 'Patient Co-Pay' : 'Patient Payable'}">Patient Payable</th>
+          <th>Total</th>
         </tr>
       </thead>
       <tbody>
@@ -293,15 +313,17 @@
           <span class="lbl">Total Amount:</span><span class="val" th:text="${billing.totalAmount}"></span>
         </div>
         <div class="totals-row" th:if="${billing.insuranceCoveredAmount != null and billing.insuranceCoveredAmount != '0.00'}">
-          <span class="lbl">Insurance Covered:</span><span class="val" th:text="${billing.insuranceCoveredAmount}"></span>
+          <span class="lbl" th:text="${billing.copyType == 'INSURANCE' ? 'Insurance Claim:' : 'Insurance Covered:'}">Insurance Covered:</span>
+          <span class="val" th:text="${billing.insuranceCoveredAmount}"></span>
         </div>
         <div class="totals-row">
-          <span class="lbl">Patient Payable:</span><span class="val" th:text="${billing.patientPayableAmount}"></span>
+          <span class="lbl" th:text="${billing.copyType == 'INSURANCE' ? 'Patient Co-Pay (Share):' : 'Patient Payable:'}">Patient Payable:</span>
+          <span class="val" th:text="${billing.patientPayableAmount}"></span>
         </div>
-        <div class="totals-row" th:if="${billing.paidAmount != null and billing.paidAmount != '0.00'}">
+        <div class="totals-row" th:if="${billing.copyType != 'INSURANCE' and billing.paidAmount != null and billing.paidAmount != '0.00'}">
           <span class="lbl">Paid:</span><span class="val val-green" th:text="${billing.paidAmount}"></span>
         </div>
-        <div class="totals-row outstanding" th:classappend="'status-' + ${billing.status}">
+        <div class="totals-row outstanding" th:if="${billing.copyType != 'INSURANCE'}" th:classappend="'status-' + ${billing.status}">
           <span class="lbl">
             <span class="status-icon" th:switch="${billing.status}">
               <span th:case="'UNPAID'">&#9888;</span>
@@ -331,12 +353,8 @@
   <div th:fragment="invoicePos(billing, pageNum)" class="invoice">
 
     <div class="status-strip" th:classappend="'status-' + ${billing.status}">
-      <span th:switch="${billing.status}">
-        <span th:case="'UNPAID'">&#9888; UNPAID</span>
-        <span th:case="'PARTIALLY_PAID'">&#9680; PARTIALLY PAID</span>
-        <span th:case="*" th:text="${billing.statusLabel}"></span>
-      </span>
-      <span th:if="${billing.hasOutstanding}" th:text="'Outstanding: ' + ${billing.outstandingAmount}"></span>
+      <span th:text="${billing.copySubtitle != null ? billing.copySubtitle + ' • ' + billing.statusLabel : billing.statusLabel}"></span>
+      <span th:if="${billing.copyType != 'INSURANCE' and billing.hasOutstanding}" th:text="'Outstanding: ' + ${billing.outstandingAmount}"></span>
     </div>
 
     <div class="inv-header-simple">
@@ -364,15 +382,17 @@
         <span class="lbl">Total:</span><span class="val" th:text="${billing.totalAmount}"></span>
       </div>
       <div class="totals-row" th:if="${billing.insuranceCoveredAmount != null and billing.insuranceCoveredAmount != '0.00'}">
-        <span class="lbl">Ins. Covered:</span><span class="val" th:text="${billing.insuranceCoveredAmount}"></span>
+        <span class="lbl" th:text="${billing.copyType == 'INSURANCE' ? 'Ins. Claim:' : 'Ins. Covered:'}">Ins. Covered:</span>
+        <span class="val" th:text="${billing.insuranceCoveredAmount}"></span>
       </div>
       <div class="totals-row">
-        <span class="lbl">Patient Payable:</span><span class="val" th:text="${billing.patientPayableAmount}"></span>
+        <span class="lbl" th:text="${billing.copyType == 'INSURANCE' ? 'Patient Co-Pay:' : 'Patient Payable:'}">Patient Payable:</span>
+        <span class="val" th:text="${billing.patientPayableAmount}"></span>
       </div>
-      <div class="totals-row" th:if="${billing.paidAmount != null and billing.paidAmount != '0.00'}">
+      <div class="totals-row" th:if="${billing.copyType != 'INSURANCE' and billing.paidAmount != null and billing.paidAmount != '0.00'}">
         <span class="lbl">Paid:</span><span class="val val-green" th:text="${billing.paidAmount}"></span>
       </div>
-      <div class="totals-row outstanding" th:classappend="'status-' + ${billing.status}">
+      <div class="totals-row outstanding" th:if="${billing.copyType != 'INSURANCE'}" th:classappend="'status-' + ${billing.status}">
         <span class="lbl">Outstanding:</span>
         <span class="val" th:classappend="${billing.hasOutstanding} ? 'val-red' : 'val-green'"
               th:text="${billing.outstandingAmount}"></span>

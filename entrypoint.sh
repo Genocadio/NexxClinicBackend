@@ -11,18 +11,5 @@ if [ -d "$STORAGE_DIR" ]; then
   fi
 fi
 
-# Ensure Playwright can find its pre-installed browsers
-export PLAYWRIGHT_BROWSERS_PATH="/opt/playwright-browsers"
-
-# Ensure the Playwright driver cache dir exists and is writable by spring.
-# The Java SDK extracts its driver JAR here on first use.
-PLAYWRIGHT_CACHE="/home/spring/.cache/ms-playwright"
-mkdir -p "$PLAYWRIGHT_CACHE"
-chown -R spring:spring "$PLAYWRIGHT_CACHE"
-chown -R spring:spring /opt/playwright-browsers 2>/dev/null || true
-
 # Drop from root → spring and exec the JVM
-exec runuser -u spring -- env \
-    "PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH" \
-    "HOME=/home/spring" \
-    java -jar app.jar
+exec runuser -u spring -- env "HOME=/home/spring" java -jar app.jar

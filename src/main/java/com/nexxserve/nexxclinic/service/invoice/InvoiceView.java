@@ -46,8 +46,40 @@ public record InvoiceView(
     String paidAmount,
     String outstandingAmount,
     boolean hasOutstanding,
-    boolean hasInsurance
+    boolean hasInsurance,
+    String invoiceTitle,
+    String copyType,
+    String copySubtitle
 ) {
+
+    /** Backwards-compatible constructor without copy fields. */
+    public InvoiceView(
+        ClinicInfo clinic,
+        String patientName,
+        String patientPhone,
+        String visitDate,
+        String departmentName,
+        String insuranceLine,
+        String invoiceNo,
+        String invoiceDate,
+        String status,
+        String statusLabel,
+        List<InvoiceItem> items,
+        String totalAmount,
+        String insuranceCoveredAmount,
+        String patientPayableAmount,
+        String paidAmount,
+        String outstandingAmount,
+        boolean hasOutstanding,
+        boolean hasInsurance
+    ) {
+        this(
+            clinic, patientName, patientPhone, visitDate, departmentName, insuranceLine,
+            invoiceNo, invoiceDate, status, statusLabel, items, totalAmount,
+            insuranceCoveredAmount, patientPayableAmount, paidAmount, outstandingAmount,
+            hasOutstanding, hasInsurance, "INVOICE", "DEFAULT", null
+        );
+    }
 
     /** Clinic header data — also a flat record for the template. */
     public record ClinicInfo(

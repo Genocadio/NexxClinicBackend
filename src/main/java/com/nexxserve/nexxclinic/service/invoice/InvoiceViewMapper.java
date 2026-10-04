@@ -35,16 +35,29 @@ public class InvoiceViewMapper {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * Map a single insurance billing row into an InvoiceView.
-     *
-     * @param billing      the billing entity (all associations eagerly loaded)
-     * @param items        the item maps from {@link com.nexxserve.nexxclinic.service.billing.BillingDataMapper#visitBillingItemToMap}
-     * @param clinicProfile the clinic profile (may be null)
+     * Map a single insurance billing row into an InvoiceView with default copy type.
      */
     public InvoiceView map(
             DepartmentInsuranceBilling billing,
             List<Map<String, Object>> items,
             ClinicProfile clinicProfile
+    ) {
+        return map(billing, items, clinicProfile, "DEFAULT");
+    }
+
+    /**
+     * Map a single insurance billing row into an InvoiceView with a specific copy type.
+     *
+     * @param billing       the billing entity (all associations eagerly loaded)
+     * @param items         the item maps from {@link com.nexxserve.nexxclinic.service.billing.BillingDataMapper#visitBillingItemToMap}
+     * @param clinicProfile the clinic profile (may be null)
+     * @param copyType      "INSURANCE", "PATIENT", or "DEFAULT" (null defaults to "DEFAULT")
+     */
+    public InvoiceView map(
+            DepartmentInsuranceBilling billing,
+            List<Map<String, Object>> items,
+            ClinicProfile clinicProfile,
+            String copyType
     ) {
         Visit visit = resolveVisit(billing);
         Patient pat = visit == null ? null : visit.getPatient();
@@ -53,6 +66,44 @@ public class InvoiceViewMapper {
 
         String insuranceLine = buildInsuranceLine(billing.getPatientInsurance());
         boolean hasInsurance = insuranceLine != null || hasNonZeroInsuranceCovered(billing.getInsuranceCoveredAmount());
+
+        String normCopyType = copyType != null && !copyType.isBlank() ? copyType.trim().toUpperCase() : "DEFAULT";
+
+        String invoiceTitle;
+        String copySubtitle;
+        String statusLabel;
+        String patientPayableStr;
+        String paidAmountStr;
+        String outstandingStr;
+        boolean hasOutstanding;
+
+        if ("INSURANCE".equals(normCopyType)) {
+            invoiceTitle = "INSURANCE CLAIM INVOICE";
+            copySubtitle = "Insurer Copy";
+            statusLabel = "CLAIMABLE";
+            BigDecimal total = billing.getTotalAmount() != null ? billing.getTotalAmount() : BigDecimal.ZERO;
+            BigDecimal ins = billing.getInsuranceCoveredAmount() != null ? billing.getInsuranceCoveredAmount() : BigDecimal.ZERO;
+            patientPayableStr = fmtMoney(total.subtract(ins).max(BigDecimal.ZERO));
+            paidAmountStr = "0.00";
+            outstandingStr = "0.00";
+            hasOutstanding = false;
+        } else if ("PATIENT".equals(normCopyType)) {
+            invoiceTitle = "PATIENT INVOICE & RECEIPT";
+            copySubtitle = "Patient Copy & Statement";
+            statusLabel = statusLabel(billing.getStatus());
+            patientPayableStr = fmtMoney(billing.getPatientPayableAmount());
+            paidAmountStr = fmtMoney(billing.getPaidAmount());
+            outstandingStr = fmtMoney(billing.getOutstandingAmount());
+            hasOutstanding = hasOutstanding(billing.getOutstandingAmount());
+        } else {
+            invoiceTitle = hasInsurance ? "INVOICE" : "INVOICE & RECEIPT";
+            copySubtitle = null;
+            statusLabel = statusLabel(billing.getStatus());
+            patientPayableStr = fmtMoney(billing.getPatientPayableAmount());
+            paidAmountStr = fmtMoney(billing.getPaidAmount());
+            outstandingStr = fmtMoney(billing.getOutstandingAmount());
+            hasOutstanding = hasOutstanding(billing.getOutstandingAmount());
+        }
 
         return new InvoiceView(
             mapClinic(clinicProfile),
@@ -66,15 +117,18 @@ public class InvoiceViewMapper {
             abbrevId(billing.getId()),
             resolveInvoiceDate(billing),
             billing.getStatus() != null ? billing.getStatus().name() : "UNKNOWN",
-            statusLabel(billing.getStatus()),
-            mapItems(items),
+            statusLabel,
+            mapItems(items, normCopyType),
             fmtMoney(billing.getTotalAmount()),
             fmtMoney(billing.getInsuranceCoveredAmount()),
-            fmtMoney(billing.getPatientPayableAmount()),
-            fmtMoney(billing.getPaidAmount()),
-            fmtMoney(billing.getOutstandingAmount()),
-            hasOutstanding(billing.getOutstandingAmount()),
-            hasInsurance
+            patientPayableStr,
+            paidAmountStr,
+            outstandingStr,
+            hasOutstanding,
+            hasInsurance,
+            invoiceTitle,
+            normCopyType,
+            copySubtitle
         );
     }
 
@@ -87,7 +141,7 @@ public class InvoiceViewMapper {
             ClinicProfile clinicProfile,
             @SuppressWarnings("unused") Object paperSizeIgnored
     ) {
-        return map(billing, items, clinicProfile);
+        return map(billing, items, clinicProfile, "DEFAULT");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -190,20 +244,40 @@ public class InvoiceViewMapper {
     //  ITEMS
     // ─────────────────────────────────────────────────────────────────────────
 
-    private List<InvoiceView.InvoiceItem> mapItems(List<Map<String, Object>> items) {
+    private List<InvoiceView.InvoiceItem> mapItems(List<Map<String, Object>> items, String copyType) {
         if (items == null) return List.of();
+        boolean isInsurance = "INSURANCE".equalsIgnoreCase(copyType);
         List<InvoiceView.InvoiceItem> result = new ArrayList<>(items.size());
         for (Map<String, Object> item : items) {
+            BigDecimal lineTotal = toBigDecimal(item.get("lineTotal"));
+            BigDecimal insCovered = toBigDecimal(item.get("insuranceCoveredAmount"));
+            BigDecimal patientPayable = toBigDecimal(item.get("patientPayableAmount"));
+
+            // For insurance claims, patient co-pay is lineTotal - insCovered (standard tariff split)
+            String patientPayableStr = isInsurance
+                ? fmtMoney(lineTotal.subtract(insCovered).max(BigDecimal.ZERO))
+                : fmtMoney(patientPayable);
+
             result.add(new InvoiceView.InvoiceItem(
                 str(item.get("productName")),
                 fmtQty(item.get("quantitySnapshot")),
                 fmtMoney(item.get("unitPriceSnapshot")),
-                fmtMoney(item.get("insuranceCoveredAmount")),
-                fmtMoney(item.get("patientPayableAmount")),
-                fmtMoney(item.get("lineTotal"))
+                fmtMoney(insCovered),
+                patientPayableStr,
+                fmtMoney(lineTotal)
             ));
         }
         return result;
+    }
+
+    private static BigDecimal toBigDecimal(Object val) {
+        if (val == null) return BigDecimal.ZERO;
+        if (val instanceof BigDecimal d) return d;
+        try {
+            return new BigDecimal(String.valueOf(val));
+        } catch (Exception e) {
+            return BigDecimal.ZERO;
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

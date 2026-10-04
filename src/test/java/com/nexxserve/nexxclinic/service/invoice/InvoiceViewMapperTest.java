@@ -119,6 +119,22 @@ class InvoiceViewMapperTest {
         return m;
     }
 
+    private InsuranceProvider insuranceProvider(String name, String acronym) {
+        InsuranceProvider p = new InsuranceProvider();
+        p.setId(UUID.randomUUID());
+        p.setInsuranceName(name);
+        p.setAcronym(acronym);
+        return p;
+    }
+
+    private PatientInsurance patientInsurance(InsuranceProvider provider, String cardNumber) {
+        PatientInsurance pi = new PatientInsurance();
+        pi.setId(UUID.randomUUID());
+        pi.setInsuranceProvider(provider);
+        pi.setInsuranceCardNumber(cardNumber);
+        return pi;
+    }
+
     private ClinicProfile clinic(String name, String address, String tin, ClinicContact... contacts) {
         ClinicProfile cp = new ClinicProfile();
         cp.setName(name);
@@ -469,5 +485,90 @@ class InvoiceViewMapperTest {
         InvoiceView view = mapper.map(b, List.of(), null);
 
         assertEquals("20 Aug 2026  14:15", view.invoiceDate());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Dual Copy Types (Insurance Claim vs Patient Receipt)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    @Test
+    void map_insuranceCopy_formatsAsInsuranceClaimWithContractualCoPay() {
+        Patient p = patient("John", null, "Doe", "John Doe", "+250788111222");
+        Visit v = visit(p, LocalDateTime.of(2026, 4, 10, 10, 0));
+        VisitBilling vb = visitBilling(v, LocalDateTime.now());
+        VisitDepartment vd = visitDepartment("General");
+        InsuranceProvider prov = insuranceProvider("RSSB / RAMA", "RAMA");
+        PatientInsurance pi = patientInsurance(prov, "RAMA-12345");
+
+        // Total: 10,000 | Insurance Covered: 8,500 | Patient Payable (waived to 0): 0 | Paid: 0 | Outstanding: 0
+        DepartmentInsuranceBilling b = billing(vb, vd, pi, VisitBillingStatus.PAID,
+            "10000", "8500", "0", "0", "0");
+
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("productName", "Consultation");
+        item.put("quantitySnapshot", new BigDecimal("1"));
+        item.put("unitPriceSnapshot", new BigDecimal("10000.00"));
+        item.put("insuranceCoveredAmount", new BigDecimal("8500.00"));
+        item.put("patientPayableAmount", BigDecimal.ZERO);
+        item.put("lineTotal", new BigDecimal("10000.00"));
+
+        InvoiceView view = mapper.map(b, List.of(item), null, "INSURANCE");
+
+        assertEquals("INSURANCE CLAIM INVOICE", view.invoiceTitle());
+        assertEquals("Insurer Copy", view.copySubtitle());
+        assertEquals("INSURANCE", view.copyType());
+        assertEquals("CLAIMABLE", view.statusLabel());
+        assertEquals("10000.00", view.totalAmount());
+        assertEquals("8500.00", view.insuranceCoveredAmount());
+        // Contractual patient co-pay on insurance claim is 10000 - 8500 = 1500, not affected by waiver
+        assertEquals("1500.00", view.patientPayableAmount());
+        assertEquals("0.00", view.paidAmount());
+        assertEquals("0.00", view.outstandingAmount());
+        assertFalse(view.hasOutstanding());
+
+        // Line item checks
+        assertEquals(1, view.items().size());
+        assertEquals("8500.00", view.items().get(0).insuranceCovered());
+        assertEquals("1500.00", view.items().get(0).patientPayable());
+    }
+
+    @Test
+    void map_patientCopy_formatsAsPatientStatementWithActualNetPayableAndLoan() {
+        Patient p = patient("John", null, "Doe", "John Doe", "+250788111222");
+        Visit v = visit(p, LocalDateTime.of(2026, 4, 10, 10, 0));
+        VisitBilling vb = visitBilling(v, LocalDateTime.now());
+        VisitDepartment vd = visitDepartment("General");
+        InsuranceProvider prov = insuranceProvider("RSSB / RAMA", "RAMA");
+        PatientInsurance pi = patientInsurance(prov, "RAMA-12345");
+
+        // Total: 10,000 | Insurance Covered: 8,500 | Patient Payable: 1,500 | Paid: 500 | Outstanding: 1,000
+        DepartmentInsuranceBilling b = billing(vb, vd, pi, VisitBillingStatus.PARTIALLY_PAID,
+            "10000", "8500", "1500", "500", "1000");
+
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("productName", "Consultation");
+        item.put("quantitySnapshot", new BigDecimal("1"));
+        item.put("unitPriceSnapshot", new BigDecimal("10000.00"));
+        item.put("insuranceCoveredAmount", new BigDecimal("8500.00"));
+        item.put("patientPayableAmount", new BigDecimal("1500.00"));
+        item.put("lineTotal", new BigDecimal("10000.00"));
+
+        InvoiceView view = mapper.map(b, List.of(item), null, "PATIENT");
+
+        assertEquals("PATIENT INVOICE & RECEIPT", view.invoiceTitle());
+        assertEquals("Patient Copy & Statement", view.copySubtitle());
+        assertEquals("PATIENT", view.copyType());
+        assertEquals("PARTIALLY PAID", view.statusLabel());
+        assertEquals("10000.00", view.totalAmount());
+        assertEquals("8500.00", view.insuranceCoveredAmount());
+        assertEquals("1500.00", view.patientPayableAmount());
+        assertEquals("500.00", view.paidAmount());
+        assertEquals("1000.00", view.outstandingAmount());
+        assertTrue(view.hasOutstanding());
+
+        // Line item checks
+        assertEquals(1, view.items().size());
+        assertEquals("8500.00", view.items().get(0).insuranceCovered());
+        assertEquals("1500.00", view.items().get(0).patientPayable());
     }
 }

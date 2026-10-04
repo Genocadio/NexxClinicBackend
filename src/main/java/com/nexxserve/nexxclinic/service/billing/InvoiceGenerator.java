@@ -106,7 +106,7 @@ public class InvoiceGenerator {
         UUID departmentInsuranceBillingId,
         AuthenticatedUser authUser
     ) {
-        return generateInvoice(null, departmentInsuranceBillingId, authUser);
+        return generateInvoice(null, departmentInsuranceBillingId, null, authUser);
     }
 
     public ApiResponse generateInvoice(
@@ -114,11 +114,22 @@ public class InvoiceGenerator {
         UUID departmentInsuranceBillingId,
         AuthenticatedUser authUser
     ) {
+        return generateInvoice(visitDepartmentId, departmentInsuranceBillingId, null, authUser);
+    }
+
+    public ApiResponse generateInvoice(
+        UUID visitDepartmentId,
+        UUID departmentInsuranceBillingId,
+        String copyType,
+        AuthenticatedUser authUser
+    ) {
         if (visitDepartmentId == null && departmentInsuranceBillingId == null) {
             return ApiResponse.error(
                 "visitDepartmentId or departmentInsuranceBillingId is required."
             );
         }
+
+        String normCopyType = copyType != null && !copyType.isBlank() ? copyType.trim().toUpperCase() : "DEFAULT";
 
         // Phase 1 — short read-only tx: authenticate, validate, snapshot the data the
         // PDF needs. All lazy associations are eagerly fetched inside the tx.
@@ -135,35 +146,15 @@ public class InvoiceGenerator {
         DepartmentInsuranceBilling billing = snapshot.billing();
         UUID billingId = billing.getId();
 
-        // Invoice already stored — return a fresh download URL (pure IO, no DB tx held).
-        // If the stored URL can't be resolved (e.g. file missing from storage),
-        // fall through to regenerate a fresh PDF below.
-        if (hasText(billing.getInvoiceUrl())) {
-            try {
-                String url = resolveDownloadUrl(billing.getInvoiceUrl());
-                return ApiResponse.success(
-                    "Invoice already exists.",
-                    Map.of("signedUrl", url)
-                );
-            } catch (Exception e) {
-                log.warn(
-                    "Stored invoice URL {} for billing {} could not be resolved ({}), regenerating.",
-                    billing.getInvoiceUrl(),
-                    billingId,
-                    e.getMessage()
-                );
-                // Fall through to Phase 2 to regenerate the PDF.
-            }
-        }
-
         // Phase 2 — PDF render + upload, entirely OUTSIDE any DB transaction.
         String objectPath;
         try {
-            objectPath = generateInvoicePdfFile(snapshot);
+            objectPath = generateInvoicePdfFile(snapshot, normCopyType);
         } catch (Exception e) {
             log.error(
-                "Invoice generation failed for billing {}: {}",
+                "Invoice generation failed for billing {} (copyType={}): {}",
                 billingId,
+                normCopyType,
                 e.getMessage(),
                 e
             );
@@ -173,9 +164,10 @@ public class InvoiceGenerator {
         // Phase 3 — short write tx: persist the object path so getInvoice can sign it.
         // If the persist fails (or the billing row vanished mid-flight), the uploaded
         // file would be an orphan with no DB reference — clean it up best-effort.
+        boolean shouldPersist = "DEFAULT".equals(normCopyType) || "PATIENT".equals(normCopyType);
         boolean persisted;
         try {
-            persisted = persistInvoiceUrl(billingId, objectPath);
+            persisted = shouldPersist ? persistInvoiceUrl(billingId, objectPath) : true;
         } catch (Exception e) {
             log.error(
                 "Invoice uploaded for billing {} but object path could not be persisted: {}",
@@ -441,16 +433,18 @@ public class InvoiceGenerator {
      * Persisting the path is the caller's job ({@link #persistInvoiceUrl}).
      */
     private String generateInvoicePdfFile(
-        InvoiceSnapshot snapshot
+        InvoiceSnapshot snapshot,
+        String copyType
     ) throws IOException {
         DepartmentInsuranceBilling billing = snapshot.billing();
         ClinicProfile clinicProfile = snapshot.clinicProfile();
         PaperSize effectivePaperSize = resolveInvoicePaperSize(clinicProfile);
 
         log.debug(
-            "Rendering invoice PDF for billing {} with effective paper size {} (default was {})",
+            "Rendering invoice PDF for billing {} with effective paper size {}, copyType {} (default was {})",
             billing.getId(),
             effectivePaperSize.key(),
+            copyType,
             defaultInvoicePaperSize.key()
         );
 
@@ -462,16 +456,17 @@ public class InvoiceGenerator {
                 billing,
                 snapshot.items(),
                 clinicProfile,
-                effectivePaperSize
+                effectivePaperSize,
+                copyType
             );
 
-            // Upload to Supabase Storage  data/{invoices}/{clinicName?}/invoice-{id}.pdf
+            // Upload to Supabase Storage  data/{invoices}/{clinicName?}/invoice-{id}[-copyType].pdf
             byte[] pdfBytes = Files.readAllBytes(tempFile);
             String clinicName = (clinicProfile != null)
                 ? clinicProfile.getName()
                 : null;
             String objectPath = buildInvoiceObjectPath(
-                clinicName, billing.getId().toString()
+                clinicName, billing.getId().toString(), copyType
             );
             storageService.upload(pdfBytes, invoiceBucket(), objectPath, "application/pdf");
             return objectPath;
@@ -613,13 +608,23 @@ public class InvoiceGenerator {
         return (bucket == null || bucket.isBlank()) ? "data" : bucket;
     }
 
-    private String buildInvoiceObjectPath(String clinicName, String billingId) {
-        String filename = "invoice-" + billingId + ".pdf";
+    private String buildInvoiceObjectPath(String clinicName, String billingId, String copyType) {
+        String suffix = "";
+        if ("INSURANCE".equalsIgnoreCase(copyType)) {
+            suffix = "-insurance";
+        } else if ("PATIENT".equalsIgnoreCase(copyType)) {
+            suffix = "-patient";
+        }
+        String filename = "invoice-" + billingId + suffix + ".pdf";
         if (clinicName != null && !clinicName.isBlank()) {
             String safe = clinicName.trim().replaceAll("[^a-zA-Z0-9_\\-]", "_");
             return "invoices/" + safe + "/" + filename;
         }
         return "invoices/" + filename;
+    }
+
+    private String buildInvoiceObjectPath(String clinicName, String billingId) {
+        return buildInvoiceObjectPath(clinicName, billingId, "DEFAULT");
     }
 
     private String resolveDownloadUrl(String objectPath) throws IOException {
