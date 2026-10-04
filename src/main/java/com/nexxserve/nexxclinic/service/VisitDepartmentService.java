@@ -896,7 +896,7 @@ public class VisitDepartmentService {
      *
      * @return warning messages about cleanup steps that failed (empty = clean delete)
      */
-    private List<String> hardDeleteVisitDepartment(VisitDepartment vd) {
+    public List<String> hardDeleteVisitDepartment(VisitDepartment vd) {
         UUID deptId = vd.getId();
         UUID visitId = vd.getVisit() != null ? vd.getVisit().getId() : null;
         UUID departmentId = vd.getDepartment() != null ? vd.getDepartment().getId() : null;

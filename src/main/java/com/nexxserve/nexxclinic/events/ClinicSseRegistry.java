@@ -15,6 +15,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.fasterxml.jackson.databind.SerializationFeature;
+
 @Component
 public class ClinicSseRegistry {
 
@@ -34,11 +37,22 @@ public class ClinicSseRegistry {
     private final Map<UUID, Map<UUID, ViewerInfo>> visitPresence = new ConcurrentHashMap<>();
 
     public ClinicSseRegistry() {
-        this(new ObjectMapper().findAndRegisterModules());
+        this(createDefaultObjectMapper());
     }
 
     public ClinicSseRegistry(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper != null ? objectMapper.copy().findAndRegisterModules() : new ObjectMapper().findAndRegisterModules();
+        ObjectMapper mapper = objectMapper != null ? objectMapper.copy() : createDefaultObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        this.objectMapper = mapper;
+    }
+
+    private static ObjectMapper createDefaultObjectMapper() {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.registerModule(new JavaTimeModule());
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        mapper.findAndRegisterModules();
+        return mapper;
     }
 
     public record ClientSession(

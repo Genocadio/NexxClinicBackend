@@ -4,6 +4,7 @@ import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
 import com.nexxserve.nexxclinic.entity.Patient;
 import com.nexxserve.nexxclinic.entity.PatientInsurance;
 import com.nexxserve.nexxclinic.entity.Visit;
+import com.nexxserve.nexxclinic.entity.VisitBilling;
 import com.nexxserve.nexxclinic.entity.VisitDepartment;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
 import com.nexxserve.nexxclinic.entity.VisitInsurance;
@@ -57,6 +58,8 @@ import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
+import com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion;
+import com.nexxserve.nexxclinic.repository.VisitBillingVersionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -81,6 +84,7 @@ public class VisitService {
     private final VisitDepartmentMedicationRepository visitDepartmentMedicationRepository;
     private final VisitPreInstructionRepository visitPreInstructionRepository;
     private final VisitBillingRepository visitBillingRepository;
+    private final VisitBillingVersionRepository visitBillingVersionRepository;
     private final VisitDepartmentNoteRepository visitDepartmentNoteRepository;
     private final VisitVitalSignsGroupRepository visitVitalSignsGroupRepository;
     private final VitalMeasurementRepository vitalMeasurementRepository;
@@ -115,6 +119,7 @@ public class VisitService {
             VisitDepartmentMedicationRepository visitDepartmentMedicationRepository,
             VisitPreInstructionRepository visitPreInstructionRepository,
             VisitBillingRepository visitBillingRepository,
+            @Lazy VisitBillingVersionRepository visitBillingVersionRepository,
             VisitDepartmentNoteRepository visitDepartmentNoteRepository,
             VisitVitalSignsGroupRepository visitVitalSignsGroupRepository,
             VitalMeasurementRepository vitalMeasurementRepository,
@@ -146,6 +151,7 @@ public class VisitService {
         this.visitDepartmentMedicationRepository = visitDepartmentMedicationRepository;
         this.visitPreInstructionRepository = visitPreInstructionRepository;
         this.visitBillingRepository = visitBillingRepository;
+        this.visitBillingVersionRepository = visitBillingVersionRepository;
         this.visitDepartmentNoteRepository = visitDepartmentNoteRepository;
         this.visitVitalSignsGroupRepository = visitVitalSignsGroupRepository;
         this.vitalMeasurementRepository = vitalMeasurementRepository;
@@ -439,10 +445,10 @@ public class VisitService {
         // Meilisearch first (typo-tolerant, ranked); the DB spec below is the fallback.
         // Only invoke Meilisearch when there's a simple patientName search param without complex date range
         boolean hasSearchParam = patientName != null;
-        if (hasSearchParam && parsedFromDate == null && parsedToDate == null && !activeOnly && meilisearchIndexService.isEnabled()) {
+        if (hasSearchParam && parsedFromDate == null && parsedToDate == null && meilisearchIndexService.isEnabled()) {
             try {
                 MeilisearchIndexService.SearchHit hit = meilisearchIndexService.searchVisits(
-                        patientName, statusFilter, visitDateEpochDay, page, size
+                        patientName, statusFilter, activeOnly, visitDateEpochDay, page, size
                 );
                 List<VisitDto> dtos = loadVisitsByHits(hit.ids(), authUser);
                 int totalPages = size == 0 ? 0 : (int) Math.ceil((double) hit.total() / size);
@@ -480,8 +486,8 @@ public class VisitService {
                     spec = spec.and((root, queryDef, builder) -> builder.lessThanOrEqualTo(root.get("visitDate"), parsedToDate));
                 }
             }
-        } else if (activeOnly) {
-            spec = spec.and((root, queryDef, builder) -> root.get("status").in(VisitStatus.CREATED, VisitStatus.IN_PROGRESS));
+        } else if (input != null && input.recentDays() != null && input.recentDays() == 0) {
+            // Explicit recentDays == 0 means "all historical visits, no date cutoff"
         } else if (statusFilter != null) {
             // When querying a specific status (e.g. COMPLETED), allow full historical pagination
             // unless recentDays is explicitly provided.
@@ -489,9 +495,7 @@ public class VisitService {
                 LocalDateTime cutoff = LocalDateTime.now().minusDays(input.recentDays()).toLocalDate().atStartOfDay();
                 spec = spec.and((root, queryDef, builder) -> builder.greaterThanOrEqualTo(root.get("visitDate"), cutoff));
             }
-        } else if (input != null && input.recentDays() != null && input.recentDays() == 0) {
-            // Explicit recentDays == 0 means "all historical visits, no date cutoff"
-        } else {
+        } else if (!activeOnly) {
             // Default rolling operational window:
             // 1. All open / in-progress visits regardless of date.
             // 2. Visits completed/finalized/edited within recentDays (default 7 days).
@@ -502,6 +506,10 @@ public class VisitService {
                     builder.greaterThanOrEqualTo(root.get("visitDate"), cutoff),
                     builder.greaterThanOrEqualTo(root.get("updatedAt"), cutoff)
             ));
+        }
+
+        if (activeOnly) {
+            spec = spec.and((root, queryDef, builder) -> root.get("status").in(VisitStatus.CREATED, VisitStatus.IN_PROGRESS));
         }
 
         if (statusFilter != null) {
@@ -886,8 +894,17 @@ public class VisitService {
         return completeVisit(input, finalAnswer, authUser);
     }
 
+    private boolean isManagerOrAboveRole(AuthenticatedUser authUser) {
+        if (authUser == null || authUser.roles() == null) {
+            return false;
+        }
+        return authUser.roles().contains(RoleName.ADMIN)
+                || authUser.roles().contains(RoleName.CLINIC_ADMIN)
+                || authUser.roles().contains(RoleName.MANAGER);
+    }
+
     @Transactional
-    public ApiResponse<VisitDto> cancelVisit(UUID visitId) {
+    public ApiResponse<VisitDto> cancelVisit(UUID visitId, AuthenticatedUser authUser) {
         if (visitId == null) {
             return ApiResponse.error("visitId is required.");
         }
@@ -898,19 +915,22 @@ public class VisitService {
         }
 
         Visit visit = visitOptional.get();
-        if (visit.getStatus() == VisitStatus.COMPLETED) {
-            return ApiResponse.error("Completed visit cannot be cancelled.");
-        }
+        boolean isManagerOrAbove = isManagerOrAboveRole(authUser);
 
-        // Billing guard: a visit that has been billed (any billing container exists)
-        // cannot be cancelled — it has a financial and audit trail.
-        if (!visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId).isEmpty()) {
-            return ApiResponse.error("Cannot cancel a billed visit. Use editBillVisit to correct the billing.");
-        }
+        if (!isManagerOrAbove) {
+            if (visit.getStatus() == VisitStatus.COMPLETED) {
+                return ApiResponse.error("Completed visit cannot be cancelled.");
+            }
 
-        List<VisitDepartmentProduct> visitProducts = visitDepartmentProductRepository.findByVisitDepartmentVisitId(visitId);
-        if (!visitProducts.isEmpty()) {
-            return ApiResponse.error("Cannot cancel visit with existing products. Remove all products first.");
+            // Billing guard: non-managers cannot cancel a billed visit
+            if (!visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId).isEmpty()) {
+                return ApiResponse.error("Cannot cancel a billed visit. Use editBillVisit to correct the billing.");
+            }
+
+            List<VisitDepartmentProduct> visitProducts = visitDepartmentProductRepository.findByVisitDepartmentVisitId(visitId);
+            if (!visitProducts.isEmpty()) {
+                return ApiResponse.error("Cannot cancel visit with existing products. Remove all products first.");
+            }
         }
 
         List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(visitId);
@@ -923,16 +943,20 @@ public class VisitService {
         Visit saved = visitRepository.save(visit);
         meilisearchIndexService.indexVisit(saved);
         clinicEventPublisher.publishVisitCancelled(saved, null);
-        return ApiResponse.success("Visit cancelled.", visitToDto(saved));
+        return ApiResponse.success("Visit cancelled.", visitToDto(saved, null, authUser));
+    }
+
+    @Transactional
+    public ApiResponse<VisitDto> cancelVisit(UUID visitId) {
+        return cancelVisit(visitId, null);
     }
 
     /**
      * Permanently delete a visit and all its associated data.
-     * Only allowed for unbilled visits that are in CREATED or CANCELLED status.
-     * A billed visit cannot be deleted — it has a financial and audit trail.
+     * Managers and Administrators can delete any visit (including billed or completed visits).
      */
     @Transactional
-    public ApiResponse deleteVisit(UUID visitId) {
+    public ApiResponse deleteVisit(UUID visitId, AuthenticatedUser authUser) {
         if (visitId == null) {
             return ApiResponse.error("visitId is required.");
         }
@@ -943,37 +967,97 @@ public class VisitService {
         }
 
         Visit visit = visitOptional.get();
+        boolean isManagerOrAbove = isManagerOrAboveRole(authUser);
 
-        if (visit.getStatus() == VisitStatus.COMPLETED) {
-            return ApiResponse.error("Cannot delete a completed visit. Cancel it first.");
+        if (!isManagerOrAbove) {
+            if (visit.getStatus() == VisitStatus.COMPLETED) {
+                return ApiResponse.error("Cannot delete a completed visit. Cancel it first.");
+            }
+
+            // Billing guard: a billed visit cannot be deleted by non-managers.
+            if (!visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId).isEmpty()) {
+                return ApiResponse.error("Cannot delete a billed visit. Use editBillVisit to correct the billing, or cancel the visit instead.");
+            }
         }
 
-        // Billing guard: a billed visit cannot be deleted.
-        if (!visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId).isEmpty()) {
-            return ApiResponse.error("Cannot delete a billed visit. Use editBillVisit to correct the billing, or cancel the visit instead.");
-        }
-
-        // Delete all associated data in dependency order.
-        // VisitDepartmentProduct -> VisitDepartment -> VisitInsurance -> Visit
-        List<VisitDepartmentProduct> products = visitDepartmentProductRepository.findByVisitDepartmentVisitId(visitId);
-        for (VisitDepartmentProduct p : products) {
-            visitDepartmentProductRepository.delete(p);
-        }
-
+        // 1. Delete all departments (and their children, notes, diagnoses, medications,
+        // products, consultation answers, billing buckets, items, payments, snapshots)
         List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(visitId);
         for (VisitDepartment dept : departments) {
-            visitDepartmentRepository.delete(dept);
+            if (dept.getParentVisitDepartment() == null) {
+                visitDepartmentService.hardDeleteVisitDepartment(dept);
+            }
         }
 
-        List<com.nexxserve.nexxclinic.entity.VisitInsurance> insurances =
-            visitInsuranceRepository.findByVisitId(visitId);
-        for (com.nexxserve.nexxclinic.entity.VisitInsurance vi : insurances) {
-            visitInsuranceRepository.delete(vi);
+        // 2. Delete any remaining consultation answers for this visit
+        try {
+            List<ConsultationAnswer> remainingAnswers = consultationAnswerRepository.findByVisitIdOrderByUpdatedAtDesc(visitId);
+            if (!remainingAnswers.isEmpty()) {
+                consultationAnswerRepository.deleteAllInBatch(remainingAnswers);
+            }
+        } catch (Exception e) {
+            log.warn("Could not delete remaining consultation answers for visit {}: {}", visitId, e.getMessage());
         }
 
+        // 3. Delete any remaining billing containers for this visit
+        try {
+            List<VisitBilling> billings = visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId);
+            if (!billings.isEmpty()) {
+                visitBillingRepository.deleteAll(billings);
+                visitBillingRepository.flush();
+            }
+        } catch (Exception e) {
+            log.warn("Could not delete remaining billing containers for visit {}: {}", visitId, e.getMessage());
+        }
+
+        // 4. Delete billing versions for this visit
+        try {
+            List<VisitBillingVersion> versions = visitBillingVersionRepository.findByVisitIdOrderByVersionDesc(visitId);
+            if (!versions.isEmpty()) {
+                visitBillingVersionRepository.deleteAll(versions);
+                visitBillingVersionRepository.flush();
+            }
+        } catch (Exception e) {
+            log.warn("Could not delete billing versions for visit {}: {}", visitId, e.getMessage());
+        }
+
+        // 5. Delete price estimates for this visit
+        try {
+            visitPriceEstimateService.deleteEstimates(visitId);
+        } catch (Exception e) {
+            log.warn("Could not delete price estimates for visit {}: {}", visitId, e.getMessage());
+        }
+
+        // 6. Delete vital signs
+        try {
+            List<VisitVitalSignsGroup> vitalGroups = visitVitalSignsGroupRepository.findByVisitIdOrderByCreatedAtAsc(visitId);
+            for (VisitVitalSignsGroup g : vitalGroups) {
+                vitalMeasurementRepository.deleteByGroupId(g.getId());
+                visitVitalSignsGroupRepository.delete(g);
+            }
+        } catch (Exception e) {
+            log.warn("Could not delete vital signs for visit {}: {}", visitId, e.getMessage());
+        }
+
+        // 7. Delete linked insurances
+        try {
+            List<com.nexxserve.nexxclinic.entity.VisitInsurance> insurances = visitInsuranceRepository.findByVisitId(visitId);
+            for (com.nexxserve.nexxclinic.entity.VisitInsurance vi : insurances) {
+                visitInsuranceRepository.delete(vi);
+            }
+        } catch (Exception e) {
+            log.warn("Could not delete linked insurances for visit {}: {}", visitId, e.getMessage());
+        }
+
+        // 8. Finally delete the visit record itself
         visitRepository.deleteById(visitId);
         meilisearchIndexService.deleteVisit(visitId);
         return ApiResponse.success("Visit deleted.", null);
+    }
+
+    @Transactional
+    public ApiResponse deleteVisit(UUID visitId) {
+        return deleteVisit(visitId, null);
     }
 
     /**

@@ -71,7 +71,7 @@ public class VisitQueryController {
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         SearchVisitsInput input = new SearchVisitsInput(
-                null, null, null, recentDays, null, status, patientName, page, size
+                null, null, null, recentDays, true, status, patientName, page, size
         );
         return visitService.visits(input, authUser);
     }

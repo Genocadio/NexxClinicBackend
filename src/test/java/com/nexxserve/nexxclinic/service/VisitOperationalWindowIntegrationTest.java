@@ -134,6 +134,7 @@ class VisitOperationalWindowIntegrationTest {
 
         Visit openVisit = createVisit(patient, VisitStatus.CREATED, LocalDateTime.now().minusDays(1), null);
         Visit completedVisit = createVisit(patient, VisitStatus.COMPLETED, LocalDateTime.now().minusDays(1), null);
+        Visit cancelledVisit = createVisit(patient, VisitStatus.CANCELLED, LocalDateTime.now().minusDays(1), null);
 
         SearchVisitsInput activeInput = new SearchVisitsInput(
                 null, null, null, null, true, null, patient.getFullName(), 0, 50
@@ -144,5 +145,6 @@ class VisitOperationalWindowIntegrationTest {
         List<UUID> returnedIds = response.data().stream().map(VisitDto::id).toList();
         assertTrue(returnedIds.contains(openVisit.getId()));
         assertFalse(returnedIds.contains(completedVisit.getId()));
+        assertFalse(returnedIds.contains(cancelledVisit.getId()));
     }
 }

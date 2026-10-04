@@ -258,16 +258,16 @@ public class VisitMutationController {
             @Argument UUID visitId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.cancelVisit(visitId);
+        return visitService.cancelVisit(visitId, authUser);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.MANAGER})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.MANAGER})
     @MutationMapping
     public ApiResponse deleteVisit(
             @Argument UUID visitId,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return visitService.deleteVisit(visitId);
+        return visitService.deleteVisit(visitId, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.MANAGER})

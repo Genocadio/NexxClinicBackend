@@ -182,12 +182,14 @@ public class MeilisearchIndexService {
     public record SearchHit(List<UUID> ids, long total) {
     }
 
-    public SearchHit searchVisits(String patientName, VisitStatus status, Long visitDateEpochDay, int page, int size) {
+    public SearchHit searchVisits(String patientName, VisitStatus status, Boolean activeOnly, Long visitDateEpochDay, int page, int size) {
         List<String> filters = new ArrayList<>();
 
         String q = patientName;
         if (status != null) {
             filters.add("status = \"" + status.name() + "\"");
+        } else if (Boolean.TRUE.equals(activeOnly)) {
+            filters.add("(status = \"CREATED\" OR status = \"IN_PROGRESS\")");
         }
         if (visitDateEpochDay != null) {
             filters.add("visitDateEpochDay = " + visitDateEpochDay);
