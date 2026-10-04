@@ -101,6 +101,7 @@ public class VisitDepartmentService {
     private final com.nexxserve.nexxclinic.repository.VisitDepartmentProductSnapshotRepository visitDepartmentProductSnapshotRepository;
     private final RolePermissionService rolePermissionService;
     private final com.nexxserve.nexxclinic.service.billing.BillingProductService billingProductService;
+    private final com.nexxserve.nexxclinic.events.ClinicEventPublisher clinicEventPublisher;
 
     public VisitDepartmentService(
             VisitRepository visitRepository,
@@ -130,7 +131,8 @@ public class VisitDepartmentService {
             MeilisearchIndexService meilisearchIndexService,
             com.nexxserve.nexxclinic.repository.VisitDepartmentProductSnapshotRepository visitDepartmentProductSnapshotRepository,
             @Lazy RolePermissionService rolePermissionService,
-            @Lazy com.nexxserve.nexxclinic.service.billing.BillingProductService billingProductService
+            @Lazy com.nexxserve.nexxclinic.service.billing.BillingProductService billingProductService,
+            com.nexxserve.nexxclinic.events.ClinicEventPublisher clinicEventPublisher
     ) {
         this.visitRepository = visitRepository;
         this.visitDepartmentRepository = visitDepartmentRepository;
@@ -160,6 +162,7 @@ public class VisitDepartmentService {
         this.visitDepartmentProductSnapshotRepository = visitDepartmentProductSnapshotRepository;
         this.rolePermissionService = rolePermissionService;
         this.billingProductService = billingProductService;
+        this.clinicEventPublisher = clinicEventPublisher;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -326,6 +329,7 @@ public class VisitDepartmentService {
 
         // Return refreshed visit DTO via visitRepository – caller can map if needed
         Visit refreshed = visitRepository.findById(visitId).orElse(visit);
+        clinicEventPublisher.publishDepartmentStateChanged(saved, resolveWorker(authUser));
         return ApiResponse.success("Department added to visit.", visitService.visitToDto(refreshed, null, authUser));
     }
 
@@ -1280,6 +1284,13 @@ public class VisitDepartmentService {
         } catch (Exception ex) {
             log.warn("Failed to sync clinical product change to billing: {}", ex.getMessage());
         }
+        clinicEventPublisher.publishProductChanged(
+            visitDepartment,
+            product.getName(),
+            item.getQuantity() != null ? item.getQuantity().intValue() : 1,
+            "ADD",
+            actingUser
+        );
         return ApiResponse.success("Product added to visit department.", visitDepartmentToDto(visitDepartment));
     }
 
@@ -1381,6 +1392,13 @@ public class VisitDepartmentService {
             VisitDepartment mappedDepartment = deleteChildVisitDepartmentIfEmpty(affectedDepartment);
             UUID targetDepartmentId = mappedDepartment != null ? mappedDepartment.getId() : affectedDepartment.getId();
             VisitDepartment freshDepartment = visitDepartmentRepository.findById(targetDepartmentId).orElse(affectedDepartment);
+            clinicEventPublisher.publishProductChanged(
+                freshDepartment,
+                item.getProduct() != null ? item.getProduct().getName() : "Product",
+                0,
+                "REMOVE",
+                null
+            );
             return ApiResponse.success("Visit department product removed.", visitDepartmentToDto(freshDepartment));
         }
 
@@ -1394,6 +1412,13 @@ public class VisitDepartmentService {
         } catch (Exception ex) {
             log.warn("Failed to sync clinical product change to billing: {}", ex.getMessage());
         }
+        clinicEventPublisher.publishProductChanged(
+            saved.getVisitDepartment(),
+            saved.getProduct() != null ? saved.getProduct().getName() : "Product",
+            saved.getQuantity() != null ? saved.getQuantity().intValue() : 1,
+            "UPDATE",
+            null
+        );
         return ApiResponse.success("Visit department product quantity updated.", visitDepartmentToDto(saved.getVisitDepartment()));
     }
 
@@ -1442,6 +1467,13 @@ public class VisitDepartmentService {
         VisitDepartment mappedDepartment = deleteChildVisitDepartmentIfEmpty(affectedDepartment);
         UUID targetDepartmentId = mappedDepartment != null ? mappedDepartment.getId() : affectedDepartment.getId();
         VisitDepartment freshDepartment = visitDepartmentRepository.findById(targetDepartmentId).orElse(affectedDepartment);
+        clinicEventPublisher.publishProductChanged(
+            freshDepartment,
+            item.getProduct() != null ? item.getProduct().getName() : "Product",
+            0,
+            "REMOVE",
+            null
+        );
         return ApiResponse.success("Visit department product removed.", visitDepartmentToDto(freshDepartment));
     }
 
@@ -1463,7 +1495,14 @@ public class VisitDepartmentService {
 
         item.setConfirmedBy(actingUser);
         item.setBillingConfirmationStatus(com.nexxserve.nexxclinic.model.BillingConfirmationStatus.CONFIRMED);
-        visitDepartmentProductRepository.save(item);
+        VisitDepartmentProduct saved = visitDepartmentProductRepository.save(item);
+        clinicEventPublisher.publishProductChanged(
+            saved.getVisitDepartment(),
+            saved.getProduct() != null ? saved.getProduct().getName() : "Product",
+            saved.getQuantity() != null ? saved.getQuantity().intValue() : 1,
+            "CONFIRM",
+            actingUser
+        );
 
         return ApiResponse.success("Product confirmed by operator.", visitDepartmentToDto(item.getVisitDepartment()));
     }
@@ -1587,6 +1626,7 @@ public class VisitDepartmentService {
         }
 
         VisitDepartment saved = visitDepartmentRepository.save(department);
+        clinicEventPublisher.publishDepartmentStateChanged(saved, resolveWorker(authUser));
         return ApiResponse.success("Visit department status updated.", visitDepartmentToDto(saved));
     }
 
@@ -1616,6 +1656,7 @@ public class VisitDepartmentService {
 
         addProcessorToVisitDepartment(department, processorOptional.get());
         VisitDepartment saved = visitDepartmentRepository.save(department);
+        clinicEventPublisher.publishDepartmentStateChanged(saved, resolveWorker(authUser));
         return ApiResponse.success("Visit department processor added.", visitDepartmentToDto(saved));
     }
 

@@ -129,7 +129,8 @@ public class VisitBillingService {
         InvoiceGenerator invoiceGenerator,
         @Lazy VisitPriceEstimateService visitPriceEstimateService,
         VisitInsuranceRepository visitInsuranceRepository,
-        com.nexxserve.nexxclinic.repository.VisitPriceEstimateRepository visitPriceEstimateRepository
+        com.nexxserve.nexxclinic.repository.VisitPriceEstimateRepository visitPriceEstimateRepository,
+        com.nexxserve.nexxclinic.events.ClinicEventPublisher clinicEventPublisher
     ) {
         this.visitRepository = visitRepository;
         this.visitDepartmentRepository = visitDepartmentRepository;
@@ -157,7 +158,10 @@ public class VisitBillingService {
         this.visitPriceEstimateService = visitPriceEstimateService;
         this.visitInsuranceRepository = visitInsuranceRepository;
         this.visitPriceEstimateRepository = visitPriceEstimateRepository;
+        this.clinicEventPublisher = clinicEventPublisher;
     }
+
+    private final com.nexxserve.nexxclinic.events.ClinicEventPublisher clinicEventPublisher;
 
     @Transactional
     public ApiResponse billVisit(
@@ -178,6 +182,8 @@ public class VisitBillingService {
                 org.springframework.transaction.interceptor.TransactionAspectSupport
                     .currentTransactionStatus()
                     .setRollbackOnly();
+            } else if (input != null && input.visitId() != null) {
+                visitRepository.findById(input.visitId()).ifPresent(v -> clinicEventPublisher.publishBillingCompleted(v, resolveWorker(authUser)));
             }
             return result;
         } catch (IllegalArgumentException e) {
@@ -1607,7 +1613,14 @@ public class VisitBillingService {
         RecordVisitBillingPaymentInput input,
         AuthenticatedUser authUser
     ) {
-        return billingPaymentService.recordVisitBillingPayment(input, authUser);
+        ApiResponse res = billingPaymentService.recordVisitBillingPayment(input, authUser);
+        if (res.status() == com.nexxserve.nexxclinic.model.ResponseStatus.SUCCESS && input != null && input.departmentInsuranceBillingId() != null) {
+            departmentInsuranceBillingRepository.findById(input.departmentInsuranceBillingId())
+                .map(dib -> dib.getVisitDepartmentBilling() != null && dib.getVisitDepartmentBilling().getVisitBilling() != null
+                        ? dib.getVisitDepartmentBilling().getVisitBilling().getVisit() : null)
+                .ifPresent(v -> clinicEventPublisher.publishBillingCompleted(v, resolveWorker(authUser)));
+        }
+        return res;
     }
 
     @Transactional(readOnly = true)

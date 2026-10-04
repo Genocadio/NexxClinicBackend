@@ -52,9 +52,15 @@ public class JwtSecurityFilter extends OncePerRequestFilter {
             return;
         }
 
+        String token = null;
         String authHeader = request.getHeader("Authorization");
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String token = authHeader.substring(7);
+            token = authHeader.substring(7);
+        } else if (request.getParameter("token") != null && !request.getParameter("token").isBlank()) {
+            token = request.getParameter("token");
+        }
+
+        if (token != null) {
             try {
                 AccessTokenInfo tokenInfo = jwtService.parseAccessToken(token);
 
@@ -71,7 +77,7 @@ public class JwtSecurityFilter extends OncePerRequestFilter {
                     SecurityContextHolder.getContext().setAuthentication(auth);
                 }
             } catch (Exception e) {
-                log.debug("JWT validation failed for REST request: {}", e.getMessage());
+                log.warn("JWT validation failed for REST request {}: {}", request.getRequestURI(), e.getMessage(), e);
                 // Not authenticated — let Spring Security handle the 401
             }
         }

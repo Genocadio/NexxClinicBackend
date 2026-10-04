@@ -104,6 +104,7 @@ public class VisitService {
     private final RolePermissionService rolePermissionService;
     private final com.nexxserve.nexxclinic.service.billing.BillingProductService billingProductService;
     private final VisitDepartmentNoteService visitDepartmentNoteService;
+    private final com.nexxserve.nexxclinic.events.ClinicEventPublisher clinicEventPublisher;
 
     public VisitService(
             VisitRepository visitRepository,
@@ -134,7 +135,8 @@ public class VisitService {
             ConsultationAnswerRepository consultationAnswerRepository,
             @Lazy RolePermissionService rolePermissionService,
             @Lazy com.nexxserve.nexxclinic.service.billing.BillingProductService billingProductService,
-            @Lazy VisitDepartmentNoteService visitDepartmentNoteService
+            @Lazy VisitDepartmentNoteService visitDepartmentNoteService,
+            com.nexxserve.nexxclinic.events.ClinicEventPublisher clinicEventPublisher
     ) {
         this.visitRepository = visitRepository;
         this.visitInsuranceRepository = visitInsuranceRepository;
@@ -165,6 +167,7 @@ public class VisitService {
         this.rolePermissionService = rolePermissionService;
         this.billingProductService = billingProductService;
         this.visitDepartmentNoteService = visitDepartmentNoteService;
+        this.clinicEventPublisher = clinicEventPublisher;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -234,6 +237,7 @@ public class VisitService {
 
         Visit latest = visitRepository.findById(saved.getId()).orElse(saved);
         meilisearchIndexService.indexVisit(latest);
+        clinicEventPublisher.publishVisitCreated(latest, actingUser);
         return ApiResponse.success("Visit created.", visitToDto(latest, null, authUser));
     }
 
@@ -811,6 +815,7 @@ public class VisitService {
 
         visit.setStatus(VisitStatus.COMPLETED);
         Visit saved = visitRepository.save(visit);
+        clinicEventPublisher.publishVisitDischarged(saved, resolveWorker(authUser));
         return ApiResponse.success("Visit completed.", visitToDto(saved));
     }
 
@@ -917,6 +922,7 @@ public class VisitService {
         visit.setStatus(VisitStatus.CANCELLED);
         Visit saved = visitRepository.save(visit);
         meilisearchIndexService.indexVisit(saved);
+        clinicEventPublisher.publishVisitCancelled(saved, null);
         return ApiResponse.success("Visit cancelled.", visitToDto(saved));
     }
 
@@ -1061,6 +1067,7 @@ public class VisitService {
         visit.setStatus(VisitStatus.FINALISED);
         Visit saved = visitRepository.save(visit);
         meilisearchIndexService.indexVisit(saved);
+        clinicEventPublisher.publishVisitDischarged(saved, null);
         return ApiResponse.success("Visit finalised.", visitToDto(saved));
     }
 
@@ -1106,6 +1113,7 @@ public class VisitService {
         visit.setStatus(VisitStatus.IN_PROGRESS);
         Visit saved = visitRepository.save(visit);
         meilisearchIndexService.indexVisit(saved);
+        clinicEventPublisher.publishVisitReopened(saved, resolveWorker(authUser));
         return ApiResponse.success("Visit reopened. You can now add new departments.", visitToDto(saved));
     }
 
@@ -1162,6 +1170,7 @@ public class VisitService {
         visitInsuranceRepository.saveAll(links);
         visitPriceEstimateService.recomputeEstimates(visitId);
         Visit refreshedVisit = visitRepository.findById(visitId).orElse(visit);
+        clinicEventPublisher.publishInsuranceChanged(refreshedVisit, "LINK", null, resolveWorker(authUser));
         return ApiResponse.success("Insurance linked to visit.", visitToDto(refreshedVisit));
     }
 
@@ -1216,6 +1225,7 @@ public class VisitService {
         visitInsuranceRepository.deleteAll(linksToRemove);
         visitPriceEstimateService.recomputeEstimates(visitId);
         Visit refreshedVisit = visitRepository.findById(visitId).orElse(visit);
+        clinicEventPublisher.publishInsuranceChanged(refreshedVisit, "UNLINK", null, resolveWorker(authUser));
         return ApiResponse.success("Insurance unlinked from visit.", visitToDto(refreshedVisit));
     }
 
@@ -1276,6 +1286,7 @@ public class VisitService {
         }
 
         vitalMeasurementRepository.saveAll(measurements);
+        clinicEventPublisher.publishVitalsChanged(visit, actingUser);
         return ApiResponse.success("Vital signs added to visit.", visitToDto(visit));
     }
 
@@ -1335,6 +1346,7 @@ public class VisitService {
         }
 
         vitalMeasurementRepository.saveAll(measurements);
+        clinicEventPublisher.publishVitalsChanged(visit, resolveWorker(authUser));
         return ApiResponse.success("Vital signs updated successfully.", visitToDto(visit));
     }
 

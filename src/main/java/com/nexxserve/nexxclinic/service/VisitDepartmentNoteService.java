@@ -40,6 +40,7 @@ public class VisitDepartmentNoteService {
     private final VisitDepartmentNoteViewerRepository visitDepartmentNoteViewerRepository;
     private final WorkerRepository workerRepository;
     private final WorkerMapper workerMapper;
+    private final com.nexxserve.nexxclinic.events.ClinicEventPublisher clinicEventPublisher;
 
     public VisitDepartmentNoteService(
             VisitRepository visitRepository,
@@ -47,7 +48,8 @@ public class VisitDepartmentNoteService {
             VisitDepartmentNoteRepository visitDepartmentNoteRepository,
             VisitDepartmentNoteViewerRepository visitDepartmentNoteViewerRepository,
             WorkerRepository workerRepository,
-            WorkerMapper workerMapper
+            WorkerMapper workerMapper,
+            com.nexxserve.nexxclinic.events.ClinicEventPublisher clinicEventPublisher
     ) {
         this.visitRepository = visitRepository;
         this.visitDepartmentRepository = visitDepartmentRepository;
@@ -55,6 +57,7 @@ public class VisitDepartmentNoteService {
         this.visitDepartmentNoteViewerRepository = visitDepartmentNoteViewerRepository;
         this.workerRepository = workerRepository;
         this.workerMapper = workerMapper;
+        this.clinicEventPublisher = clinicEventPublisher;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -216,6 +219,7 @@ public class VisitDepartmentNoteService {
         }
 
         VisitDepartmentNote saved = visitDepartmentNoteRepository.save(note);
+        clinicEventPublisher.publishNoteAdded(saved, actingUser);
         return ApiResponse.success("Note added successfully.", visitDepartmentNoteToDto(saved, authUser));
     }
 
