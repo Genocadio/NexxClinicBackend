@@ -1384,17 +1384,27 @@ public class VisitDepartmentService {
                 return ApiResponse.error("Cannot remove a product that has billing history. Use editBillVisit to correct the billing instead.");
             }
             VisitDepartment affectedDepartment = item.getVisitDepartment();
-            visitPriceEstimateService.deleteEstimateByVisitDepartmentProductId(item.getId());
+            UUID affectedDepartmentId = affectedDepartment != null ? affectedDepartment.getId() : null;
+            UUID visitId = (affectedDepartment != null && affectedDepartment.getVisit() != null) ? affectedDepartment.getVisit().getId() : null;
+            UUID productId = item.getId();
+            String productName = item.getProduct() != null ? item.getProduct().getName() : "Product";
+
             visitDepartmentProductRepository.delete(item);
             visitDepartmentProductRepository.flush();
-            reopenVisitIfCompleted(visit);
-            visitPriceEstimateService.recomputeEstimates(visit.getId());
-            VisitDepartment mappedDepartment = deleteChildVisitDepartmentIfEmpty(affectedDepartment);
-            UUID targetDepartmentId = mappedDepartment != null ? mappedDepartment.getId() : affectedDepartment.getId();
-            VisitDepartment freshDepartment = visitDepartmentRepository.findById(targetDepartmentId).orElse(affectedDepartment);
+            visitPriceEstimateService.deleteEstimateByVisitDepartmentProductId(productId);
+
+            if (visitId != null) {
+                reopenVisitIfCompleted(visitId);
+                visitPriceEstimateService.recomputeEstimates(visitId);
+            }
+            VisitDepartment mappedDepartment = deleteChildVisitDepartmentIfEmpty(affectedDepartmentId);
+            UUID targetDepartmentId = mappedDepartment != null ? mappedDepartment.getId() : affectedDepartmentId;
+            VisitDepartment freshDepartment = targetDepartmentId != null
+                    ? visitDepartmentRepository.findByIdWithVisitAndDepartment(targetDepartmentId).orElse(affectedDepartment)
+                    : affectedDepartment;
             clinicEventPublisher.publishProductChanged(
                 freshDepartment,
-                item.getProduct() != null ? item.getProduct().getName() : "Product",
+                productName,
                 0,
                 "REMOVE",
                 null
@@ -1405,8 +1415,10 @@ public class VisitDepartmentService {
         item.setQuantity(input.quantity());
 
         VisitDepartmentProduct saved = visitDepartmentProductRepository.save(item);
-        deleteChildVisitDepartmentIfEmpty(saved.getVisitDepartment());
-        visitPriceEstimateService.recomputeEstimates(visit.getId());
+        deleteChildVisitDepartmentIfEmpty(saved.getVisitDepartment() != null ? saved.getVisitDepartment().getId() : null);
+        if (saved.getVisitDepartment() != null && saved.getVisitDepartment().getVisit() != null) {
+            visitPriceEstimateService.recomputeEstimates(saved.getVisitDepartment().getVisit().getId());
+        }
         try {
             billingProductService.syncClinicalProductChangeToBilling(saved);
         } catch (Exception ex) {
@@ -1428,16 +1440,18 @@ public class VisitDepartmentService {
             return ApiResponse.error("visitDepartmentProductId is required.");
         }
 
-        Optional<VisitDepartmentProduct> itemOptional = visitDepartmentProductRepository.findById(visitDepartmentProductId);
+        Optional<VisitDepartmentProduct> itemOptional = visitDepartmentProductRepository.findByIdWithDepartmentAndVisit(visitDepartmentProductId);
         if (itemOptional.isEmpty()) {
             return ApiResponse.error("Visit department product not found.");
         }
 
         VisitDepartmentProduct item = itemOptional.get();
-        Visit visit = item.getVisitDepartment().getVisit();
         VisitDepartment affectedDepartment = item.getVisitDepartment();
-        VisitDepartmentStatus deptStatus = affectedDepartment.getStatus();
+        UUID affectedDepartmentId = affectedDepartment != null ? affectedDepartment.getId() : null;
+        UUID visitId = (affectedDepartment != null && affectedDepartment.getVisit() != null) ? affectedDepartment.getVisit().getId() : null;
+        VisitDepartmentStatus deptStatus = affectedDepartment != null ? affectedDepartment.getStatus() : null;
         boolean isDeptEditing = deptStatus == VisitDepartmentStatus.DEPARTMENT_EDITING;
+        String productName = item.getProduct() != null ? item.getProduct().getName() : "Product";
 
         // Profile products are managed by the profile — they cannot be removed
         // individually. Only changeVisitDepartmentProfile can replace them.
@@ -1446,8 +1460,8 @@ public class VisitDepartmentService {
         }
 
         // D2 fix: products in a department that has been BILLED are frozen for finance.
-        if (!isDeptEditing && deptStatus == VisitDepartmentStatus.BILLING
-                && visitDepartmentBillingRepository.existsByVisitDepartmentId(affectedDepartment.getId())) {
+        if (!isDeptEditing && deptStatus == VisitDepartmentStatus.BILLING && affectedDepartmentId != null
+                && visitDepartmentBillingRepository.existsByVisitDepartmentId(affectedDepartmentId)) {
             return ApiResponse.error("Cannot remove a product from a billed department. Use startBillEditing to enter edit mode first.");
         }
 
@@ -1458,18 +1472,24 @@ public class VisitDepartmentService {
         if (!billingItems.isEmpty()) {
             return ApiResponse.error("Cannot remove a product that has billing history. Use editBillVisit to correct the billing instead.");
         }
-        visitPriceEstimateService.deleteEstimateByVisitDepartmentProductId(item.getId());
+
         visitDepartmentProductRepository.delete(item);
         visitDepartmentProductRepository.flush();
-        reopenVisitIfCompleted(visit);
-        visitPriceEstimateService.recomputeEstimates(visit.getId());
+        visitPriceEstimateService.deleteEstimateByVisitDepartmentProductId(visitDepartmentProductId);
 
-        VisitDepartment mappedDepartment = deleteChildVisitDepartmentIfEmpty(affectedDepartment);
-        UUID targetDepartmentId = mappedDepartment != null ? mappedDepartment.getId() : affectedDepartment.getId();
-        VisitDepartment freshDepartment = visitDepartmentRepository.findById(targetDepartmentId).orElse(affectedDepartment);
+        if (visitId != null) {
+            reopenVisitIfCompleted(visitId);
+            visitPriceEstimateService.recomputeEstimates(visitId);
+        }
+
+        VisitDepartment mappedDepartment = deleteChildVisitDepartmentIfEmpty(affectedDepartmentId);
+        UUID targetDepartmentId = mappedDepartment != null ? mappedDepartment.getId() : affectedDepartmentId;
+        VisitDepartment freshDepartment = targetDepartmentId != null
+                ? visitDepartmentRepository.findByIdWithVisitAndDepartment(targetDepartmentId).orElse(affectedDepartment)
+                : affectedDepartment;
         clinicEventPublisher.publishProductChanged(
             freshDepartment,
-            item.getProduct() != null ? item.getProduct().getName() : "Product",
+            productName,
             0,
             "REMOVE",
             null
@@ -2016,9 +2036,20 @@ public class VisitDepartmentService {
     // ─────────────────────────────────────────────────────────────
 
     public VisitDepartmentDto visitDepartmentToDto(VisitDepartment visitDepartment) {
+        if (visitDepartment == null) {
+            return null;
+        }
+        UUID visitId = null;
+        try {
+            if (visitDepartment.getVisit() != null) {
+                visitId = visitDepartment.getVisit().getId();
+            }
+        } catch (Exception e) {
+            // lazy proxy without session
+        }
         return visitDepartmentToDto(
                 visitDepartment,
-                resolveVisitInsuranceProviderIds(visitDepartment.getVisit().getId()),
+                resolveVisitInsuranceProviderIds(visitId),
                 new LinkedHashSet<>(),
                 null
         );
@@ -2922,36 +2953,53 @@ public class VisitDepartmentService {
         }
     }
 
+    public VisitDepartment deleteChildVisitDepartmentIfEmpty(UUID visitDepartmentId) {
+        if (visitDepartmentId == null) {
+            return null;
+        }
+        Optional<VisitDepartment> vdOpt = visitDepartmentRepository.findById(visitDepartmentId);
+        if (vdOpt.isEmpty()) {
+            return null;
+        }
+        return deleteChildVisitDepartmentIfEmpty(vdOpt.get());
+    }
+
     public VisitDepartment deleteChildVisitDepartmentIfEmpty(VisitDepartment visitDepartment) {
-        if (visitDepartment == null) {
+        if (visitDepartment == null || visitDepartment.getId() == null) {
             return null;
         }
 
-        if (visitDepartment.getParentVisitDepartment() == null) {
-            return visitDepartment;
+        Optional<VisitDepartment> freshOpt = visitDepartmentRepository.findById(visitDepartment.getId());
+        if (freshOpt.isEmpty()) {
+            return null;
+        }
+        VisitDepartment target = freshOpt.get();
+
+        if (target.getParentVisitDepartment() == null) {
+            return target;
         }
 
         // Use IncludingDeleted: a soft-deleted product still has a FK row,
         // so the department is not truly empty and must not be deleted.
         List<VisitDepartmentProduct> remainingProducts = visitDepartmentProductRepository
-                .findByVisitDepartmentIdIncludingDeleted(visitDepartment.getId());
+                .findByVisitDepartmentIdIncludingDeleted(target.getId());
         if (!remainingProducts.isEmpty()) {
-            return visitDepartment;
+            return target;
         }
 
         // FK guard: a child with clinical/financial dependents cannot be hard-deleted —
         // deleting it would throw DataIntegrityViolationException -> 500. Keep it and
         // let the caller decide (it will surface in the DTO as a still-present child).
-        if (!visitDepartmentDiagnosisRepository.findByVisitDepartmentId(visitDepartment.getId()).isEmpty()
-                || !visitDepartmentMedicationRepository.findByVisitDepartmentId(visitDepartment.getId()).isEmpty()
-                || !visitPreInstructionRepository.findByVisitDepartmentIdOrderByCreatedAtAsc(visitDepartment.getId()).isEmpty()
-                || visitDepartmentNoteServiceHasNotes(visitDepartment.getId())
-                || visitDepartmentBillingRepository.existsByVisitDepartmentId(visitDepartment.getId())) {
-            return visitDepartment;
+        if (!visitDepartmentDiagnosisRepository.findByVisitDepartmentId(target.getId()).isEmpty()
+                || !visitDepartmentMedicationRepository.findByVisitDepartmentId(target.getId()).isEmpty()
+                || !visitPreInstructionRepository.findByVisitDepartmentIdOrderByCreatedAtAsc(target.getId()).isEmpty()
+                || visitDepartmentNoteServiceHasNotes(target.getId())
+                || visitDepartmentBillingRepository.existsByVisitDepartmentId(target.getId())) {
+            return target;
         }
 
-        VisitDepartment parent = visitDepartment.getParentVisitDepartment();
-        visitDepartmentRepository.delete(visitDepartment);
+        VisitDepartment parent = target.getParentVisitDepartment();
+        visitDepartmentRepository.delete(target);
         visitDepartmentRepository.flush();
         return parent;
     }
@@ -2975,10 +3023,29 @@ public class VisitDepartmentService {
         return workerRepository.findById(authUser.userId()).orElse(null);
     }
 
+    private void reopenVisitIfCompleted(UUID visitId) {
+        if (visitId == null) return;
+        try {
+            visitRepository.findById(visitId).ifPresent(this::reopenVisitIfCompleted);
+        } catch (Exception ignored) {}
+    }
+
     private void reopenVisitIfCompleted(Visit visit) {
-        if (visit.getStatus() == VisitStatus.COMPLETED) {
-            visit.setStatus(VisitStatus.IN_PROGRESS);
-            visitRepository.save(visit);
+        if (visit == null) return;
+        try {
+            if (visit.getStatus() == VisitStatus.COMPLETED) {
+                visit.setStatus(VisitStatus.IN_PROGRESS);
+                visitRepository.save(visit);
+            }
+        } catch (Exception e) {
+            if (visit.getId() != null) {
+                visitRepository.findById(visit.getId()).ifPresent(v -> {
+                    if (v.getStatus() == VisitStatus.COMPLETED) {
+                        v.setStatus(VisitStatus.IN_PROGRESS);
+                        visitRepository.save(v);
+                    }
+                });
+            }
         }
     }
 

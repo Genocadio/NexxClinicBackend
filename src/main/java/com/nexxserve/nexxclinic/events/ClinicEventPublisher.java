@@ -6,7 +6,9 @@ import com.nexxserve.nexxclinic.entity.VisitDepartmentNote;
 import com.nexxserve.nexxclinic.entity.Worker;
 import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
+import com.nexxserve.nexxclinic.model.VisitStatus;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -33,61 +35,88 @@ public class ClinicEventPublisher {
     public void publishVisitCreated(Visit visit, Worker creator) {
         if (visit == null) return;
         try {
+            UUID visitId = safeGetVisitId(visit);
+            if (visitId == null) return;
+
+            UUID patientId = safeGetPatientId(visit);
+            String patientName = safeGetPatientName(visit);
+            VisitStatus visitStatus = safeGetVisitStatus(visit);
+
             Set<UUID> targetDeptIds = new HashSet<>();
-            List<VisitDepartment> depts = visitDepartmentRepository.findByVisitId(visit.getId());
-            for (VisitDepartment vd : depts) {
-                if (vd.getDepartment() != null) {
-                    targetDeptIds.add(vd.getDepartment().getId());
+            try {
+                List<VisitDepartment> depts = visitDepartmentRepository.findByVisitId(visitId);
+                for (VisitDepartment vd : depts) {
+                    if (vd != null && vd.getDepartment() != null) {
+                        targetDeptIds.add(vd.getDepartment().getId());
+                    }
                 }
-            }
+            } catch (Exception ignored) {}
 
             ClinicSseEvent event = ClinicSseEvent.builder()
                     .type("VISIT_CREATED")
-                    .visitId(visit.getId())
-                    .patientId(visit.getPatient() != null ? visit.getPatient().getId() : null)
-                    .patientName(visit.getPatient() != null ? visit.getPatient().getFirstName() + " " + visit.getPatient().getLastName() : null)
-                    .visitStatus(visit.getStatus())
+                    .visitId(visitId)
+                    .patientId(patientId)
+                    .patientName(patientName)
+                    .visitStatus(visitStatus)
                     .actorId(creator != null ? creator.getId() : null)
-                    .actorName(creator != null ? creator.getFirstName() + " " + creator.getLastName() : null)
+                    .actorName(creator != null ? (creator.getFirstName() + " " + creator.getLastName()).trim() : null)
                     .targetRoles(Set.of(RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.ADMIN, RoleName.MANAGER, RoleName.CLINIC_ADMIN))
                     .targetDepartmentIds(targetDeptIds)
                     .build();
 
             sseRegistry.broadcast(event);
         } catch (Exception e) {
-            log.warn("Error broadcasting VISIT_CREATED event for visit {}: {}", visit.getId(), e.getMessage());
+            log.warn("Error broadcasting VISIT_CREATED event: {}", e.getMessage());
         }
     }
 
     public void publishDepartmentStateChanged(VisitDepartment vd, Worker actor) {
-        if (vd == null || vd.getVisit() == null) return;
+        if (vd == null) return;
         try {
+            Visit visit = vd.getVisit();
+            UUID visitId = safeGetVisitId(visit);
+            if (visitId == null) return;
+
+            UUID patientId = safeGetPatientId(visit);
+            String patientName = safeGetPatientName(visit);
+            VisitStatus visitStatus = safeGetVisitStatus(visit);
+
             Set<RoleName> targetRoles = new HashSet<>(Set.of(RoleName.CLINICIAN, RoleName.NURSE, RoleName.ADMIN, RoleName.MANAGER, RoleName.CLINIC_ADMIN));
             if (vd.getStatus() == VisitDepartmentStatus.BILLING || vd.getStatus() == VisitDepartmentStatus.COMPLETED) {
                 targetRoles.add(RoleName.FINANCE);
             }
 
             Set<UUID> targetWorkerIds = new HashSet<>();
-            if (vd.getProcessors() != null && !vd.getProcessors().isEmpty()) {
-                vd.getProcessors().forEach(p -> targetWorkerIds.add(p.getId()));
-            }
+            try {
+                if (vd.getProcessors() != null && !vd.getProcessors().isEmpty()) {
+                    vd.getProcessors().forEach(p -> {
+                        if (p != null && p.getId() != null) targetWorkerIds.add(p.getId());
+                    });
+                }
+            } catch (Exception ignored) {}
 
             Set<UUID> targetDeptIds = new HashSet<>();
-            if (vd.getDepartment() != null) {
-                targetDeptIds.add(vd.getDepartment().getId());
-            }
+            UUID departmentId = null;
+            String departmentName = null;
+            try {
+                if (vd.getDepartment() != null) {
+                    departmentId = vd.getDepartment().getId();
+                    departmentName = vd.getDepartment().getName();
+                    targetDeptIds.add(departmentId);
+                }
+            } catch (Exception ignored) {}
 
             ClinicSseEvent event = ClinicSseEvent.builder()
                     .type("VISIT_DEPARTMENT_STATE_CHANGED")
-                    .visitId(vd.getVisit().getId())
-                    .patientId(vd.getVisit().getPatient() != null ? vd.getVisit().getPatient().getId() : null)
-                    .patientName(vd.getVisit().getPatient() != null ? vd.getVisit().getPatient().getFirstName() + " " + vd.getVisit().getPatient().getLastName() : null)
-                    .departmentId(vd.getDepartment() != null ? vd.getDepartment().getId() : null)
-                    .departmentName(vd.getDepartment() != null ? vd.getDepartment().getName() : null)
+                    .visitId(visitId)
+                    .patientId(patientId)
+                    .patientName(patientName)
+                    .departmentId(departmentId)
+                    .departmentName(departmentName)
                     .departmentStatus(vd.getStatus())
-                    .visitStatus(vd.getVisit().getStatus())
+                    .visitStatus(visitStatus)
                     .actorId(actor != null ? actor.getId() : null)
-                    .actorName(actor != null ? actor.getFirstName() + " " + actor.getLastName() : null)
+                    .actorName(actor != null ? (actor.getFirstName() + " " + actor.getLastName()).trim() : null)
                     .targetRoles(targetRoles)
                     .targetDepartmentIds(targetDeptIds)
                     .targetWorkerIds(targetWorkerIds)
@@ -95,31 +124,48 @@ public class ClinicEventPublisher {
 
             sseRegistry.broadcast(event);
         } catch (Exception e) {
-            log.warn("Error broadcasting VISIT_DEPARTMENT_STATE_CHANGED event for visit {}: {}", vd.getVisit().getId(), e.getMessage());
+            log.warn("Error broadcasting VISIT_DEPARTMENT_STATE_CHANGED event: {}", e.getMessage());
         }
     }
 
     public void publishProductChanged(VisitDepartment vd, String productName, Integer quantity, String action, Worker actor) {
-        if (vd == null || vd.getVisit() == null) return;
+        if (vd == null) return;
         try {
+            Visit visit = vd.getVisit();
+            UUID visitId = safeGetVisitId(visit);
+            if (visitId == null) return;
+
+            UUID patientId = safeGetPatientId(visit);
+            String patientName = safeGetPatientName(visit);
+            VisitStatus visitStatus = safeGetVisitStatus(visit);
+
             Map<String, Object> metadata = new HashMap<>();
             metadata.put("action", action);
             if (productName != null) metadata.put("productName", productName);
             if (quantity != null) metadata.put("quantity", quantity);
 
-            Set<UUID> targetWorkerIds = extractAttendingWorkers(vd.getVisit());
+            Set<UUID> targetWorkerIds = extractAttendingWorkers(visitId);
+
+            UUID departmentId = null;
+            String departmentName = null;
+            try {
+                if (vd.getDepartment() != null) {
+                    departmentId = vd.getDepartment().getId();
+                    departmentName = vd.getDepartment().getName();
+                }
+            } catch (Exception ignored) {}
 
             ClinicSseEvent event = ClinicSseEvent.builder()
                     .type("VISIT_PRODUCT_CHANGED")
-                    .visitId(vd.getVisit().getId())
-                    .patientId(vd.getVisit().getPatient() != null ? vd.getVisit().getPatient().getId() : null)
-                    .patientName(vd.getVisit().getPatient() != null ? vd.getVisit().getPatient().getFirstName() + " " + vd.getVisit().getPatient().getLastName() : null)
-                    .departmentId(vd.getDepartment() != null ? vd.getDepartment().getId() : null)
-                    .departmentName(vd.getDepartment() != null ? vd.getDepartment().getName() : null)
+                    .visitId(visitId)
+                    .patientId(patientId)
+                    .patientName(patientName)
+                    .departmentId(departmentId)
+                    .departmentName(departmentName)
                     .departmentStatus(vd.getStatus())
-                    .visitStatus(vd.getVisit().getStatus())
+                    .visitStatus(visitStatus)
                     .actorId(actor != null ? actor.getId() : null)
-                    .actorName(actor != null ? actor.getFirstName() + " " + actor.getLastName() : null)
+                    .actorName(actor != null ? (actor.getFirstName() + " " + actor.getLastName()).trim() : null)
                     .targetRoles(Set.of(RoleName.CLINICIAN, RoleName.FINANCE, RoleName.ADMIN, RoleName.MANAGER, RoleName.CLINIC_ADMIN))
                     .targetWorkerIds(targetWorkerIds)
                     .metadata(metadata)
@@ -127,31 +173,48 @@ public class ClinicEventPublisher {
 
             sseRegistry.broadcast(event);
         } catch (Exception e) {
-            log.warn("Error broadcasting VISIT_PRODUCT_CHANGED event for visit {}: {}", vd.getVisit().getId(), e.getMessage());
+            log.warn("Error broadcasting VISIT_PRODUCT_CHANGED event: {}", e.getMessage());
         }
     }
 
     public void publishNoteAdded(VisitDepartmentNote note, Worker actor) {
-        if (note == null || note.getVisitDepartment() == null || note.getVisitDepartment().getVisit() == null) return;
+        if (note == null || note.getVisitDepartment() == null) return;
         try {
             VisitDepartment vd = note.getVisitDepartment();
+            Visit visit = vd.getVisit();
+            UUID visitId = safeGetVisitId(visit);
+            if (visitId == null) return;
+
+            UUID patientId = safeGetPatientId(visit);
+            String patientName = safeGetPatientName(visit);
+            VisitStatus visitStatus = safeGetVisitStatus(visit);
+
             Map<String, Object> metadata = new HashMap<>();
             metadata.put("noteId", note.getId());
             metadata.put("noteType", note.getNoteType() != null ? note.getNoteType().name() : "NOTE");
 
-            Set<UUID> targetWorkerIds = extractAttendingWorkers(vd.getVisit());
+            Set<UUID> targetWorkerIds = extractAttendingWorkers(visitId);
+
+            UUID departmentId = null;
+            String departmentName = null;
+            try {
+                if (vd.getDepartment() != null) {
+                    departmentId = vd.getDepartment().getId();
+                    departmentName = vd.getDepartment().getName();
+                }
+            } catch (Exception ignored) {}
 
             ClinicSseEvent event = ClinicSseEvent.builder()
                     .type("VISIT_NOTE_ADDED")
-                    .visitId(vd.getVisit().getId())
-                    .patientId(vd.getVisit().getPatient() != null ? vd.getVisit().getPatient().getId() : null)
-                    .patientName(vd.getVisit().getPatient() != null ? vd.getVisit().getPatient().getFirstName() + " " + vd.getVisit().getPatient().getLastName() : null)
-                    .departmentId(vd.getDepartment() != null ? vd.getDepartment().getId() : null)
-                    .departmentName(vd.getDepartment() != null ? vd.getDepartment().getName() : null)
+                    .visitId(visitId)
+                    .patientId(patientId)
+                    .patientName(patientName)
+                    .departmentId(departmentId)
+                    .departmentName(departmentName)
                     .departmentStatus(vd.getStatus())
-                    .visitStatus(vd.getVisit().getStatus())
+                    .visitStatus(visitStatus)
                     .actorId(actor != null ? actor.getId() : null)
-                    .actorName(actor != null ? actor.getFirstName() + " " + actor.getLastName() : null)
+                    .actorName(actor != null ? (actor.getFirstName() + " " + actor.getLastName()).trim() : null)
                     .targetRoles(Set.of(RoleName.CLINICIAN, RoleName.NURSE, RoleName.FINANCE, RoleName.ADMIN, RoleName.MANAGER, RoleName.CLINIC_ADMIN))
                     .targetWorkerIds(targetWorkerIds)
                     .metadata(metadata)
@@ -166,20 +229,27 @@ public class ClinicEventPublisher {
     public void publishInsuranceChanged(Visit visit, String action, String insuranceName, Worker actor) {
         if (visit == null) return;
         try {
+            UUID visitId = safeGetVisitId(visit);
+            if (visitId == null) return;
+
+            UUID patientId = safeGetPatientId(visit);
+            String patientName = safeGetPatientName(visit);
+            VisitStatus visitStatus = safeGetVisitStatus(visit);
+
             Map<String, Object> metadata = new HashMap<>();
             metadata.put("action", action);
             if (insuranceName != null) metadata.put("insuranceName", insuranceName);
 
-            Set<UUID> targetWorkerIds = extractAttendingWorkers(visit);
+            Set<UUID> targetWorkerIds = extractAttendingWorkers(visitId);
 
             ClinicSseEvent event = ClinicSseEvent.builder()
                     .type("VISIT_INSURANCE_CHANGED")
-                    .visitId(visit.getId())
-                    .patientId(visit.getPatient() != null ? visit.getPatient().getId() : null)
-                    .patientName(visit.getPatient() != null ? visit.getPatient().getFirstName() + " " + visit.getPatient().getLastName() : null)
-                    .visitStatus(visit.getStatus())
+                    .visitId(visitId)
+                    .patientId(patientId)
+                    .patientName(patientName)
+                    .visitStatus(visitStatus)
                     .actorId(actor != null ? actor.getId() : null)
-                    .actorName(actor != null ? actor.getFirstName() + " " + actor.getLastName() : null)
+                    .actorName(actor != null ? (actor.getFirstName() + " " + actor.getLastName()).trim() : null)
                     .targetRoles(Set.of(RoleName.RECEPTION, RoleName.FINANCE, RoleName.CLINICIAN, RoleName.ADMIN, RoleName.MANAGER, RoleName.CLINIC_ADMIN))
                     .targetWorkerIds(targetWorkerIds)
                     .metadata(metadata)
@@ -187,122 +257,157 @@ public class ClinicEventPublisher {
 
             sseRegistry.broadcast(event);
         } catch (Exception e) {
-            log.warn("Error broadcasting VISIT_INSURANCE_CHANGED event for visit {}: {}", visit.getId(), e.getMessage());
+            log.warn("Error broadcasting VISIT_INSURANCE_CHANGED event: {}", e.getMessage());
         }
     }
 
     public void publishVitalsChanged(Visit visit, Worker actor) {
         if (visit == null) return;
         try {
-            Set<UUID> targetWorkerIds = extractAttendingWorkers(visit);
+            UUID visitId = safeGetVisitId(visit);
+            if (visitId == null) return;
+
+            UUID patientId = safeGetPatientId(visit);
+            String patientName = safeGetPatientName(visit);
+            VisitStatus visitStatus = safeGetVisitStatus(visit);
+
+            Set<UUID> targetWorkerIds = extractAttendingWorkers(visitId);
 
             ClinicSseEvent event = ClinicSseEvent.builder()
                     .type("VISIT_VITALS_CHANGED")
-                    .visitId(visit.getId())
-                    .patientId(visit.getPatient() != null ? visit.getPatient().getId() : null)
-                    .patientName(visit.getPatient() != null ? visit.getPatient().getFirstName() + " " + visit.getPatient().getLastName() : null)
-                    .visitStatus(visit.getStatus())
+                    .visitId(visitId)
+                    .patientId(patientId)
+                    .patientName(patientName)
+                    .visitStatus(visitStatus)
                     .actorId(actor != null ? actor.getId() : null)
-                    .actorName(actor != null ? actor.getFirstName() + " " + actor.getLastName() : null)
+                    .actorName(actor != null ? (actor.getFirstName() + " " + actor.getLastName()).trim() : null)
                     .targetRoles(Set.of(RoleName.NURSE, RoleName.CLINICIAN, RoleName.ADMIN, RoleName.MANAGER, RoleName.CLINIC_ADMIN))
                     .targetWorkerIds(targetWorkerIds)
                     .build();
 
             sseRegistry.broadcast(event);
         } catch (Exception e) {
-            log.warn("Error broadcasting VISIT_VITALS_CHANGED event for visit {}: {}", visit.getId(), e.getMessage());
+            log.warn("Error broadcasting VISIT_VITALS_CHANGED event: {}", e.getMessage());
         }
     }
 
     public void publishBillingCompleted(Visit visit, Worker cashier) {
         if (visit == null) return;
         try {
-            Set<UUID> targetWorkerIds = extractAttendingWorkers(visit);
+            UUID visitId = safeGetVisitId(visit);
+            if (visitId == null) return;
+
+            UUID patientId = safeGetPatientId(visit);
+            String patientName = safeGetPatientName(visit);
+            VisitStatus visitStatus = safeGetVisitStatus(visit);
+
+            Set<UUID> targetWorkerIds = extractAttendingWorkers(visitId);
 
             ClinicSseEvent event = ClinicSseEvent.builder()
                     .type("BILLING_COMPLETED")
-                    .visitId(visit.getId())
-                    .patientId(visit.getPatient() != null ? visit.getPatient().getId() : null)
-                    .patientName(visit.getPatient() != null ? visit.getPatient().getFirstName() + " " + visit.getPatient().getLastName() : null)
-                    .visitStatus(visit.getStatus())
+                    .visitId(visitId)
+                    .patientId(patientId)
+                    .patientName(patientName)
+                    .visitStatus(visitStatus)
                     .actorId(cashier != null ? cashier.getId() : null)
-                    .actorName(cashier != null ? cashier.getFirstName() + " " + cashier.getLastName() : null)
+                    .actorName(cashier != null ? (cashier.getFirstName() + " " + cashier.getLastName()).trim() : null)
                     .targetRoles(Set.of(RoleName.FINANCE, RoleName.RECEPTION, RoleName.CLINICIAN, RoleName.ADMIN, RoleName.MANAGER, RoleName.CLINIC_ADMIN))
                     .targetWorkerIds(targetWorkerIds)
                     .build();
 
             sseRegistry.broadcast(event);
         } catch (Exception e) {
-            log.warn("Error broadcasting BILLING_COMPLETED event for visit {}: {}", visit.getId(), e.getMessage());
+            log.warn("Error broadcasting BILLING_COMPLETED event: {}", e.getMessage());
         }
     }
 
     public void publishVisitDischarged(Visit visit, Worker actor) {
         if (visit == null) return;
         try {
-            Set<UUID> targetWorkerIds = extractAttendingWorkers(visit);
+            UUID visitId = safeGetVisitId(visit);
+            if (visitId == null) return;
+
+            UUID patientId = safeGetPatientId(visit);
+            String patientName = safeGetPatientName(visit);
+            VisitStatus visitStatus = safeGetVisitStatus(visit);
+
+            Set<UUID> targetWorkerIds = extractAttendingWorkers(visitId);
 
             ClinicSseEvent event = ClinicSseEvent.builder()
                     .type("VISIT_DISCHARGED")
-                    .visitId(visit.getId())
-                    .patientId(visit.getPatient() != null ? visit.getPatient().getId() : null)
-                    .patientName(visit.getPatient() != null ? visit.getPatient().getFirstName() + " " + visit.getPatient().getLastName() : null)
-                    .visitStatus(visit.getStatus())
+                    .visitId(visitId)
+                    .patientId(patientId)
+                    .patientName(patientName)
+                    .visitStatus(visitStatus)
                     .actorId(actor != null ? actor.getId() : null)
-                    .actorName(actor != null ? actor.getFirstName() + " " + actor.getLastName() : null)
+                    .actorName(actor != null ? (actor.getFirstName() + " " + actor.getLastName()).trim() : null)
                     .targetRoles(Set.of(RoleName.RECEPTION, RoleName.CLINICIAN, RoleName.NURSE, RoleName.FINANCE, RoleName.ADMIN, RoleName.MANAGER, RoleName.CLINIC_ADMIN))
                     .targetWorkerIds(targetWorkerIds)
                     .build();
 
             sseRegistry.broadcast(event);
         } catch (Exception e) {
-            log.warn("Error broadcasting VISIT_DISCHARGED event for visit {}: {}", visit.getId(), e.getMessage());
+            log.warn("Error broadcasting VISIT_DISCHARGED event: {}", e.getMessage());
         }
     }
 
     public void publishVisitCancelled(Visit visit, Worker actor) {
         if (visit == null) return;
         try {
-            Set<UUID> targetWorkerIds = extractAttendingWorkers(visit);
+            UUID visitId = safeGetVisitId(visit);
+            if (visitId == null) return;
+
+            UUID patientId = safeGetPatientId(visit);
+            String patientName = safeGetPatientName(visit);
+            VisitStatus visitStatus = safeGetVisitStatus(visit);
+
+            Set<UUID> targetWorkerIds = extractAttendingWorkers(visitId);
 
             ClinicSseEvent event = ClinicSseEvent.builder()
                     .type("VISIT_CANCELLED")
-                    .visitId(visit.getId())
-                    .patientId(visit.getPatient() != null ? visit.getPatient().getId() : null)
-                    .patientName(visit.getPatient() != null ? visit.getPatient().getFirstName() + " " + visit.getPatient().getLastName() : null)
-                    .visitStatus(visit.getStatus())
+                    .visitId(visitId)
+                    .patientId(patientId)
+                    .patientName(patientName)
+                    .visitStatus(visitStatus)
                     .actorId(actor != null ? actor.getId() : null)
-                    .actorName(actor != null ? actor.getFirstName() + " " + actor.getLastName() : null)
+                    .actorName(actor != null ? (actor.getFirstName() + " " + actor.getLastName()).trim() : null)
                     .targetRoles(Set.of(RoleName.RECEPTION, RoleName.CLINICIAN, RoleName.NURSE, RoleName.FINANCE, RoleName.ADMIN, RoleName.MANAGER, RoleName.CLINIC_ADMIN))
                     .targetWorkerIds(targetWorkerIds)
                     .build();
 
             sseRegistry.broadcast(event);
         } catch (Exception e) {
-            log.warn("Error broadcasting VISIT_CANCELLED event for visit {}: {}", visit.getId(), e.getMessage());
+            log.warn("Error broadcasting VISIT_CANCELLED event: {}", e.getMessage());
         }
     }
 
     public void publishVisitReopened(Visit visit, Worker actor) {
         if (visit == null) return;
         try {
-            Set<UUID> targetWorkerIds = extractAttendingWorkers(visit);
+            UUID visitId = safeGetVisitId(visit);
+            if (visitId == null) return;
+
+            UUID patientId = safeGetPatientId(visit);
+            String patientName = safeGetPatientName(visit);
+            VisitStatus visitStatus = safeGetVisitStatus(visit);
+
+            Set<UUID> targetWorkerIds = extractAttendingWorkers(visitId);
 
             ClinicSseEvent event = ClinicSseEvent.builder()
                     .type("VISIT_REOPENED")
-                    .visitId(visit.getId())
-                    .patientId(visit.getPatient() != null ? visit.getPatient().getId() : null)
-                    .patientName(visit.getPatient() != null ? visit.getPatient().getFirstName() + " " + visit.getPatient().getLastName() : null)
-                    .visitStatus(visit.getStatus())
+                    .visitId(visitId)
+                    .patientId(patientId)
+                    .patientName(patientName)
+                    .visitStatus(visitStatus)
                     .actorId(actor != null ? actor.getId() : null)
-                    .actorName(actor != null ? actor.getFirstName() + " " + actor.getLastName() : null)
+                    .actorName(actor != null ? (actor.getFirstName() + " " + actor.getLastName()).trim() : null)
                     .targetRoles(Set.of(RoleName.RECEPTION, RoleName.CLINICIAN, RoleName.NURSE, RoleName.FINANCE, RoleName.ADMIN, RoleName.MANAGER, RoleName.CLINIC_ADMIN))
                     .targetWorkerIds(targetWorkerIds)
                     .build();
 
             sseRegistry.broadcast(event);
         } catch (Exception e) {
-            log.warn("Error broadcasting VISIT_REOPENED event for visit {}: {}", visit.getId(), e.getMessage());
+            log.warn("Error broadcasting VISIT_REOPENED event: {}", e.getMessage());
         }
     }
 
@@ -324,21 +429,74 @@ public class ClinicEventPublisher {
         }
     }
 
-    private Set<UUID> extractAttendingWorkers(Visit visit) {
+    private Set<UUID> extractAttendingWorkers(UUID visitId) {
         Set<UUID> workerIds = new HashSet<>();
-        if (visit == null || visit.getId() == null) return workerIds;
-        List<VisitDepartment> depts = visitDepartmentRepository.findByVisitId(visit.getId());
-        for (VisitDepartment vd : depts) {
-            if (vd.getProcessors() != null) {
-                vd.getProcessors().forEach(p -> workerIds.add(p.getId()));
+        if (visitId == null) return workerIds;
+        try {
+            List<VisitDepartment> depts = visitDepartmentRepository.findByVisitId(visitId);
+            for (VisitDepartment vd : depts) {
+                if (vd == null) continue;
+                try {
+                    if (vd.getProcessors() != null) {
+                        vd.getProcessors().forEach(p -> {
+                            if (p != null && p.getId() != null) workerIds.add(p.getId());
+                        });
+                    }
+                } catch (Exception ignored) {}
+                try {
+                    if (vd.getAddedBy() != null && vd.getAddedBy().getId() != null) {
+                        workerIds.add(vd.getAddedBy().getId());
+                    }
+                } catch (Exception ignored) {}
+                try {
+                    if (vd.getCompletedBy() != null && vd.getCompletedBy().getId() != null) {
+                        workerIds.add(vd.getCompletedBy().getId());
+                    }
+                } catch (Exception ignored) {}
             }
-            if (vd.getAddedBy() != null) {
-                workerIds.add(vd.getAddedBy().getId());
-            }
-            if (vd.getCompletedBy() != null) {
-                workerIds.add(vd.getCompletedBy().getId());
-            }
-        }
+        } catch (Exception ignored) {}
         return workerIds;
+    }
+
+    private UUID safeGetVisitId(Visit visit) {
+        if (visit == null) return null;
+        try {
+            return visit.getId();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private UUID safeGetPatientId(Visit visit) {
+        if (visit == null) return null;
+        try {
+            return visit.getPatient() != null ? visit.getPatient().getId() : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String safeGetPatientName(Visit visit) {
+        if (visit == null) return null;
+        try {
+            if (visit.getPatient() != null) {
+                String first = visit.getPatient().getFirstName() != null ? visit.getPatient().getFirstName() : "";
+                String last = visit.getPatient().getLastName() != null ? visit.getPatient().getLastName() : "";
+                String full = (first + " " + last).trim();
+                return full.isEmpty() ? null : full;
+            }
+        } catch (Exception e) {
+            return null;
+        }
+        return null;
+    }
+
+    private VisitStatus safeGetVisitStatus(Visit visit) {
+        if (visit == null) return null;
+        try {
+            return visit.getStatus();
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

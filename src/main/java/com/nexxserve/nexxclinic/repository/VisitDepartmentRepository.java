@@ -14,6 +14,14 @@ import jakarta.persistence.LockModeType;
 
 public interface VisitDepartmentRepository extends JpaRepository<VisitDepartment, UUID> {
 
+    @Query("SELECT vd FROM VisitDepartment vd "
+            + "LEFT JOIN FETCH vd.visit v "
+            + "LEFT JOIN FETCH v.patient "
+            + "LEFT JOIN FETCH vd.department "
+            + "LEFT JOIN FETCH vd.profile "
+            + "WHERE vd.id = :id")
+    Optional<VisitDepartment> findByIdWithVisitAndDepartment(@Param("id") UUID id);
+
     List<VisitDepartment> findByVisitId(UUID visitId);
 
     List<VisitDepartment> findByVisitIdIn(Collection<UUID> visitIds);

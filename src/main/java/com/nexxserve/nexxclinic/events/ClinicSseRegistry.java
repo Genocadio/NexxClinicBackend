@@ -34,8 +34,11 @@ public class ClinicSseRegistry {
     private final Map<UUID, Map<UUID, ViewerInfo>> visitPresence = new ConcurrentHashMap<>();
 
     public ClinicSseRegistry() {
-        this.objectMapper = new ObjectMapper();
-        this.objectMapper.findAndRegisterModules();
+        this(new ObjectMapper().findAndRegisterModules());
+    }
+
+    public ClinicSseRegistry(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper != null ? objectMapper.copy().findAndRegisterModules() : new ObjectMapper().findAndRegisterModules();
     }
 
     public record ClientSession(

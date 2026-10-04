@@ -10,6 +10,13 @@ import org.springframework.data.repository.query.Param;
 
 public interface VisitDepartmentProductRepository extends JpaRepository<VisitDepartmentProduct, UUID> {
 
+    @Query("SELECT v FROM VisitDepartmentProduct v "
+            + "LEFT JOIN FETCH v.visitDepartment vd "
+            + "LEFT JOIN FETCH vd.visit vis "
+            + "LEFT JOIN FETCH v.product p "
+            + "WHERE v.id = :id")
+    Optional<VisitDepartmentProduct> findByIdWithDepartmentAndVisit(@Param("id") UUID id);
+
     @Query("SELECT v FROM VisitDepartmentProduct v WHERE v.visitDepartment.id = :visitDepartmentId AND v.deleted = false")
     List<VisitDepartmentProduct> findByVisitDepartmentId(@Param("visitDepartmentId") UUID visitDepartmentId);
 

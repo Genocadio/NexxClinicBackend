@@ -81,7 +81,7 @@ public class GraphQlExceptionResolver extends DataFetcherExceptionResolverAdapte
         // is accessed outside a transaction (e.g., a mapper called from a read-only
         // query that detached the entity). Surface as a recoverable error.
         if (ex instanceof LazyInitializationException lie) {
-            log.warn("Lazy loading error on field '{}': {}", env.getField().getName(), lie.getMessage());
+            log.warn("Lazy loading error on field '{}': {}", env.getField().getName(), lie.getMessage(), lie);
             return buildError(env, ErrorType.INTERNAL_ERROR, "LAZY_LOAD_ERROR",
                     "A related record could not be loaded. Please refresh and try again.");
         }
