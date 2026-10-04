@@ -79,7 +79,8 @@ public class BillingPaymentDistributor {
                 payment == null ||
                 payment.amount() == null ||
                 payment.amount().compareTo(MoneyUtils.ZERO) <= 0 ||
-                payment.paymentMethod() == null
+                payment.paymentMethod() == null ||
+                payment.paymentMethod() == com.nexxserve.nexxclinic.model.PaymentMethod.NONE
             ) {
                 queue.poll();
                 continue;

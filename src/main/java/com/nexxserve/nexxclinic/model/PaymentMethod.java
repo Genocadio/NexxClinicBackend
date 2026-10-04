@@ -6,5 +6,6 @@ public enum PaymentMethod {
     CARD,
     BANK_TRANSFER,
     CHEQUE,
-    MIXED
+    MIXED,
+    NONE
 }

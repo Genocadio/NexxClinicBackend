@@ -98,6 +98,12 @@ public class BillingValidation {
             if (payment == null || payment.amount() == null || payment.paymentMethod() == null) {
                 return "Each payment requires amount and paymentMethod.";
             }
+            if (payment.paymentMethod() == com.nexxserve.nexxclinic.model.PaymentMethod.NONE) {
+                if (payment.amount().compareTo(MoneyUtils.ZERO) > 0) {
+                    return "Payment method NONE cannot have an amount greater than 0.";
+                }
+                continue;
+            }
             if (payment.amount().compareTo(MoneyUtils.ZERO) <= 0) {
                 return "Payment amount must be greater than 0.";
             }
