@@ -429,6 +429,38 @@ public class ClinicEventPublisher {
         }
     }
 
+    public void publishUserCreated(Worker worker, Worker creator) {
+        if (worker == null) return;
+        try {
+            ClinicSseEvent event = ClinicSseEvent.builder()
+                    .type("USER_CREATED")
+                    .actorId(creator != null ? creator.getId() : null)
+                    .actorName(creator != null ? (creator.getFirstName() + " " + creator.getLastName()).trim() : null)
+                    .targetRoles(Set.of(RoleName.ADMIN, RoleName.MANAGER, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE))
+                    .build();
+
+            sseRegistry.broadcast(event);
+        } catch (Exception e) {
+            log.warn("Error broadcasting USER_CREATED event: {}", e.getMessage());
+        }
+    }
+
+    public void publishUserUpdated(Worker worker, Worker updater) {
+        if (worker == null) return;
+        try {
+            ClinicSseEvent event = ClinicSseEvent.builder()
+                    .type("USER_UPDATED")
+                    .actorId(updater != null ? updater.getId() : null)
+                    .actorName(updater != null ? (updater.getFirstName() + " " + updater.getLastName()).trim() : null)
+                    .targetRoles(Set.of(RoleName.ADMIN, RoleName.MANAGER, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE))
+                    .build();
+
+            sseRegistry.broadcast(event);
+        } catch (Exception e) {
+            log.warn("Error broadcasting USER_UPDATED event: {}", e.getMessage());
+        }
+    }
+
     private Set<UUID> extractAttendingWorkers(UUID visitId) {
         Set<UUID> workerIds = new HashSet<>();
         if (visitId == null) return workerIds;

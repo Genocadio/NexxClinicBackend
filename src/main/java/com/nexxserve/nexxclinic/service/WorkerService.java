@@ -66,6 +66,7 @@ public class WorkerService {
     private final AdminAuditService adminAuditService;
     private final MeilisearchIndexService meilisearchIndexService;
     private final LoginRateLimiterService loginRateLimiterService;
+    private final com.nexxserve.nexxclinic.events.ClinicEventPublisher clinicEventPublisher;
 
     public WorkerService(
             WorkerRepository workerRepository,
@@ -79,7 +80,8 @@ public class WorkerService {
             PasswordPolicyService passwordPolicyService,
             AdminAuditService adminAuditService,
             MeilisearchIndexService meilisearchIndexService,
-            LoginRateLimiterService loginRateLimiterService
+            LoginRateLimiterService loginRateLimiterService,
+            com.nexxserve.nexxclinic.events.ClinicEventPublisher clinicEventPublisher
     ) {
         this.workerRepository = workerRepository;
         this.departmentRepository = departmentRepository;
@@ -93,6 +95,7 @@ public class WorkerService {
         this.adminAuditService = adminAuditService;
         this.meilisearchIndexService = meilisearchIndexService;
         this.loginRateLimiterService = loginRateLimiterService;
+        this.clinicEventPublisher = clinicEventPublisher;
     }
 
     @Transactional
@@ -162,6 +165,7 @@ public class WorkerService {
         String message = firstUser
                 ? "First user registered as ACTIVE ADMIN with non-expiring password policy."
                 : "Registration submitted. Await admin activation before login.";
+        clinicEventPublisher.publishUserCreated(saved, null);
         return ApiResponse.success(message, workerToMap(saved));
     }
 
@@ -211,6 +215,7 @@ public class WorkerService {
                 "{\"roles\":\"" + saved.getRoles() + "\",\"active\":true}"
         );
 
+        clinicEventPublisher.publishUserCreated(saved, resolveWorker(adminUser));
         return ApiResponse.success("User created and activated. Password will be set on first login attempt.", workerToMap(saved));
     }
 
@@ -248,7 +253,13 @@ public class WorkerService {
             "{\"roles\":\"" + worker.getRoles() + "\",\"status\":\"ACTIVE\"}"
         );
 
+        clinicEventPublisher.publishUserUpdated(saved, resolveWorker(adminUser));
         return ApiResponse.success("User activated and roles assigned.", workerToMap(worker));
+    }
+
+    private Worker resolveWorker(AuthenticatedUser authUser) {
+        if (authUser == null || authUser.userId() == null) return null;
+        return workerRepository.findById(authUser.userId()).orElse(null);
     }
 
     @Transactional
@@ -437,6 +448,8 @@ public class WorkerService {
                 "DEACTIVATE_USER",
                 "{\"status\":\"DISABLED\",\"active\":false,\"revokeSessions\":" + revokeSessions + "}"
         );
+
+        clinicEventPublisher.publishUserUpdated(saved, resolveWorker(adminUser));
 
         return ApiResponse.success("User account deactivated successfully.", workerToMap(worker));
     }
@@ -631,6 +644,7 @@ public class WorkerService {
             return mapPersistenceError(ex, "Unable to update profile due to invalid or duplicate data.");
         }
         meilisearchIndexService.indexWorker(saved);
+        clinicEventPublisher.publishUserUpdated(saved, saved);
         return ApiResponse.success("Profile updated successfully.", workerToMap(saved));
     }
 
@@ -738,6 +752,7 @@ public class WorkerService {
                 "{\"roles\":\"" + saved.getRoles() + "\",\"departmentCount\":" + saved.getDepartments().size() + "}"
         );
 
+        clinicEventPublisher.publishUserUpdated(saved, resolveWorker(adminUser));
         return ApiResponse.success("User updated successfully.", workerToMap(saved));
     }
 
