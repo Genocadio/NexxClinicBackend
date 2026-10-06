@@ -1,6 +1,7 @@
 package com.nexxserve.nexxclinic.service;
 
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
+import com.nexxserve.nexxclinic.dto.out.LastVisitSummary;
 import com.nexxserve.nexxclinic.dto.out.PatientDto;
 import com.nexxserve.nexxclinic.dto.out.PatientInsuranceDto;
 import com.nexxserve.nexxclinic.dto.out.VisitDto;
@@ -1191,11 +1192,38 @@ public class PatientService {
                         .collect(java.util.stream.Collectors.groupingBy(
                                 pi -> pi.getPatient().getId()
                         ));
+        // Batch-fetch the single most-recent visit per patient (N+1-free).
+        Map<UUID, com.nexxserve.nexxclinic.entity.Visit> lastVisitByPatient =
+                visitRepository.findLatestVisitPerPatient(patientIds)
+                        .stream()
+                        .collect(java.util.stream.Collectors.toMap(
+                                v -> v.getPatient().getId(),
+                                v -> v,
+                                (a, b) -> a // keep first if duplicates
+                        ));
         return patients.stream()
-                .map(p -> patientMapper.toDto(
-                        p,
-                        insurancesByPatient.getOrDefault(p.getId(), List.of())
-                ))
+                .map(p -> {
+                    PatientDto base = patientMapper.toDto(
+                            p,
+                            insurancesByPatient.getOrDefault(p.getId(), List.of())
+                    );
+                    com.nexxserve.nexxclinic.entity.Visit lv = lastVisitByPatient.get(p.getId());
+                    if (lv == null) return base;
+                    LastVisitSummary summary = new LastVisitSummary(
+                            lv.getId(), lv.getStatus(), lv.getVisitDate());
+                    return new PatientDto(
+                            base.id(), base.patientIdentifier(), base.firstName(),
+                            base.middleName(), base.lastName(), base.fullName(),
+                            base.dateOfBirth(), base.age(), base.gender(),
+                            base.primaryPhoneNumber(), base.alternativePhone(),
+                            base.village(), base.cell(), base.city(), base.district(),
+                            base.postalAddress(), base.nationalIdNumber(),
+                            base.passportNumber(), base.emergencyContactName(),
+                            base.emergencyContactRelationship(),
+                            base.emergencyContactPhoneNumber(),
+                            base.patientInsurances(), base.createdAt(), base.updatedAt(),
+                            summary);
+                })
                 .toList();
     }
 

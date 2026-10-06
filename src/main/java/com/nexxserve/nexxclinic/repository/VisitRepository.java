@@ -43,16 +43,32 @@ public interface VisitRepository extends JpaRepository<Visit, UUID>, JpaSpecific
 	@Query("SELECT v FROM Visit v WHERE v.patient.id = :patientId AND v.status IN :statuses")
 	List<Visit> findByPatientIdAndStatusIn(@Param("patientId") UUID patientId, @Param("statuses") java.util.Collection<com.nexxserve.nexxclinic.model.VisitStatus> statuses);
 
+	/**
+	 * For a given set of patient IDs, returns one Visit per patient - the most recently
+	 * created. Used to populate lastVisit on patient search results without N+1 queries.
+	 */
 	@Query("""
-		SELECT v FROM Visit v
-		WHERE v.patient.id = :patientId
-		AND (
-			v.visitDate < :referenceVisitDate
-			OR (v.visitDate = :referenceVisitDate AND v.createdAt < :referenceCreatedAt)
-			OR (v.visitDate = :referenceVisitDate AND v.createdAt = :referenceCreatedAt AND v.id <> :referenceVisitId)
-		)
-		ORDER BY v.visitDate DESC, v.createdAt DESC
-		""")
+			SELECT v FROM Visit v
+			WHERE v.patient.id IN :patientIds
+			AND NOT EXISTS (
+				SELECT 1 FROM Visit v2
+				WHERE v2.patient.id = v.patient.id
+				AND (v2.createdAt > v.createdAt
+				     OR (v2.createdAt = v.createdAt AND v2.id > v.id))
+			)
+			""")
+	java.util.List<Visit> findLatestVisitPerPatient(@Param("patientIds") java.util.Collection<java.util.UUID> patientIds);
+
+	@Query("""
+			SELECT v FROM Visit v
+			WHERE v.patient.id = :patientId
+			AND (
+				v.visitDate < :referenceVisitDate
+				OR (v.visitDate = :referenceVisitDate AND v.createdAt < :referenceCreatedAt)
+				OR (v.visitDate = :referenceVisitDate AND v.createdAt = :referenceCreatedAt AND v.id <> :referenceVisitId)
+			)
+			ORDER BY v.visitDate DESC, v.createdAt DESC
+			""")
 	List<Visit> findPreviousVisitsByPatientId(
 			@Param("patientId") UUID patientId,
 			@Param("referenceVisitDate") LocalDateTime referenceVisitDate,

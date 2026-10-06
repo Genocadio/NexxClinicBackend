@@ -31,6 +31,8 @@ public record PatientDto(
         String emergencyContactPhoneNumber,
         List<PatientInsuranceDto> patientInsurances,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        /** Nullable – populated only when the patient is returned via searchPatients. */
+        LastVisitSummary lastVisit
 ) {
 }

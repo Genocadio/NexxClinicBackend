@@ -1,0 +1,16 @@
+services:
+  backend:
+    build:
+      target: build
+    command: ["java", "-jar", "build/libs/nexxclinic-0.0.1-SNAPSHOT.jar"]
+    environment:
+      SERVER_PORT: "8080"
+      STORAGE_TYPE: LOCAL
+      LOGGING_LEVEL_COM_NEXXSERVE_NEXXCLINIC_EVENTS: DEBUG
+  frontend:
+    image: nexxclinic-frontend-local
+    build:
+      context: ../nexxclinic
+      dockerfile: Dockerfile
+      args:
+        API_BASE_URL: http://backend:8080

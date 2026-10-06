@@ -438,6 +438,13 @@ type Patient {
   patientInsurances: [PatientInsurance!]
   createdAt: String!
   updatedAt: String!
+  lastVisit: LastVisitSummary
+}
+
+type LastVisitSummary {
+  id: ID!
+  status: VisitStatus!
+  visitDate: String
 }
 
 type PatientResponse implements ApiResponse {

@@ -23,6 +23,7 @@ public interface PatientMapper {
     @Mapping(source = "insurances", target = "patientInsurances")
     // 2. Call your custom calculation method using a Java expression
     @Mapping(target = "age", expression = "java(calculateAge(patient))")
+    @Mapping(target = "lastVisit", ignore = true)
     PatientDto toDto(Patient patient, List<PatientInsurance> insurances);
 
     // 3. Keep your custom logic cleanly tucked inside a default method

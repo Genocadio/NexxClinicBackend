@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -144,9 +145,12 @@ public class ClinicSseRegistry {
 
     public void broadcast(ClinicSseEvent event) {
         if (sessions.isEmpty()) {
+            log.debug("Dropping SSE event {} because there are no connected clients", event.type());
             return;
         }
 
+        int connectedCount = sessions.size();
+        AtomicInteger deliveredCount = new AtomicInteger();
         String jsonPayload;
         try {
             jsonPayload = objectMapper.writeValueAsString(event);
@@ -162,6 +166,7 @@ public class ClinicSseRegistry {
                             .id(event.eventId().toString())
                             .name(event.type())
                             .data(jsonPayload));
+                    deliveredCount.incrementAndGet();
                 } catch (Exception e) {
                     log.debug("Failed to send SSE event to session {}, removing", sessionId);
                     session.emitter().complete();
@@ -169,6 +174,8 @@ public class ClinicSseRegistry {
                 }
             }
         });
+        log.debug("SSE event {} delivered to {} of {} connected session(s)",
+                event.type(), deliveredCount.get(), connectedCount);
     }
 
     private boolean shouldDeliver(ClientSession session, ClinicSseEvent event) {
