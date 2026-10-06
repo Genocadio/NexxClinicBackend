@@ -47,19 +47,25 @@ public class BillingValidation {
 
     /**
      * Counts unread BILLING notes on any non-CANCELLED department of the visit for the
-     * given viewer. ADMIN, MANAGER and CLINIC_ADMIN bypass the gate. Returns 0 for a null
-     * viewer so callers can fail closed on top of this.
+     * given viewer. ADMIN, MANAGER and CLINIC_ADMIN bypass the gate. FINANCE also bypasses
+     * the gate (finance users bill/collect payments without being forced through the clinician
+     * notes workflow). Returns 0 for a null viewer so callers can fail closed on top of this.
+     *
+     * <p>When the visiting worker is a clinician and the visit is not yet finalised, the caller
+     * is expected to pass {@code null} as {@code viewer} so the gate still applies. For completed
+     * /finalised visits and for finance/admin/manager roles the gate is intentionally loosened.
      */
     public long countUnreadNotesForVisit(UUID visitId, Worker viewer) {
         if (visitId == null || viewer == null || viewer.getId() == null) {
             return 0;
         }
 
-        // Business rule: ADMIN, MANAGER and CLINIC_ADMIN can bypass unread notes check for billing.
+        // Business rule: ADMIN, MANAGER, CLINIC_ADMIN and FINANCE can bypass unread notes check for billing.
         if (viewer.getRoles() != null && (
             viewer.getRoles().contains(RoleName.ADMIN) ||
             viewer.getRoles().contains(RoleName.MANAGER) ||
-            viewer.getRoles().contains(RoleName.CLINIC_ADMIN)
+            viewer.getRoles().contains(RoleName.CLINIC_ADMIN) ||
+            viewer.getRoles().contains(RoleName.FINANCE)
         )) {
             return 0;
         }

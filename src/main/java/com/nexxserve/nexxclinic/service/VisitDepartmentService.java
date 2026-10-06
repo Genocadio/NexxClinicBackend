@@ -101,6 +101,7 @@ public class VisitDepartmentService {
     private final com.nexxserve.nexxclinic.repository.VisitDepartmentProductSnapshotRepository visitDepartmentProductSnapshotRepository;
     private final RolePermissionService rolePermissionService;
     private final com.nexxserve.nexxclinic.service.billing.BillingProductService billingProductService;
+    private final com.nexxserve.nexxclinic.service.billing.InvoiceGenerator invoiceGenerator;
     private final com.nexxserve.nexxclinic.events.ClinicEventPublisher clinicEventPublisher;
 
     public VisitDepartmentService(
@@ -132,6 +133,7 @@ public class VisitDepartmentService {
             com.nexxserve.nexxclinic.repository.VisitDepartmentProductSnapshotRepository visitDepartmentProductSnapshotRepository,
             @Lazy RolePermissionService rolePermissionService,
             @Lazy com.nexxserve.nexxclinic.service.billing.BillingProductService billingProductService,
+            com.nexxserve.nexxclinic.service.billing.InvoiceGenerator invoiceGenerator,
             com.nexxserve.nexxclinic.events.ClinicEventPublisher clinicEventPublisher
     ) {
         this.visitRepository = visitRepository;
@@ -162,6 +164,7 @@ public class VisitDepartmentService {
         this.visitDepartmentProductSnapshotRepository = visitDepartmentProductSnapshotRepository;
         this.rolePermissionService = rolePermissionService;
         this.billingProductService = billingProductService;
+        this.invoiceGenerator = invoiceGenerator;
         this.clinicEventPublisher = clinicEventPublisher;
     }
 
@@ -3112,6 +3115,38 @@ public class VisitDepartmentService {
                 b.setInvoiceUrl(null);
                 departmentInsuranceBillingRepository.save(b);
             }
+
+            // Regenerate invoices after the transaction commits so the expensive
+            // PDF render and upload do not hold the DB connection open. This mirrors
+            // the invoice-regeneration path used by changeVisitDate.
+            List<UUID> billingIds = billings.stream()
+                .map(DepartmentInsuranceBilling::getId)
+                .toList();
+            org.springframework.transaction.support.TransactionSynchronizationManager
+                .registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            for (UUID bid : billingIds) {
+                                try {
+                                    com.nexxserve.nexxclinic.dto.out.ApiResponse<?> result =
+                                        invoiceGenerator.generateInvoice(bid, authUser);
+                                    if (result.status() != com.nexxserve.nexxclinic.model.ResponseStatus.SUCCESS) {
+                                        log.warn(
+                                            "Invoice regeneration after encounter date change for {} returned: {}",
+                                            bid, result.message()
+                                        );
+                                    }
+                                } catch (Exception e) {
+                                    log.error(
+                                        "Failed to regenerate invoice after encounter date change for {}: {}",
+                                        bid, e.getMessage(), e
+                                    );
+                                }
+                            }
+                        }
+                    }
+                );
         }
 
         if (visit != null) {

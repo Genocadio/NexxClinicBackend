@@ -26,7 +26,7 @@ public class LoginRateLimiterService {
 
     public LoginRateLimiterService(
             @Value("${app.security.login.max-failed-attempts:5}") int maxAttempts,
-            @Value("${app.security.login.lockout-duration-minutes:15}") int lockoutDurationMinutes
+            @Value("${app.security.login.lockout-duration-minutes:5}") int lockoutDurationMinutes
     ) {
         this.maxAttempts = maxAttempts;
         this.lockoutDuration = Duration.ofMinutes(lockoutDurationMinutes);
@@ -93,6 +93,12 @@ public class LoginRateLimiterService {
 
             // If existing lockout expired, reset counter to 1
             if (current.lockedUntil != null && now.isAfter(current.lockedUntil)) {
+                return new AttemptTracker(1, now, null);
+            }
+
+            // Sliding window: attempts older than the lockout duration no longer count,
+            // so the effective rate-limit window equals the lockout duration.
+            if (Duration.between(current.lastAttempt, now).compareTo(lockoutDuration) > 0) {
                 return new AttemptTracker(1, now, null);
             }
 

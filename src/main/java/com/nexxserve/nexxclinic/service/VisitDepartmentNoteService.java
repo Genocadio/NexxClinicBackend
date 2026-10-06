@@ -406,7 +406,11 @@ public class VisitDepartmentNoteService {
     }
 
     /**
-     * Admin and Manager roles are never blocked by unread notes.
+     * Admin, Manager and Clinic Admin roles are never blocked by unread notes.
+     * Finance is handled separately at the billing boundary (see
+     * {@link BillingValidation#countUnreadNotesForVisit} and
+     * {@link #hasUnreadBillingNotes}) so finance can bill without being forced
+     * through the clinician notes workflow.
      */
     public boolean isExemptFromNotesBlock(AuthenticatedUser authUser) {
         if (authUser == null || authUser.roles() == null) {
@@ -418,11 +422,29 @@ public class VisitDepartmentNoteService {
     }
 
     /**
+     * Finance users can bypass the unread BILLING notes gate. ADMIN / MANAGER /
+     * CLINIC_ADMIN are already covered by {@link #isExemptFromNotesBlock}.
+     */
+    public boolean canBypassBillingNotesGate(AuthenticatedUser authUser) {
+        if (authUser == null || authUser.roles() == null) {
+            return false;
+        }
+        return authUser.roles().contains(RoleName.FINANCE);
+    }
+
+    /**
      * Checks whether there are any unread BILLING notes for the current user on the given visit.
+     *
+     * <p>Finance users bypass this gate intentionally so the billing screen does not force finance
+     * staff to hunt down clinician notes for completed/finalised visits. ADMIN / MANAGER / CLINIC_ADMIN
+     * are already exempt via {@link #isExemptFromNotesBlock}.
      */
     @Transactional(readOnly = true)
     public boolean hasUnreadBillingNotes(UUID visitId, AuthenticatedUser authUser) {
-        if (isExemptFromNotesBlock(authUser) || authUser == null || authUser.userId() == null || visitId == null) {
+        if (authUser == null || authUser.userId() == null || visitId == null) {
+            return false;
+        }
+        if (isExemptFromNotesBlock(authUser) || canBypassBillingNotesGate(authUser)) {
             return false;
         }
         UUID viewerId = authUser.userId();
