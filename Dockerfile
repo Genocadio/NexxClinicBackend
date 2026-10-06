@@ -17,7 +17,9 @@ RUN gradle bootJar --no-daemon -x test
 FROM eclipse-temurin:21-jre-jammy
 
 # Install Chromium runtime dependencies, fonts, and curl for healthcheck
+# Install Chromium runtime dependencies, fonts, curl, and timezone data
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    tzdata \
     libnss3 \
     libnspr4 \
     libatk1.0-0 \
@@ -41,6 +43,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
     fonts-noto-color-emoji \
     curl \
+    && ln -sf /usr/share/zoneinfo/Africa/Kigali /etc/localtime \
+    && echo "Africa/Kigali" > /etc/timezone \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && mkdir -p /opt/playwright-browsers \
