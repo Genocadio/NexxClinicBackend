@@ -11,6 +11,7 @@ import com.nexxserve.nexxclinic.entity.VisitDepartment;
 import com.nexxserve.nexxclinic.entity.StandaloneForm;
 import com.nexxserve.nexxclinic.entity.StandaloneFormAnswer;
 import com.nexxserve.nexxclinic.entity.StandaloneFormVersion;
+import com.nexxserve.nexxclinic.events.ClinicEventPublisher;
 import com.nexxserve.nexxclinic.graphql.input.StandaloneFormInput;
 import com.nexxserve.nexxclinic.mappers.out.StandaloneFormMapper;
 import com.nexxserve.nexxclinic.model.AnswerStatus;
@@ -46,6 +47,7 @@ public class StandaloneFormService {
     private final VisitDepartmentProductRepository visitDepartmentProductRepository;
     private final VisitDepartmentService visitDepartmentService;
     private final VisitDepartmentNoteService visitDepartmentNoteService;
+    private final ClinicEventPublisher clinicEventPublisher;
     private final StandaloneFormMapper mapper;
     private static final Logger log = LoggerFactory.getLogger(StandaloneFormService.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -60,6 +62,7 @@ public class StandaloneFormService {
                                  VisitDepartmentProductRepository visitDepartmentProductRepository,
                                  @Lazy VisitDepartmentService visitDepartmentService,
                                  VisitDepartmentNoteService visitDepartmentNoteService,
+                                 ClinicEventPublisher clinicEventPublisher,
                                  StandaloneFormMapper mapper) {
         this.formRepository = formRepository;
         this.versionRepository = versionRepository;
@@ -71,6 +74,7 @@ public class StandaloneFormService {
         this.visitDepartmentProductRepository = visitDepartmentProductRepository;
         this.visitDepartmentService = visitDepartmentService;
         this.visitDepartmentNoteService = visitDepartmentNoteService;
+        this.clinicEventPublisher = clinicEventPublisher;
         this.mapper = mapper;
     }
 
@@ -387,6 +391,7 @@ public class StandaloneFormService {
         visitDept.setAnswerId(savedAnswer.getId());
 
         List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(visitId);
+        List<VisitDepartment> newlyMarkedForBilling = new ArrayList<>();
         for (VisitDepartment dept : departments) {
             if (dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.CANCELLED
                     && dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.COMPLETED) {
@@ -397,16 +402,25 @@ public class StandaloneFormService {
                         || p.getStatus() == com.nexxserve.nexxclinic.model.VisitProductStatus.CORRECTION_PENDING
                 ));
                 if (hasUnbilled) {
+                    boolean justMarked = dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.BILLING;
                     dept.setStatus(com.nexxserve.nexxclinic.model.VisitDepartmentStatus.BILLING);
                     if (dept.getId().equals(visitDept.getId())) {
                         visitDept.setStatus(com.nexxserve.nexxclinic.model.VisitDepartmentStatus.BILLING);
                     }
-                    visitDepartmentRepository.save(dept);
+                    VisitDepartment savedDept = visitDepartmentRepository.save(dept);
+                    if (justMarked) {
+                        newlyMarkedForBilling.add(savedDept);
+                    }
                 }
             }
         }
 
         VisitDepartment savedVisitDepartment = visitDepartmentRepository.save(visitDept);
+        // Broadcast the handoff to billing so other connected sessions refetch live
+        // (this path used to flip the status silently, requiring a manual refresh).
+        for (VisitDepartment markedDept : newlyMarkedForBilling) {
+            clinicEventPublisher.publishDepartmentStateChanged(markedDept, null);
+        }
 
         StandaloneFormAnswerDto mappedAnswerDto = mapper.toDto(savedAnswer);
         StandaloneFormAnswerDto answerDto = new StandaloneFormAnswerDto(

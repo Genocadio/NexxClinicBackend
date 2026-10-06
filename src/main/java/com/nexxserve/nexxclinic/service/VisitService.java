@@ -870,6 +870,7 @@ public class VisitService {
         // unbilled products. If all products are billed or no products exist, no status change is made
         // (departments are never transitioned to COMPLETED by consultation save).
         List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(input.visitId());
+        List<VisitDepartment> newlyMarkedForBilling = new ArrayList<>();
         for (VisitDepartment dept : departments) {
             if (dept.getStatus() != VisitDepartmentStatus.CANCELLED && dept.getStatus() != VisitDepartmentStatus.COMPLETED) {
                 List<VisitDepartmentProduct> products = visitDepartmentProductRepository.findByVisitDepartmentId(dept.getId());
@@ -879,13 +880,24 @@ public class VisitService {
                         || p.getStatus() == VisitProductStatus.CORRECTION_PENDING
                 ));
                 if (hasUnbilled) {
+                    boolean justMarked = dept.getStatus() != VisitDepartmentStatus.BILLING;
                     dept.setStatus(VisitDepartmentStatus.BILLING);
-                    visitDepartmentRepository.save(dept);
+                    VisitDepartment savedDept = visitDepartmentRepository.save(dept);
+                    if (justMarked) {
+                        newlyMarkedForBilling.add(savedDept);
+                    }
                 }
             }
         }
 
         Visit saved = visitRepository.save(visit);
+        // Broadcast the handoff to billing: connected finance/dashboard clients refetch on
+        // VISIT_DEPARTMENT_STATE_CHANGED. Without this publish, marking a department for
+        // billing was silent and other sessions only saw it after a manual refresh.
+        Worker actingUser = resolveWorker(authUser);
+        for (VisitDepartment markedDept : newlyMarkedForBilling) {
+            clinicEventPublisher.publishDepartmentStateChanged(markedDept, actingUser);
+        }
         return ApiResponse.success(finalAnswer ? "Visit submitted for billing." : "Consultation answers saved.", visitToDto(saved));
     }
 

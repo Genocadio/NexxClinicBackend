@@ -18,6 +18,8 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 public class ClinicEventPublisher {
@@ -64,7 +66,7 @@ public class ClinicEventPublisher {
                     .targetDepartmentIds(targetDeptIds)
                     .build();
 
-            sseRegistry.broadcast(event);
+            broadcastAfterCommit(event);
         } catch (Exception e) {
             log.warn("Error broadcasting VISIT_CREATED event: {}", e.getMessage());
         }
@@ -122,7 +124,7 @@ public class ClinicEventPublisher {
                     .targetWorkerIds(targetWorkerIds)
                     .build();
 
-            sseRegistry.broadcast(event);
+            broadcastAfterCommit(event);
         } catch (Exception e) {
             log.warn("Error broadcasting VISIT_DEPARTMENT_STATE_CHANGED event: {}", e.getMessage());
         }
@@ -171,7 +173,7 @@ public class ClinicEventPublisher {
                     .metadata(metadata)
                     .build();
 
-            sseRegistry.broadcast(event);
+            broadcastAfterCommit(event);
         } catch (Exception e) {
             log.warn("Error broadcasting VISIT_PRODUCT_CHANGED event: {}", e.getMessage());
         }
@@ -220,7 +222,7 @@ public class ClinicEventPublisher {
                     .metadata(metadata)
                     .build();
 
-            sseRegistry.broadcast(event);
+            broadcastAfterCommit(event);
         } catch (Exception e) {
             log.warn("Error broadcasting VISIT_NOTE_ADDED event: {}", e.getMessage());
         }
@@ -255,7 +257,7 @@ public class ClinicEventPublisher {
                     .metadata(metadata)
                     .build();
 
-            sseRegistry.broadcast(event);
+            broadcastAfterCommit(event);
         } catch (Exception e) {
             log.warn("Error broadcasting VISIT_INSURANCE_CHANGED event: {}", e.getMessage());
         }
@@ -285,7 +287,7 @@ public class ClinicEventPublisher {
                     .targetWorkerIds(targetWorkerIds)
                     .build();
 
-            sseRegistry.broadcast(event);
+            broadcastAfterCommit(event);
         } catch (Exception e) {
             log.warn("Error broadcasting VISIT_VITALS_CHANGED event: {}", e.getMessage());
         }
@@ -315,7 +317,7 @@ public class ClinicEventPublisher {
                     .targetWorkerIds(targetWorkerIds)
                     .build();
 
-            sseRegistry.broadcast(event);
+            broadcastAfterCommit(event);
         } catch (Exception e) {
             log.warn("Error broadcasting BILLING_COMPLETED event: {}", e.getMessage());
         }
@@ -345,7 +347,7 @@ public class ClinicEventPublisher {
                     .targetWorkerIds(targetWorkerIds)
                     .build();
 
-            sseRegistry.broadcast(event);
+            broadcastAfterCommit(event);
         } catch (Exception e) {
             log.warn("Error broadcasting VISIT_DISCHARGED event: {}", e.getMessage());
         }
@@ -375,7 +377,7 @@ public class ClinicEventPublisher {
                     .targetWorkerIds(targetWorkerIds)
                     .build();
 
-            sseRegistry.broadcast(event);
+            broadcastAfterCommit(event);
         } catch (Exception e) {
             log.warn("Error broadcasting VISIT_CANCELLED event: {}", e.getMessage());
         }
@@ -405,7 +407,7 @@ public class ClinicEventPublisher {
                     .targetWorkerIds(targetWorkerIds)
                     .build();
 
-            sseRegistry.broadcast(event);
+            broadcastAfterCommit(event);
         } catch (Exception e) {
             log.warn("Error broadcasting VISIT_REOPENED event: {}", e.getMessage());
         }
@@ -423,7 +425,7 @@ public class ClinicEventPublisher {
                     .metadata(metadata)
                     .build();
 
-            sseRegistry.broadcast(event);
+            broadcastAfterCommit(event);
         } catch (Exception e) {
             log.warn("Error broadcasting VISIT_PRESENCE_CHANGED event: {}", e.getMessage());
         }
@@ -439,7 +441,7 @@ public class ClinicEventPublisher {
                     .targetRoles(Set.of(RoleName.ADMIN, RoleName.MANAGER, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE))
                     .build();
 
-            sseRegistry.broadcast(event);
+            broadcastAfterCommit(event);
         } catch (Exception e) {
             log.warn("Error broadcasting USER_CREATED event: {}", e.getMessage());
         }
@@ -455,10 +457,29 @@ public class ClinicEventPublisher {
                     .targetRoles(Set.of(RoleName.ADMIN, RoleName.MANAGER, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN, RoleName.FINANCE))
                     .build();
 
-            sseRegistry.broadcast(event);
+            broadcastAfterCommit(event);
         } catch (Exception e) {
             log.warn("Error broadcasting USER_UPDATED event: {}", e.getMessage());
         }
+    }
+
+    private void broadcastAfterCommit(ClinicSseEvent event) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()
+                && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    try {
+                        sseRegistry.broadcast(event);
+                    } catch (Exception e) {
+                        log.warn("Failed to broadcast committed SSE event {}: {}", event.type(), e.getMessage());
+                    }
+                }
+            });
+            return;
+        }
+
+        sseRegistry.broadcast(event);
     }
 
     private Set<UUID> extractAttendingWorkers(UUID visitId) {
