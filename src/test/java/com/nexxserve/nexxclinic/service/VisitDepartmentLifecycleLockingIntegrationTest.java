@@ -885,6 +885,24 @@ class VisitDepartmentLifecycleLockingIntegrationTest {
 
         VisitDepartment deptAfterUnbilled = visitDepartmentRepository.findById(visitDeptId).orElseThrow();
         assertEquals(VisitDepartmentStatus.BILLING, deptAfterUnbilled.getStatus(), "Should transition to BILLING when unbilled product exists");
+
+        // Case 3: Department in billing edit mode (what startBillEditing produces).
+        // Consultation saves — draft or final — must NOT clobber DEPARTMENT_EDITING:
+        // that silently exits edit mode while products are still CORRECTION_PENDING
+        // and permanently blocks invoice generation (repaired by Flyway V42).
+        VisitDepartment editingDept = visitDepartmentRepository.findById(visitDeptId).orElseThrow();
+        editingDept.setStatus(VisitDepartmentStatus.DEPARTMENT_EDITING);
+        editingDept.setBillingEditSourceStatus(VisitDepartmentStatus.BILLING);
+        visitDepartmentRepository.save(editingDept);
+
+        ApiResponse<VisitDto> editModeSaveRes = visitService.completeVisit(input, false, authUser);
+        assertEquals(ResponseStatus.SUCCESS, editModeSaveRes.status());
+
+        VisitDepartment deptInEditMode = visitDepartmentRepository.findById(visitDeptId).orElseThrow();
+        assertEquals(VisitDepartmentStatus.DEPARTMENT_EDITING, deptInEditMode.getStatus(),
+                "Consultation save must not clobber billing edit mode");
+        assertEquals(VisitDepartmentStatus.BILLING, deptInEditMode.getBillingEditSourceStatus(),
+                "Pre-edit source status must be preserved");
     }
 
     @Test
