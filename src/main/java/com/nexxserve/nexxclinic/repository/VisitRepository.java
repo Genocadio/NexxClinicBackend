@@ -37,6 +37,16 @@ public interface VisitRepository extends JpaRepository<Visit, UUID>, JpaSpecific
 	@Query("update Visit v set v.visitDate = :visitDate where v.id = :visitId")
 	int updateVisitDate(@Param("visitId") UUID visitId, @Param("visitDate") LocalDateTime visitDate);
 
+	@Query("""
+			SELECT COUNT(v) FROM Visit v
+			WHERE v.patient.id = :patientId
+			  AND (v.createdAt < :createdAt OR (v.createdAt = :createdAt AND v.id <= :visitId))
+			""")
+	long countPatientVisitsCreatedThrough(
+			@Param("patientId") UUID patientId,
+			@Param("createdAt") LocalDateTime createdAt,
+			@Param("visitId") UUID visitId);
+
 	@Query("SELECT v FROM Visit v WHERE v.patient.id = :patientId ORDER BY v.visitDate DESC, v.createdAt DESC")
 	List<Visit> findLastVisitsByPatientId(@Param("patientId") UUID patientId, Pageable pageable);
 

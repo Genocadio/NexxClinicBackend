@@ -17,6 +17,7 @@ import com.nexxserve.nexxclinic.config.SupabaseProperties;
 import com.nexxserve.nexxclinic.service.FileStorageService;
 import com.nexxserve.nexxclinic.service.InvoicePdfGenerator;
 import com.nexxserve.nexxclinic.service.PaperSize;
+import com.nexxserve.nexxclinic.service.VisitArchivePathBuilder;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -60,6 +61,7 @@ public class InvoiceGenerator {
     private final BillingDataMapper billingDataMapper;
     private final FileStorageService storageService;
     private final SupabaseProperties storageProps;
+    private final VisitArchivePathBuilder archivePathBuilder;
     private final TransactionTemplate transactionTemplate;
     private final TransactionTemplate readOnlyTransactionTemplate;
     private final int signedUrlExpirySeconds;
@@ -79,6 +81,7 @@ public class InvoiceGenerator {
         BillingDataMapper billingDataMapper,
         FileStorageService storageService,
         SupabaseProperties storageProps,
+        VisitArchivePathBuilder archivePathBuilder,
         PlatformTransactionManager transactionManager,
         @Value("${billing.invoice.signed-url-expiry-seconds:300}") int signedUrlExpirySeconds,
         @Value("${billing.invoice.paper-size:letter}") String paperSizeKey
@@ -94,6 +97,7 @@ public class InvoiceGenerator {
         this.billingDataMapper = billingDataMapper;
         this.storageService = storageService;
         this.storageProps = storageProps;
+        this.archivePathBuilder = archivePathBuilder;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.readOnlyTransactionTemplate = new TransactionTemplate(transactionManager);
         this.readOnlyTransactionTemplate.setReadOnly(true);
@@ -429,7 +433,8 @@ public class InvoiceGenerator {
 
     /**
      * Phase-2 helper (runs OUTSIDE any DB transaction): renders the invoice PDF to a
-     * temp file and uploads it to Supabase Storage. Returns the uploaded object path.
+     * temp file and uploads it through the configured storage backend. Returns the
+     * uploaded object path.
      * Persisting the path is the caller's job ({@link #persistInvoiceUrl}).
      */
     private String generateInvoicePdfFile(
@@ -460,14 +465,8 @@ public class InvoiceGenerator {
                 copyType
             );
 
-            // Upload to Supabase Storage  data/{invoices}/{clinicName?}/invoice-{id}[-copyType].pdf
             byte[] pdfBytes = Files.readAllBytes(tempFile);
-            String clinicName = (clinicProfile != null)
-                ? clinicProfile.getName()
-                : null;
-            String objectPath = buildInvoiceObjectPath(
-                clinicName, billing.getId().toString(), copyType
-            );
+            String objectPath = archivePathBuilder.invoicePath(billing, clinicProfile, copyType);
             storageService.upload(pdfBytes, invoiceBucket(), objectPath, "application/pdf");
             return objectPath;
         } finally {
@@ -605,26 +604,7 @@ public class InvoiceGenerator {
 
     private String invoiceBucket() {
         String bucket = storageProps.getBucketInvoices();
-        return (bucket == null || bucket.isBlank()) ? "data" : bucket;
-    }
-
-    private String buildInvoiceObjectPath(String clinicName, String billingId, String copyType) {
-        String suffix = "";
-        if ("INSURANCE".equalsIgnoreCase(copyType)) {
-            suffix = "-insurance";
-        } else if ("PATIENT".equalsIgnoreCase(copyType)) {
-            suffix = "-patient";
-        }
-        String filename = "invoice-" + billingId + suffix + ".pdf";
-        if (clinicName != null && !clinicName.isBlank()) {
-            String safe = clinicName.trim().replaceAll("[^a-zA-Z0-9_\\-]", "_");
-            return "invoices/" + safe + "/" + filename;
-        }
-        return "invoices/" + filename;
-    }
-
-    private String buildInvoiceObjectPath(String clinicName, String billingId) {
-        return buildInvoiceObjectPath(clinicName, billingId, "DEFAULT");
+        return (bucket == null || bucket.isBlank()) ? "clinic-files" : bucket;
     }
 
     private String resolveDownloadUrl(String objectPath) throws IOException {

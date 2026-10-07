@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Comparator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -13,12 +14,13 @@ import org.springframework.stereotype.Service;
 /**
  * Stores files on the local filesystem. Used when {@code supabase.storage-type=LOCAL}.
  * <p>
- * Directory layout under {@code supabase.local-storage-path} (default {@code ./storage}):
+ * Bucket directories are created under {@code supabase.local-storage-path}
+ * (default {@code ./storage}):
  * <pre>
  *   storage/
  *     uploads-public/    ← public files (profile photos, logos, insurance docs)
  *     uploads-private/   ← private files
- *     invoices/          ← generated invoice PDFs
+ *     clinic-files/      ← private visit archives and generated invoice PDFs
  * </pre>
  * Files are served by the backend via {@code /api/media/} and the frontend resolves
  * these URLs through {@code getMediaUrl()} → {@code /api/media/...}.
@@ -70,10 +72,53 @@ public class LocalStorageService implements FileStorageService {
     @Override
     public void upload(byte[] data, String bucket, String objectPath, String contentType)
             throws IOException {
-        Path target = storageRoot.resolve(bucket).resolve(objectPath);
+        Path target = resolveSafe(bucket, objectPath);
         Files.createDirectories(target.getParent());
         Files.write(target, data);
         log.debug("Local storage write: {}/{} ({} bytes)", bucket, objectPath, data.length);
+    }
+
+    @Override
+    public byte[] download(String bucket, String objectPath) throws IOException {
+        return Files.readAllBytes(resolveSafe(bucket, objectPath));
+    }
+
+    @Override
+    public void ensureDirectory(String bucket, String directoryPath) throws IOException {
+        Path directory = resolveSafe(bucket, directoryPath);
+        Files.createDirectories(directory);
+    }
+
+    @Override
+    public void movePrefix(String bucket, String sourcePrefix, String destinationPrefix)
+            throws IOException {
+        Path source = resolveSafe(bucket, sourcePrefix);
+        Path destination = resolveSafe(bucket, destinationPrefix);
+        if (!Files.exists(source)) {
+            return;
+        }
+        if (source.equals(destination)) {
+            return;
+        }
+
+        Files.createDirectories(destination.getParent());
+        try (var paths = Files.walk(source)) {
+            for (Path path : paths.sorted(Comparator.naturalOrder()).toList()) {
+                Path target = destination.resolve(source.relativize(path));
+                if (Files.isDirectory(path)) {
+                    Files.createDirectories(target);
+                } else {
+                    Files.createDirectories(target.getParent());
+                    Files.copy(path, target, StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+        }
+        try (var paths = Files.walk(source)) {
+            for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) {
+                Files.delete(path);
+            }
+        }
+        log.info("Moved local storage prefix {}/{} to {}", bucket, sourcePrefix, destinationPrefix);
     }
 
     @Override
@@ -110,12 +155,22 @@ public class LocalStorageService implements FileStorageService {
      * Returns null if the file does not exist.
      */
     public Path resolve(String bucket, String relativePath) {
-        Path resolved = storageRoot.resolve(bucket).resolve(relativePath).normalize();
-        // Security: ensure the resolved path is still under storageRoot
-        if (!resolved.startsWith(storageRoot)) {
+        Path bucketRoot = storageRoot.resolve(bucket).normalize();
+        Path resolved = bucketRoot.resolve(relativePath).normalize();
+        // Keep resolved media within its requested bucket.
+        if (!resolved.startsWith(bucketRoot)) {
             log.warn("Path traversal attempt blocked: {}/{}", bucket, relativePath);
             return null;
         }
         return Files.exists(resolved) ? resolved : null;
+    }
+
+    private Path resolveSafe(String bucket, String relativePath) throws IOException {
+        Path bucketRoot = storageRoot.resolve(bucket).normalize();
+        Path resolved = bucketRoot.resolve(relativePath).normalize();
+        if (!bucketRoot.startsWith(storageRoot) || !resolved.startsWith(bucketRoot)) {
+            throw new IOException("Storage path escapes the configured root");
+        }
+        return resolved;
     }
 }

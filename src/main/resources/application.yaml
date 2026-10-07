@@ -41,6 +41,10 @@ meilisearch:
   # Disable to make product/patient/worker search use the database exclusively.
   enabled: ${MEILI_ENABLED:true}
 
+nexxicd:
+  # Base URL of the ICD-11 wrapper service (e.g. http://localhost:8082).
+  url: ${NEXXICD_URL:}
+
 supabase:
   # Storage backend: LOCAL (filesystem) or SUPABASE (self-hosted Supabase Storage).
   # When LOCAL, files are saved under localStoragePath and served by /api/media/.
@@ -48,12 +52,19 @@ supabase:
   storage-type: ${STORAGE_TYPE:LOCAL}
   url: ${SUPABASE_URL:https://supa.med.rw}
   service-key: ${SUPABASE_SERVICE_KEY:SECRET}
+  # MinIO/S3-compatible settings; used only when STORAGE_TYPE=MINIO.
+  minio-endpoint: ${MINIO_ENDPOINT:}
+  # Set this to the address reachable by browsers for presigned downloads.
+  minio-public-endpoint: ${MINIO_PUBLIC_ENDPOINT:}
+  minio-access-key: ${MINIO_ACCESS_KEY:}
+  minio-secret-key: ${MINIO_SECRET_KEY:}
+  minio-region: ${MINIO_REGION:us-east-1}
   # Root directory for local file storage (only used when storage-type=LOCAL).
   local-storage-path: ${LOCAL_STORAGE_PATH:./storage}
   bucket-public: uploads-public
   bucket-private: uploads-private
-  # Bucket for generated invoice PDFs; created automatically on first use.
-  bucket-invoices: ${SUPABASE_BUCKET_INVOICES:data}
+  # Private bucket for visit archive folders and generated invoice PDFs.
+  bucket-invoices: ${SUPABASE_BUCKET_INVOICES:clinic-files}
   # Storage HTTP client hardening: fail fast instead of hanging on slow/unhealthy
   # Supabase, and survive transient (429/5xx) blips with bounded backoff.
   connect-timeout-ms: ${SUPABASE_CONNECT_TIMEOUT_MS:5000}

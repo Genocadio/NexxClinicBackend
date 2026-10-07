@@ -61,14 +61,22 @@ meilisearch:
   api-key: ${MEILI_MASTER_KEY}
   enabled: ${MEILI_ENABLED:true}
 
+nexxicd:
+  url: ${NEXXICD_URL:}
+
 supabase:
   storage-type: ${STORAGE_TYPE:SUPABASE}
   url: ${SUPABASE_URL:http://localhost:8000}
   service-key: ${SUPABASE_SERVICE_KEY:YOUR_SERVICE_ROLE_KEY}
+  minio-endpoint: ${MINIO_ENDPOINT:}
+  minio-public-endpoint: ${MINIO_PUBLIC_ENDPOINT:}
+  minio-access-key: ${MINIO_ACCESS_KEY:}
+  minio-secret-key: ${MINIO_SECRET_KEY:}
+  minio-region: ${MINIO_REGION:us-east-1}
   local-storage-path: ${LOCAL_STORAGE_PATH:./storage}
   bucket-public: ${SUPABASE_BUCKET_PUBLIC:uploads-public}
   bucket-private: ${SUPABASE_BUCKET_PRIVATE:uploads-private}
-  bucket-invoices: ${SUPABASE_BUCKET_INVOICES:data}
+  bucket-invoices: ${SUPABASE_BUCKET_INVOICES:clinic-files}
   connect-timeout-ms: ${SUPABASE_CONNECT_TIMEOUT_MS:5000}
   request-timeout-ms: ${SUPABASE_REQUEST_TIMEOUT_MS:15000}
   retry-max-attempts: ${SUPABASE_RETRY_MAX_ATTEMPTS:2}

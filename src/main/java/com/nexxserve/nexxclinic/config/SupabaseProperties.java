@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
  * supabase:
  *   url: https://supa.med.rw
  *   service-key: YOUR_SERVICE_ROLE_KEY
- *   storage-type: LOCAL  # or SUPABASE
+ *   storage-type: LOCAL  # LOCAL, SUPABASE, or MINIO
  *   local-storage-path: ./storage
  * </pre>
  */
@@ -33,9 +33,24 @@ public class SupabaseProperties {
     /** Service-role key with full Storage access. Ignored when storageType=LOCAL. */
     private String serviceKey;
 
+    /** MinIO/S3 API endpoint used by the backend. */
+    private String minioEndpoint;
+
+    /** Endpoint used by clients for presigned downloads; defaults to minioEndpoint. */
+    private String minioPublicEndpoint;
+
+    /** MinIO access key. */
+    private String minioAccessKey;
+
+    /** MinIO secret key. */
+    private String minioSecretKey;
+
+    /** AWS region required for S3 request signing; MinIO commonly uses us-east-1. */
+    private String minioRegion = "us-east-1";
+
     /**
      * Root directory for local file storage (relative to working dir or absolute).
-     * Only used when storageType=LOCAL. Subdirectories: uploads/, invoices/.
+     * Only used when storageType=LOCAL; each configured bucket is a subdirectory.
      */
     private String localStoragePath = "./storage";
 
@@ -45,8 +60,8 @@ public class SupabaseProperties {
     /** Bucket name for private uploads. */
     private String bucketPrivate = "uploads-private";
 
-    /** Bucket name for generated invoices. Default "data". */
-    private String bucketInvoices = "data";
+    /** Private bucket name for visit archives and generated invoices. */
+    private String bucketInvoices = "clinic-files";
 
     /** Connect timeout (ms) for the Storage HTTP client. Default 5000. */
     private int connectTimeoutMs = 5000;
@@ -85,6 +100,50 @@ public class SupabaseProperties {
 
     public boolean isSupabaseMode() {
         return storageType == StorageType.SUPABASE;
+    }
+
+    public boolean isMinioMode() {
+        return storageType == StorageType.MINIO;
+    }
+
+    public String getMinioEndpoint() {
+        return minioEndpoint;
+    }
+
+    public void setMinioEndpoint(String minioEndpoint) {
+        this.minioEndpoint = minioEndpoint;
+    }
+
+    public String getMinioPublicEndpoint() {
+        return minioPublicEndpoint;
+    }
+
+    public void setMinioPublicEndpoint(String minioPublicEndpoint) {
+        this.minioPublicEndpoint = minioPublicEndpoint;
+    }
+
+    public String getMinioAccessKey() {
+        return minioAccessKey;
+    }
+
+    public void setMinioAccessKey(String minioAccessKey) {
+        this.minioAccessKey = minioAccessKey;
+    }
+
+    public String getMinioSecretKey() {
+        return minioSecretKey;
+    }
+
+    public void setMinioSecretKey(String minioSecretKey) {
+        this.minioSecretKey = minioSecretKey;
+    }
+
+    public String getMinioRegion() {
+        return minioRegion;
+    }
+
+    public void setMinioRegion(String minioRegion) {
+        this.minioRegion = minioRegion;
     }
 
     public String getUrl() {

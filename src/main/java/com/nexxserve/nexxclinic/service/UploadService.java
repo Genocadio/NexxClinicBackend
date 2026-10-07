@@ -140,24 +140,7 @@ public class UploadService {
                     ? supabaseProperties.getBucketPublic()
                     : supabaseProperties.getBucketPrivate();
 
-            // For visibility change, re-upload to the new bucket
-            // (works for both local and supabase — just copies to a different directory/bucket)
-            java.nio.file.Path sourceFile = null;
-            if (storageService instanceof LocalStorageService local) {
-                sourceFile = local.resolve(upload.getBucket(), upload.getStoragePath());
-            }
-
-            byte[] fileBytes;
-            if (sourceFile != null) {
-                fileBytes = java.nio.file.Files.readAllBytes(sourceFile);
-            } else {
-                // Supabase: download from the public URL
-                try (var is = new java.net.URL(
-                    supabaseProperties.getUrl() + storageService.getPublicUrl(upload.getBucket(), upload.getStoragePath())
-                ).openStream()) {
-                    fileBytes = is.readAllBytes();
-                }
-            }
+            byte[] fileBytes = storageService.download(upload.getBucket(), upload.getStoragePath());
 
             storageService.upload(fileBytes, newBucket, upload.getStoragePath(), upload.getContentType());
 

@@ -3105,6 +3105,26 @@ public class VisitDepartmentService {
         }
 
         java.time.LocalDateTime newEncounterDate = input.encounterDate();
+        boolean visitDateAdjusted = false;
+        if (visit != null && visit.getVisitDate() != null && newEncounterDate.isBefore(visit.getVisitDate())) {
+            java.time.LocalDateTime adjustedVisitDate = newEncounterDate.minusMinutes(2);
+            ApiResponse<?> visitDateResponse = visitService.changeVisitDate(
+                new com.nexxserve.nexxclinic.graphql.input.ChangeVisitDateInput(
+                    visit.getId(), adjustedVisitDate
+                ),
+                authUser
+            );
+            if (visitDateResponse.status() != ResponseStatus.SUCCESS) {
+                return ApiResponse.error(
+                    "Encounter date was not changed because the visit date could not be adjusted: "
+                        + visitDateResponse.message()
+                );
+            }
+            visitDateAdjusted = true;
+            dept = visitDepartmentRepository.findById(dept.getId()).orElseThrow();
+            visit = dept.getVisit();
+        }
+
         dept.setStartedAt(newEncounterDate);
         visitDepartmentRepository.save(dept);
 
@@ -3120,37 +3140,39 @@ public class VisitDepartmentService {
                 departmentInsuranceBillingRepository.save(b);
             }
 
-            // Regenerate invoices after the transaction commits so the expensive
-            // PDF render and upload do not hold the DB connection open. This mirrors
-            // the invoice-regeneration path used by changeVisitDate.
-            List<UUID> billingIds = billings.stream()
-                .map(DepartmentInsuranceBilling::getId)
-                .toList();
-            org.springframework.transaction.support.TransactionSynchronizationManager
-                .registerSynchronization(
-                    new org.springframework.transaction.support.TransactionSynchronization() {
-                        @Override
-                        public void afterCommit() {
-                            for (UUID bid : billingIds) {
-                                try {
-                                    com.nexxserve.nexxclinic.dto.out.ApiResponse<?> result =
-                                        invoiceGenerator.generateInvoice(bid, authUser);
-                                    if (result.status() != com.nexxserve.nexxclinic.model.ResponseStatus.SUCCESS) {
-                                        log.warn(
-                                            "Invoice regeneration after encounter date change for {} returned: {}",
-                                            bid, result.message()
+            if (!visitDateAdjusted) {
+                // Regenerate invoices after the transaction commits so the expensive
+                // PDF render and upload do not hold the DB connection open. This mirrors
+                // the invoice-regeneration path used by changeVisitDate.
+                List<UUID> billingIds = billings.stream()
+                    .map(DepartmentInsuranceBilling::getId)
+                    .toList();
+                org.springframework.transaction.support.TransactionSynchronizationManager
+                    .registerSynchronization(
+                        new org.springframework.transaction.support.TransactionSynchronization() {
+                            @Override
+                            public void afterCommit() {
+                                for (UUID bid : billingIds) {
+                                    try {
+                                        com.nexxserve.nexxclinic.dto.out.ApiResponse<?> result =
+                                            invoiceGenerator.generateInvoice(bid, authUser);
+                                        if (result.status() != com.nexxserve.nexxclinic.model.ResponseStatus.SUCCESS) {
+                                            log.warn(
+                                                "Invoice regeneration after encounter date change for {} returned: {}",
+                                                bid, result.message()
+                                            );
+                                        }
+                                    } catch (Exception e) {
+                                        log.error(
+                                            "Failed to regenerate invoice after encounter date change for {}: {}",
+                                            bid, e.getMessage(), e
                                         );
                                     }
-                                } catch (Exception e) {
-                                    log.error(
-                                        "Failed to regenerate invoice after encounter date change for {}: {}",
-                                        bid, e.getMessage(), e
-                                    );
                                 }
                             }
                         }
-                    }
-                );
+                    );
+            }
         }
 
         if (visit != null) {

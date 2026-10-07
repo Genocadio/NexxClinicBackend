@@ -39,6 +39,7 @@ class SupabaseStorageServiceTest {
         SupabaseProperties p = new SupabaseProperties();
         p.setUrl("https://supa.med.rw");
         p.setServiceKey("test-key");
+        p.setBucketInvoices("data");
         return p;
     }
 

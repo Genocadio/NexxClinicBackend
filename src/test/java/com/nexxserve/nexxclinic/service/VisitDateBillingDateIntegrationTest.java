@@ -12,6 +12,7 @@ import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
 import com.nexxserve.nexxclinic.entity.Worker;
 import com.nexxserve.nexxclinic.graphql.input.BillVisitInput;
 import com.nexxserve.nexxclinic.graphql.input.ChangeVisitDateInput;
+import com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentEncounterDateInput;
 import com.nexxserve.nexxclinic.model.AccountStatus;
 import com.nexxserve.nexxclinic.model.CoverageType;
 import com.nexxserve.nexxclinic.model.ExemptionType;
@@ -56,6 +57,7 @@ class VisitDateBillingDateIntegrationTest {
 
     @Autowired private VisitBillingService visitBillingService;
     @Autowired private VisitService visitService;
+    @Autowired private VisitDepartmentService visitDepartmentService;
     @Autowired private WorkerRepository workerRepository;
     @Autowired private PatientRepository patientRepository;
     @Autowired private DepartmentRepository departmentRepository;
@@ -166,6 +168,39 @@ class VisitDateBillingDateIntegrationTest {
         return departmentInsuranceBillingRepository
             .findAllByVisitId(visitId)
             .iterator().next();
+    }
+
+    @Test
+    @Transactional
+    void encounterDateBeforeVisitDateMovesVisitDateToTwoMinutesBeforeEncounter() {
+        LocalDateTime originalVisitDate = LocalDateTime.now().minusDays(2);
+        Fixture fx = createVisitWithProduct(originalVisitDate);
+        LocalDateTime encounterDate = originalVisitDate.minusHours(1);
+
+        var response = visitDepartmentService.updateVisitDepartmentEncounterDate(
+            new UpdateVisitDepartmentEncounterDateInput(fx.vdId(), encounterDate),
+            auth(fx.actor())
+        );
+
+        assertEquals(ResponseStatus.SUCCESS, response.status(), response.message());
+        assertEquals(encounterDate, visitDepartmentRepository.findById(fx.vdId()).orElseThrow().getStartedAt());
+        assertEquals(encounterDate.minusMinutes(2), visitRepository.findById(fx.visit().getId()).orElseThrow().getVisitDate());
+    }
+
+    @Test
+    @Transactional
+    void encounterDateAfterVisitDateLeavesVisitDateUnchanged() {
+        LocalDateTime originalVisitDate = LocalDateTime.now().minusDays(2);
+        Fixture fx = createVisitWithProduct(originalVisitDate);
+        LocalDateTime encounterDate = originalVisitDate.plusHours(1);
+
+        var response = visitDepartmentService.updateVisitDepartmentEncounterDate(
+            new UpdateVisitDepartmentEncounterDateInput(fx.vdId(), encounterDate),
+            auth(fx.actor())
+        );
+
+        assertEquals(ResponseStatus.SUCCESS, response.status(), response.message());
+        assertEquals(originalVisitDate, visitRepository.findById(fx.visit().getId()).orElseThrow().getVisitDate());
     }
 
     // ─── Scenario 1: billed visit, edit visit date forward ─────────────

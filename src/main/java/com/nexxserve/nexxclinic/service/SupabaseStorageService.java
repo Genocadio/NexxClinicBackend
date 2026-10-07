@@ -8,7 +8,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -148,6 +150,142 @@ public class SupabaseStorageService implements FileStorageService {
             }
         }
     }
+
+    @Override
+    public void ensureDirectory(String bucket, String directoryPath) throws IOException {
+        String prefix = trimSlashes(directoryPath);
+        if (prefix.isBlank()) {
+            return;
+        }
+        upload(new byte[0], bucket, prefix + "/.keep", "application/octet-stream");
+    }
+
+    @Override
+    public void movePrefix(String bucket, String sourcePrefix, String destinationPrefix)
+            throws IOException {
+        String source = trimSlashes(sourcePrefix);
+        String destination = trimSlashes(destinationPrefix);
+        if (source.isBlank() || destination.isBlank() || source.equals(destination)) {
+            return;
+        }
+        if (destination.startsWith(source + "/")) {
+            throw new IOException("Cannot move a storage prefix inside itself");
+        }
+
+        List<StorageObject> objects = new ArrayList<>();
+        collectObjects(bucket, source, objects);
+        for (StorageObject object : objects) {
+            String suffix = object.path().substring(source.length());
+            String newObjectPath = destination + suffix;
+            byte[] contents = download(bucket, object.path());
+            upload(contents, bucket, newObjectPath, object.contentType());
+            delete(bucket, object.path());
+        }
+        log.info("Moved Supabase storage prefix {}/{} to {}", bucket, source, destination);
+    }
+
+    private void collectObjects(String bucket, String prefix, List<StorageObject> objects) throws IOException {
+        int offset = 0;
+        while (true) {
+            String body = mapper.writeValueAsString(Map.of(
+                "prefix", prefix,
+                "limit", 1000,
+                "offset", offset,
+                "sortBy", Map.of("column", "name", "order", "asc")
+            ));
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(base() + "/storage/v1/object/list/" + bucket))
+                .header("Authorization", "Bearer " + props.getServiceKey())
+                .header("Content-Type", "application/json")
+                .timeout(Duration.ofMillis(props.getRequestTimeoutMs()))
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+            HttpResponse<String> response = sendWithRetry(request);
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IOException("Supabase object listing failed with HTTP " + response.statusCode());
+            }
+
+            com.fasterxml.jackson.databind.JsonNode entries = mapper.readTree(response.body());
+            if (!entries.isArray()) {
+                throw new IOException("Supabase returned an invalid object listing");
+            }
+            int resultCount = entries.size();
+            for (com.fasterxml.jackson.databind.JsonNode entry : entries) {
+                String name = entry.path("name").asText(null);
+                if (name == null || name.isBlank()) {
+                    continue;
+                }
+                String objectPath = prefix + "/" + name;
+                if (entry.path("id").isMissingNode() || entry.path("id").isNull()) {
+                    collectObjects(bucket, objectPath, objects);
+                } else {
+                    String contentType = entry.path("metadata").path("mimetype").asText("application/octet-stream");
+                    objects.add(new StorageObject(objectPath, contentType));
+                }
+            }
+            if (resultCount < 1000) {
+                break;
+            }
+            offset += resultCount;
+        }
+    }
+
+    @Override
+    public byte[] download(String bucket, String objectPath) throws IOException {
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create(base() + "/storage/v1/object/" + bucket + "/" + objectPath))
+            .header("Authorization", "Bearer " + props.getServiceKey())
+            .timeout(Duration.ofMillis(props.getRequestTimeoutMs()))
+            .GET()
+            .build();
+        int retries = Math.max(0, props.getRetryMaxAttempts());
+        for (int attempt = 0; ; attempt++) {
+            HttpResponse<byte[]> response;
+            try {
+                response = http.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("Supabase object download interrupted", e);
+            } catch (IOException e) {
+                if (attempt >= retries) {
+                    throw e;
+                }
+                sleepBeforeRetry(attempt);
+                continue;
+            }
+            if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                return response.body();
+            }
+            if ((response.statusCode() == HTTP_TOO_MANY_REQUESTS || response.statusCode() >= 500)
+                    && attempt < retries) {
+                sleepBeforeRetry(attempt);
+                continue;
+            }
+            throw new IOException("Supabase object download failed with HTTP " + response.statusCode());
+        }
+    }
+
+    private void sleepBeforeRetry(int attempt) throws IOException {
+        try {
+            Thread.sleep(backoffFor(attempt));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Supabase storage retry interrupted", e);
+        }
+    }
+
+    private String trimSlashes(String value) {
+        if (value == null) {
+            return "";
+        }
+        int start = 0;
+        int end = value.length();
+        while (start < end && value.charAt(start) == '/') start++;
+        while (end > start && value.charAt(end - 1) == '/') end--;
+        return value.substring(start, end);
+    }
+
+    private record StorageObject(String path, String contentType) {}
 
     private void doUpload(byte[] data, String bucket, String objectPath, String contentType)
             throws IOException {
@@ -370,12 +508,12 @@ public class SupabaseStorageService implements FileStorageService {
 
     /**
      * Bucket used for generated invoices. Configurable via
-     * {@code supabase.bucket-invoices} (default {@code "data"}); created on first
+     * {@code supabase.bucket-invoices} (default {@code "clinic-files"}); created on first
      * use if it does not exist yet.
      */
     public String invoiceBucket() {
         String bucket = props.getBucketInvoices();
-        return (bucket == null || bucket.isBlank()) ? "data" : bucket;
+        return (bucket == null || bucket.isBlank()) ? "clinic-files" : bucket;
     }
 
     private String base() {

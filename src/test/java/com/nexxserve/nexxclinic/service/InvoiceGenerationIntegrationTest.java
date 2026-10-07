@@ -90,6 +90,9 @@ class InvoiceGenerationIntegrationTest {
     private InvoiceGenerator invoiceGenerator;
 
     @Autowired
+    private VisitArchivePathBuilder archivePathBuilder;
+
+    @Autowired
     private WorkerRepository workerRepository;
 
     @Autowired
@@ -243,8 +246,12 @@ class InvoiceGenerationIntegrationTest {
 
     /** Stubs the file storage calls used by the render/upload phase. */
     private void stubStorage(String objectPath) throws Exception {
-        when(fileStorageService.getSignedUrl("data", objectPath, 300))
+        when(fileStorageService.getSignedUrl("clinic-files", objectPath, 300))
             .thenReturn("https://signed/" + objectPath);
+    }
+
+    private String defaultInvoicePath(DepartmentInsuranceBilling billing) {
+        return archivePathBuilder.invoicePath(billing, null, "DEFAULT");
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -254,8 +261,7 @@ class InvoiceGenerationIntegrationTest {
     @Test
     void generateInvoiceUploadsAndPersistsInvoiceUrl() throws Exception {
         Fixture fx = persistBilledVisit(VisitProductStatus.BILLED);
-        // No ClinicProfile in fixture → clinicName=null → path = invoices/invoice-{id}.pdf
-        String objectPath = "invoices/invoice-" + fx.billing().getId() + ".pdf";
+        String objectPath = defaultInvoicePath(fx.billing());
         stubStorage(objectPath);
 
         ApiResponse<?> response = invoiceGenerator.generateInvoice(
@@ -277,8 +283,8 @@ class InvoiceGenerationIntegrationTest {
         assertEquals(objectPath, reloaded.getInvoiceUrl());
 
         // Phase 2 uploaded the file; after persist, the signed URL was generated.
-        verify(fileStorageService).upload(any(byte[].class), eq("data"), eq(objectPath), eq("application/pdf"));
-        verify(fileStorageService).getSignedUrl("data", objectPath, 300);
+        verify(fileStorageService).upload(any(byte[].class), eq("clinic-files"), eq(objectPath), eq("application/pdf"));
+        verify(fileStorageService).getSignedUrl("clinic-files", objectPath, 300);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -327,7 +333,7 @@ class InvoiceGenerationIntegrationTest {
         newerBilling.setPatientInsurance(fx.billing().getPatientInsurance());
         newerBilling = departmentInsuranceBillingRepository.save(newerBilling);
 
-        String objectPath = "invoices/invoice-" + newerBilling.getId() + ".pdf";
+        String objectPath = defaultInvoicePath(newerBilling);
         stubStorage(objectPath);
 
         // Generating by visitDepartmentId should automatically pick the latest version
@@ -352,7 +358,7 @@ class InvoiceGenerationIntegrationTest {
     @Test
     void generateInvoiceWithBillingIdPassedAsVisitDepartmentIdResolvesSuccessfully() throws Exception {
         Fixture fx = persistBilledVisit(VisitProductStatus.BILLED);
-        String objectPath = "invoices/invoice-" + fx.billing().getId() + ".pdf";
+        String objectPath = defaultInvoicePath(fx.billing());
         stubStorage(objectPath);
 
         // visitDepartmentId is passed the billing ID (e.g. from legacy caller or ambiguous ID)
@@ -370,7 +376,7 @@ class InvoiceGenerationIntegrationTest {
     @Test
     void generateInvoiceWithBothParametersSetToSameBillingIdResolvesSuccessfully() throws Exception {
         Fixture fx = persistBilledVisit(VisitProductStatus.BILLED);
-        String objectPath = "invoices/invoice-" + fx.billing().getId() + ".pdf";
+        String objectPath = defaultInvoicePath(fx.billing());
         stubStorage(objectPath);
 
         // Both visitDepartmentId and departmentInsuranceBillingId are populated with the billing ID
@@ -402,7 +408,7 @@ class InvoiceGenerationIntegrationTest {
         newerBilling.setPatientInsurance(fx.billing().getPatientInsurance());
         newerBilling = departmentInsuranceBillingRepository.save(newerBilling);
 
-        String objectPath = "invoices/invoice-" + newerBilling.getId() + ".pdf";
+        String objectPath = defaultInvoicePath(newerBilling);
         stubStorage(objectPath);
 
         // Passing old billing ID should seamlessly resolve the latest version instead of failing
@@ -442,7 +448,7 @@ class InvoiceGenerationIntegrationTest {
         // runs against the real repository.
         when(departmentInsuranceBillingRepository.findById(fx.billing().getId()))
             .thenReturn(Optional.empty());
-        String objectPath = "invoices/invoice-" + fx.billing().getId() + ".pdf";
+        String objectPath = defaultInvoicePath(fx.billing());
         stubStorage(objectPath);
 
         ApiResponse<?> response = invoiceGenerator.generateInvoice(
@@ -453,8 +459,8 @@ class InvoiceGenerationIntegrationTest {
         assertEquals(ResponseStatus.ERROR, response.status());
         assertTrue(response.message().contains("no longer available"));
         // The file was uploaded, then orphaned and deleted.
-        verify(fileStorageService).upload(any(byte[].class), eq("data"), eq(objectPath), eq("application/pdf"));
-        verify(fileStorageService).delete("data", objectPath);
+        verify(fileStorageService).upload(any(byte[].class), eq("clinic-files"), eq(objectPath), eq("application/pdf"));
+        verify(fileStorageService).delete("clinic-files", objectPath);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -480,7 +486,7 @@ class InvoiceGenerationIntegrationTest {
                 Optional.of(newer)                             // Phase 3: version 2 is latest now
             );
 
-        String objectPath = "invoices/invoice-" + fx.billing().getId() + ".pdf";
+        String objectPath = defaultInvoicePath(fx.billing());
         stubStorage(objectPath);
 
         ApiResponse<?> response = invoiceGenerator.generateInvoice(
@@ -495,7 +501,7 @@ class InvoiceGenerationIntegrationTest {
                 .findById(fx.billing().getId()).orElseThrow().getInvoiceUrl(),
                 "stale billing must not receive a fresh invoice URL");
         // The file was uploaded, then orphaned and deleted.
-        verify(fileStorageService).upload(any(byte[].class), eq("data"), eq(objectPath), eq("application/pdf"));
-        verify(fileStorageService).delete("data", objectPath);
+        verify(fileStorageService).upload(any(byte[].class), eq("clinic-files"), eq(objectPath), eq("application/pdf"));
+        verify(fileStorageService).delete("clinic-files", objectPath);
     }
 }

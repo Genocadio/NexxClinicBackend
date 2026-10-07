@@ -785,6 +785,29 @@ type VisitDepartmentDiagnosis {
   createdAt: String!
 }
 
+type Icd11Suggestion {
+  id: String
+  code: String
+  title: String
+  chapter: String
+  score: Float!
+}
+
+type Icd11SearchResult {
+  query: String!
+  lang: String!
+  limit: Int!
+  total: Int!
+  results: [Icd11Suggestion!]!
+  source: String!
+}
+
+type Icd11SearchResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: Icd11SearchResult
+}
+
 type VisitDepartmentMedication {
   id: ID!
   medicationName: String!
@@ -1868,6 +1891,7 @@ type Query {
   visitBilling(visitId: ID!): VisitBillingResponse!
   getVisitDepartmentBilling(visitDepartmentId: ID!): VisitDepartmentBillingResponse!
   visitPriceEstimates(visitId: ID!): VisitPriceEstimatesListResponse!
+  searchIcd11Diseases(query: String!, lang: String, limit: Int, chapter: String): Icd11SearchResponse!
   clinicProfile: ClinicProfileResponse!
   lastPatientDepartmentVisit(visitId: ID!, departmentId: ID!): LastPatientDepartmentVisitResponse!
   insuranceCoverage(ruleId: ID!): InsuranceCoverageResponse!

@@ -7,9 +7,11 @@ package com.nexxserve.nexxclinic.model;
  *       served by the backend via {@code /api/media/}.</li>
  *   <li>{@code SUPABASE} — files uploaded to a self-hosted Supabase Storage instance;
  *       served by the Next.js proxy at {@code /supa/}.</li>
+ *   <li>{@code MINIO} — files stored in an S3-compatible MinIO bucket.</li>
  * </ul>
  */
 public enum StorageType {
     LOCAL,
-    SUPABASE
+    SUPABASE,
+    MINIO
 }

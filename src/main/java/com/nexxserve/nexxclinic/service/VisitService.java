@@ -110,6 +110,7 @@ public class VisitService {
     private final com.nexxserve.nexxclinic.service.billing.BillingProductService billingProductService;
     private final VisitDepartmentNoteService visitDepartmentNoteService;
     private final com.nexxserve.nexxclinic.events.ClinicEventPublisher clinicEventPublisher;
+    private final VisitArchiveService visitArchiveService;
 
     public VisitService(
             VisitRepository visitRepository,
@@ -142,7 +143,8 @@ public class VisitService {
             @Lazy RolePermissionService rolePermissionService,
             @Lazy com.nexxserve.nexxclinic.service.billing.BillingProductService billingProductService,
             @Lazy VisitDepartmentNoteService visitDepartmentNoteService,
-            com.nexxserve.nexxclinic.events.ClinicEventPublisher clinicEventPublisher
+            com.nexxserve.nexxclinic.events.ClinicEventPublisher clinicEventPublisher,
+            VisitArchiveService visitArchiveService
     ) {
         this.visitRepository = visitRepository;
         this.visitInsuranceRepository = visitInsuranceRepository;
@@ -175,6 +177,7 @@ public class VisitService {
         this.billingProductService = billingProductService;
         this.visitDepartmentNoteService = visitDepartmentNoteService;
         this.clinicEventPublisher = clinicEventPublisher;
+        this.visitArchiveService = visitArchiveService;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -281,6 +284,7 @@ public class VisitService {
         }
 
         Visit updatedVisit = visitRepository.findById(input.visitId()).orElse(existingVisit);
+        visitArchiveService.scheduleFolderMove(updatedVisit, oldVisitDate, newVisitDate);
 
         // When the visit date changes after billing, recalculate each billing's
         // billing date by applying the same shift as the visit date moved, then
@@ -1165,6 +1169,7 @@ public class VisitService {
 
         visit.setStatus(VisitStatus.FINALISED);
         Visit saved = visitRepository.save(visit);
+        visitArchiveService.scheduleFolderCreation(saved, departments);
         meilisearchIndexService.indexVisit(saved);
         clinicEventPublisher.publishVisitDischarged(saved, null);
         return ApiResponse.success("Visit finalised.", visitToDto(saved));
