@@ -125,6 +125,18 @@ enum VisitProductStatus {
 }
 
 """
+Billing lifecycle state of a product line, separated from the exemption mode:
+- UNBILLED: needs billing (legacy PENDING/UNPAID)
+- BILLED: billed; `exemptionMode` records how (NONE = normal charge, FULL/PATIENT_SHARE = waived)
+- CORRECTING: under an active billing correction (legacy CORRECTION_PENDING); quick-bill rejects these until the edit completes
+"""
+enum BillingState {
+  UNBILLED
+  BILLED
+  CORRECTING
+}
+
+"""
 How a visit department product was added:
 - USER: added manually through the normal add-product flow
 - PROFILE: auto-added from a department profile (cannot be removed individually — change the visit department's profile instead)
@@ -791,6 +803,10 @@ type VisitDepartmentProduct {
   product: Product!
   quantity: Float!
   status: VisitProductStatus!
+  """Billing lifecycle state — "was this billed?" (UNBILLED/BILLED/CORRECTING)."""
+  billingState: BillingState!
+  """Exemption mode — only meaningful when billingState is BILLED."""
+  exemptionMode: ExemptionType!
   source: VisitDepartmentProductSource!
   addedBy: Worker
   billedBy: Worker

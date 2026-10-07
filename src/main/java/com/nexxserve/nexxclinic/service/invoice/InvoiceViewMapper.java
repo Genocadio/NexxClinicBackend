@@ -109,8 +109,13 @@ public class InvoiceViewMapper {
             mapClinic(clinicProfile),
             formatPatientName(pat),
             pat != null ? pat.getPrimaryPhoneNumber() : null,
-            visit != null && visit.getVisitDate() != null
-                    ? DATE_FMT.format(visit.getVisitDate()) : null,
+            // Encounter date of the billed visit department — the invoice belongs
+            // to this department, not to the visit as a whole. Fall back to the visit
+            // date when the department never recorded an encounter start.
+            vd != null && vd.getStartedAt() != null
+                    ? DATE_FMT.format(vd.getStartedAt())
+                    : visit != null && visit.getVisitDate() != null
+                            ? DATE_FMT.format(visit.getVisitDate()) : null,
             vd != null && vd.getDepartment() != null
                     ? vd.getDepartment().getName() : null,
             insuranceLine,

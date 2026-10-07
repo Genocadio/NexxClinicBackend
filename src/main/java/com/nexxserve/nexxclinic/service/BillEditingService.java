@@ -6,6 +6,7 @@ import com.nexxserve.nexxclinic.entity.Visit;
 import com.nexxserve.nexxclinic.entity.VisitDepartment;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
 import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
+import com.nexxserve.nexxclinic.model.BillingState;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
 import com.nexxserve.nexxclinic.repository.VisitRepository;
 import com.nexxserve.nexxclinic.repository.VisitBillingRepository;
@@ -300,9 +301,7 @@ public class BillEditingService {
         int count = 0;
         for (VisitDepartmentProduct p : products) {
             if (p.isDeleted()) continue;
-            if (p.getStatus() == VisitProductStatus.BILLED
-                    || p.getStatus() == VisitProductStatus.EXEMPTED
-                    || p.getStatus() == VisitProductStatus.PATIENT_SHARE_EXEMPTED) {
+            if (p.getBillingState() == BillingState.BILLED) {
                 p.setStatus(VisitProductStatus.CORRECTION_PENDING);
                 visitDepartmentProductRepository.save(p);
                 count++;
@@ -329,7 +328,7 @@ public class BillEditingService {
         int count = 0;
         for (VisitDepartmentProduct p : products) {
             if (p.isDeleted()) continue;
-            if (p.getStatus() == VisitProductStatus.CORRECTION_PENDING) {
+            if (p.getBillingState() == BillingState.CORRECTING) {
                 p.setStatus(VisitProductStatus.BILLED);
                 visitDepartmentProductRepository.save(p);
                 count++;

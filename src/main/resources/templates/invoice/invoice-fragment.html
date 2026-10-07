@@ -255,8 +255,8 @@
         <div class="meta-kv" th:if="${billing.patientPhone}">
           <span class="k">Phone: </span><span class="v" th:text="${billing.patientPhone}"></span>
         </div>
-        <div class="meta-kv" th:if="${billing.visitDate}">
-          <span class="k">Visit Date: </span><span class="v" th:text="${billing.visitDate}"></span>
+        <div class="meta-kv" th:if="${billing.encounterDate}">
+          <span class="k">Encounter Date: </span><span class="v" th:text="${billing.encounterDate}"></span>
         </div>
         <div class="meta-kv" th:if="${billing.departmentName}">
           <span class="k">Department: </span><span class="v" th:text="${billing.departmentName}"></span>
@@ -362,7 +362,7 @@
       <span class="invno" th:text="'#' + ${billing.invoiceNo}">#0001</span>
     </div>
     <p class="clinic-line" style="margin:0 0 6px 0;"
-       th:text="${billing.patientName} + (${billing.visitDate} != null ? ' &middot; ' + ${billing.visitDate} : '')">
+       th:text="${billing.patientName} + (${billing.encounterDate} != null ? ' &middot; ' + ${billing.encounterDate} : '')">
        Patient &middot; Date</p>
 
     <table class="items-slim">

@@ -488,6 +488,42 @@ class InvoiceViewMapperTest {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Encounter date (per visit department) vs visit date
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    @Test
+    void encounterDate_usesDepartmentStartedAt_notVisitDate() {
+        Patient p = patient("Jane", null, "Doe", "Jane Doe", null);
+        // Visit recorded on 01 Oct 2026, but this department's encounter started
+        // on 06 Oct 2026 — the invoice must show the department encounter date.
+        Visit v = visit(p, LocalDateTime.of(2026, 10, 1, 8, 0));
+        VisitBilling vb = visitBilling(v, LocalDateTime.now());
+        VisitDepartment vd = visitDepartment("Ophthalmology");
+        vd.setStartedAt(LocalDateTime.of(2026, 10, 6, 9, 30));
+        DepartmentInsuranceBilling b = billing(vb, vd, null, VisitBillingStatus.PAID,
+            "100", "0", "100", "100", "0");
+
+        InvoiceView view = mapper.map(b, List.of(), null);
+
+        assertEquals("06 Oct 2026", view.encounterDate());
+    }
+
+    @Test
+    void encounterDate_fallsBackToVisitDate_whenDepartmentNeverStarted() {
+        Patient p = patient("Jane", null, "Doe", "Jane Doe", null);
+        Visit v = visit(p, LocalDateTime.of(2026, 10, 1, 8, 0));
+        VisitBilling vb = visitBilling(v, LocalDateTime.now());
+        VisitDepartment vd = visitDepartment("Ophthalmology");
+        // startedAt never recorded → fall back to the visit date.
+        DepartmentInsuranceBilling b = billing(vb, vd, null, VisitBillingStatus.PAID,
+            "100", "0", "100", "100", "0");
+
+        InvoiceView view = mapper.map(b, List.of(), null);
+
+        assertEquals("01 Oct 2026", view.encounterDate());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Dual Copy Types (Insurance Claim vs Patient Receipt)
     // ═══════════════════════════════════════════════════════════════════════════
 

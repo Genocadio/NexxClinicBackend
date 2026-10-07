@@ -12,7 +12,9 @@ import java.util.List;
  * @param clinic            clinic header info
  * @param patientName       resolved patient full name
  * @param patientPhone      patient primary phone (may be null)
- * @param visitDate         formatted visit date (may be null)
+ * @param encounterDate     formatted encounter date of the billed visit department;
+ *                          falls back to the visit date when the department recorded
+ *                          no encounter start (may be null)
  * @param departmentName    department name (may be null)
  * @param insuranceLine     formatted insurance line, e.g. "Santé Plus — SPR-2024-98765" (may be null)
  * @param invoiceNo         abbreviated billing UUID
@@ -32,7 +34,7 @@ public record InvoiceView(
     ClinicInfo clinic,
     String patientName,
     String patientPhone,
-    String visitDate,
+    String encounterDate,
     String departmentName,
     String insuranceLine,
     String invoiceNo,
@@ -57,7 +59,7 @@ public record InvoiceView(
         ClinicInfo clinic,
         String patientName,
         String patientPhone,
-        String visitDate,
+        String encounterDate,
         String departmentName,
         String insuranceLine,
         String invoiceNo,
@@ -74,7 +76,7 @@ public record InvoiceView(
         boolean hasInsurance
     ) {
         this(
-            clinic, patientName, patientPhone, visitDate, departmentName, insuranceLine,
+            clinic, patientName, patientPhone, encounterDate, departmentName, insuranceLine,
             invoiceNo, invoiceDate, status, statusLabel, items, totalAmount,
             insuranceCoveredAmount, patientPayableAmount, paidAmount, outstandingAmount,
             hasOutstanding, hasInsurance, "INVOICE", "DEFAULT", null

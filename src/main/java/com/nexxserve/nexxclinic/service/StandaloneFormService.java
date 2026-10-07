@@ -400,11 +400,8 @@ public class StandaloneFormService {
                     && dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.COMPLETED
                     && dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.DEPARTMENT_EDITING) {
                 List<com.nexxserve.nexxclinic.entity.VisitDepartmentProduct> products = visitDepartmentProductRepository.findByVisitDepartmentId(dept.getId());
-                boolean hasUnbilled = products.stream().anyMatch(p -> !p.isDeleted() && (
-                        p.getStatus() == com.nexxserve.nexxclinic.model.VisitProductStatus.PENDING
-                        || p.getStatus() == com.nexxserve.nexxclinic.model.VisitProductStatus.UNPAID
-                        || p.getStatus() == com.nexxserve.nexxclinic.model.VisitProductStatus.CORRECTION_PENDING
-                ));
+                boolean hasUnbilled = products.stream().anyMatch(p -> !p.isDeleted()
+                        && p.getBillingState() != com.nexxserve.nexxclinic.model.BillingState.BILLED);
                 if (hasUnbilled) {
                     boolean justMarked = dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.BILLING;
                     dept.setStatus(com.nexxserve.nexxclinic.model.VisitDepartmentStatus.BILLING);

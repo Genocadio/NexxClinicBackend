@@ -10,6 +10,7 @@ import com.nexxserve.nexxclinic.entity.VisitPriceEstimate;
 import com.nexxserve.nexxclinic.entity.ProductInsuranceCoverage;
 import com.nexxserve.nexxclinic.model.EncounterType;
 import com.nexxserve.nexxclinic.model.PatientShareSource;
+import com.nexxserve.nexxclinic.model.BillingState;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
 import com.nexxserve.nexxclinic.repository.InsuranceCoverageRepository;
 import com.nexxserve.nexxclinic.repository.ProductInsuranceCoverageRepository;
@@ -115,9 +116,7 @@ public class VisitPriceEstimateService {
         // Filter to active (non-deleted) products in non-exempted status
         List<VisitDepartmentProduct> activeProducts = allProducts.stream()
             .filter(p -> !p.isDeleted())
-            .filter(p -> p.getStatus() == VisitProductStatus.PENDING
-                      || p.getStatus() == VisitProductStatus.UNPAID
-                      || p.getStatus() == VisitProductStatus.CORRECTION_PENDING)
+            .filter(p -> p.getBillingState() != BillingState.BILLED)
             .toList();
 
         if (activeProducts.isEmpty()) {

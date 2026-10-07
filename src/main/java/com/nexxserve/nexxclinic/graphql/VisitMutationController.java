@@ -370,7 +370,7 @@ public class VisitMutationController {
         return noteService.addVisitDepartmentNote(input, authUser);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE, RoleName.NURSE, RoleName.CLINICIAN})
     @MutationMapping
     public ApiResponse markVisitDepartmentNoteViewed(
             @Argument UUID noteId,

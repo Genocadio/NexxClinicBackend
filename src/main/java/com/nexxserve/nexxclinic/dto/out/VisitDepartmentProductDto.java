@@ -1,6 +1,8 @@
 package com.nexxserve.nexxclinic.dto.out;
 
 import com.nexxserve.nexxclinic.model.BillingConfirmationStatus;
+import com.nexxserve.nexxclinic.model.BillingState;
+import com.nexxserve.nexxclinic.model.ExemptionType;
 import com.nexxserve.nexxclinic.model.VisitDepartmentProductSource;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
 import java.math.BigDecimal;
@@ -12,6 +14,8 @@ public record VisitDepartmentProductDto(
         ProductDto product,
         BigDecimal quantity,
         VisitProductStatus status,
+        BillingState billingState,
+        ExemptionType exemptionMode,
         VisitDepartmentProductSource source,
         WorkerDto addedBy,
         WorkerDto billedBy,

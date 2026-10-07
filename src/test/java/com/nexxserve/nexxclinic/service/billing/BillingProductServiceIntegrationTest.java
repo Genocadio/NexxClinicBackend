@@ -16,6 +16,7 @@ import com.nexxserve.nexxclinic.graphql.input.BillVisitInput;
 import com.nexxserve.nexxclinic.graphql.input.CreateVisitDepartmentProductInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentProductQuantityInput;
 import com.nexxserve.nexxclinic.model.BillingConfirmationStatus;
+import com.nexxserve.nexxclinic.model.BillingState;
 import com.nexxserve.nexxclinic.model.CoverageType;
 import com.nexxserve.nexxclinic.model.EncounterType;
 import com.nexxserve.nexxclinic.model.ExemptionType;
@@ -256,6 +257,7 @@ public class BillingProductServiceIntegrationTest {
 
         VisitDepartmentProductDto prodDto = new VisitDepartmentProductDto(
                 vdp.getId(), null, new BigDecimal("2.0"), VisitProductStatus.BILLED,
+                BillingState.BILLED, ExemptionType.NONE,
                 null, null, null, null, BillingConfirmationStatus.CONFIRMED, null,
                 LocalDateTime.now(), LocalDateTime.now()
         );

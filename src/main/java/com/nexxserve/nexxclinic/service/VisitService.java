@@ -27,6 +27,7 @@ import com.nexxserve.nexxclinic.model.PermissionName;
 import com.nexxserve.nexxclinic.model.ResponseStatus;
 import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
+import com.nexxserve.nexxclinic.model.BillingState;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
 import com.nexxserve.nexxclinic.model.VisitStatus;
 import com.nexxserve.nexxclinic.entity.Department;
@@ -779,9 +780,7 @@ public class VisitService {
 
         List<VisitDepartmentProduct> visitProducts = visitDepartmentProductRepository.findByVisitDepartmentVisitId(visitId);
         boolean hasUnbilledProducts = visitProducts.stream()
-                .anyMatch(product -> product.getStatus() == VisitProductStatus.PENDING
-                        || product.getStatus() == VisitProductStatus.UNPAID
-                        || product.getStatus() == VisitProductStatus.CORRECTION_PENDING);
+                .anyMatch(product -> product.getBillingState() != BillingState.BILLED);
 
         if (hasUnbilledProducts) {
             return ApiResponse.error("Cannot complete visit with unbilled products. All products must be billed first.");
@@ -883,11 +882,8 @@ public class VisitService {
                     && dept.getStatus() != VisitDepartmentStatus.COMPLETED
                     && dept.getStatus() != VisitDepartmentStatus.DEPARTMENT_EDITING) {
                 List<VisitDepartmentProduct> products = visitDepartmentProductRepository.findByVisitDepartmentId(dept.getId());
-                boolean hasUnbilled = products.stream().anyMatch(p -> !p.isDeleted() && (
-                        p.getStatus() == VisitProductStatus.PENDING
-                        || p.getStatus() == VisitProductStatus.UNPAID
-                        || p.getStatus() == VisitProductStatus.CORRECTION_PENDING
-                ));
+                boolean hasUnbilled = products.stream().anyMatch(p -> !p.isDeleted()
+                        && p.getBillingState() != BillingState.BILLED);
                 if (hasUnbilled) {
                     boolean justMarked = dept.getStatus() != VisitDepartmentStatus.BILLING;
                     dept.setStatus(VisitDepartmentStatus.BILLING);
@@ -1135,9 +1131,7 @@ public class VisitService {
                 // Check unbilled products
                 List<VisitDepartmentProduct> products = visitDepartmentProductRepository.findByVisitDepartmentId(dept.getId());
                 boolean hasUnbilled = products.stream().anyMatch(p ->
-                        p.getStatus() == VisitProductStatus.PENDING
-                        || p.getStatus() == VisitProductStatus.UNPAID
-                        || p.getStatus() == VisitProductStatus.CORRECTION_PENDING
+                        p.getBillingState() != BillingState.BILLED
                 );
                 if (hasUnbilled) {
                     return ApiResponse.error("Cannot finalise: department '" + dept.getDepartment().getName() + "' has unbilled products. All products must be billed first.");
@@ -1876,9 +1870,7 @@ public class VisitService {
             for (VisitDepartment dept : visitDepartments) {
                 List<VisitDepartmentProduct> products = productsByVdId.getOrDefault(dept.getId(), List.of());
                 boolean hasUnbilled = products.stream().anyMatch(p ->
-                        p.getStatus() == VisitProductStatus.PENDING
-                        || p.getStatus() == VisitProductStatus.UNPAID
-                        || p.getStatus() == VisitProductStatus.CORRECTION_PENDING
+                        p.getBillingState() != BillingState.BILLED
                 );
                 if (hasUnbilled) unbilledDeptCount++;
             }
@@ -2024,19 +2016,11 @@ public class VisitService {
 
         boolean directBillable = productsByVdId.getOrDefault(visitDepartment.getId(), List.of()).stream()
                 .filter(p -> !p.isDeleted())
-                .anyMatch(p ->
-                        p.getStatus() == VisitProductStatus.PENDING
-                        || p.getStatus() == VisitProductStatus.UNPAID
-                        || p.getStatus() == VisitProductStatus.CORRECTION_PENDING
-                );
+                .anyMatch(p -> p.getBillingState() != BillingState.BILLED);
         boolean childBillable = children.stream().anyMatch(child ->
                 productsByVdId.getOrDefault(child.getId(), List.of()).stream()
                         .filter(p -> !p.isDeleted())
-                        .anyMatch(p ->
-                                p.getStatus() == VisitProductStatus.PENDING
-                                || p.getStatus() == VisitProductStatus.UNPAID
-                                || p.getStatus() == VisitProductStatus.CORRECTION_PENDING
-                        )
+                        .anyMatch(p -> p.getBillingState() != BillingState.BILLED)
         );
         boolean hasBillable = directBillable || childBillable;
 

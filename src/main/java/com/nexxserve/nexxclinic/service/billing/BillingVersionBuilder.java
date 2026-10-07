@@ -4,6 +4,7 @@ import com.nexxserve.nexxclinic.entity.Visit;
 import com.nexxserve.nexxclinic.entity.VisitBilling;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
 import com.nexxserve.nexxclinic.entity.billing.VisitBillingVersion;
+import com.nexxserve.nexxclinic.model.BillingState;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
 import com.nexxserve.nexxclinic.repository.VisitBillingRepository;
 import com.nexxserve.nexxclinic.repository.VisitBillingVersionRepository;
@@ -130,9 +131,7 @@ public class BillingVersionBuilder {
         return items.stream().allMatch(
             item ->
                 item.isDeleted() ||
-                item.getStatus() == VisitProductStatus.BILLED ||
-                item.getStatus() == VisitProductStatus.EXEMPTED ||
-                item.getStatus() == VisitProductStatus.PATIENT_SHARE_EXEMPTED
+                item.getBillingState() == BillingState.BILLED
         );
     }
 
@@ -162,9 +161,7 @@ public class BillingVersionBuilder {
         return items.stream().allMatch(
             item ->
                 item.isDeleted() ||
-                item.getStatus() == VisitProductStatus.BILLED ||
-                item.getStatus() == VisitProductStatus.EXEMPTED ||
-                item.getStatus() == VisitProductStatus.PATIENT_SHARE_EXEMPTED
+                item.getBillingState() == BillingState.BILLED
         );
     }
 }

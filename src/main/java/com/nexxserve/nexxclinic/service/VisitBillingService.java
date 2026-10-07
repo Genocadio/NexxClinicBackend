@@ -25,6 +25,7 @@ import com.nexxserve.nexxclinic.model.ExemptionType;
 
 import com.nexxserve.nexxclinic.model.VisitBillingStatus;
 import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
+import com.nexxserve.nexxclinic.model.BillingState;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
 import com.nexxserve.nexxclinic.model.VisitStatus;
 import com.nexxserve.nexxclinic.repository.DepartmentInsuranceBillingRepository;
@@ -1668,7 +1669,7 @@ public class VisitBillingService {
         List<VisitDepartmentProduct> allProductsCheck =
             visitDepartmentProductRepository.findByVisitDepartmentVisitId(visitId);
         boolean hasCorrectionPending = allProductsCheck.stream()
-            .anyMatch(p -> !p.isDeleted() && p.getStatus() == VisitProductStatus.CORRECTION_PENDING);
+            .anyMatch(p -> !p.isDeleted() && p.getBillingState() == BillingState.CORRECTING);
         if (hasCorrectionPending) {
             return ApiResponse.error("Some products are mid-edit (CORRECTION_PENDING). Complete or cancel the billing edit before quick-billing.");
         }
@@ -1817,12 +1818,8 @@ public class VisitBillingService {
     }
 
     private boolean requiresBilling(VisitDepartmentProduct item) {
-        // PENDING, UNPAID and CORRECTION_PENDING all require billing.
-        return (
-            item.getStatus() != VisitProductStatus.BILLED &&
-            item.getStatus() != VisitProductStatus.EXEMPTED &&
-            item.getStatus() != VisitProductStatus.PATIENT_SHARE_EXEMPTED
-        );
+        // UNBILLED and CORRECTING (mid-correction) both require billing.
+        return item.getBillingState() != BillingState.BILLED;
     }
 
     private ExemptionType resolveExemptionTypeFromStatus(VisitProductStatus status) {

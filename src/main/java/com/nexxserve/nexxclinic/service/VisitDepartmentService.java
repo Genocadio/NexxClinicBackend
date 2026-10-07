@@ -32,6 +32,7 @@ import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.model.BillingConfirmationStatus;
 import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
 import com.nexxserve.nexxclinic.model.VisitDepartmentProductSource;
+import com.nexxserve.nexxclinic.model.BillingState;
 import com.nexxserve.nexxclinic.model.VisitProductStatus;
 import com.nexxserve.nexxclinic.model.VisitStatus;
 import com.nexxserve.nexxclinic.repository.DepartmentProfileProductRepository;
@@ -1369,9 +1370,7 @@ public class VisitDepartmentService {
         // diverge from its billing snapshot. Quantity corrections go through editBillVisit.
         // In DEPARTMENT_EDITING mode, quantity changes are allowed.
         if (!isDeptEditing
-                && (item.getStatus() == VisitProductStatus.BILLED
-                    || item.getStatus() == VisitProductStatus.EXEMPTED
-                    || item.getStatus() == VisitProductStatus.PATIENT_SHARE_EXEMPTED)) {
+                && item.getBillingState() == BillingState.BILLED) {
             return ApiResponse.error("Cannot change the quantity of a billed or exempted product. Use startBillEditing to enter edit mode first.");
         }
 
@@ -1615,10 +1614,8 @@ public class VisitDepartmentService {
             }
             List<VisitDepartmentProduct> products = visitDepartmentProductRepository
                 .findByVisitDepartmentId(department.getId());
-            boolean hasUnbilled = products.stream().anyMatch(p -> !p.isDeleted() && (
-                p.getStatus() == VisitProductStatus.PENDING
-                    || p.getStatus() == VisitProductStatus.UNPAID
-                    || p.getStatus() == VisitProductStatus.CORRECTION_PENDING));
+            boolean hasUnbilled = products.stream().anyMatch(p -> !p.isDeleted()
+                    && p.getBillingState() != BillingState.BILLED);
             if (hasUnbilled) {
                 return ApiResponse.error("Cannot complete a department with unbilled products. All products must be billed first.");
             }
@@ -2710,11 +2707,7 @@ public class VisitDepartmentService {
         List<VisitDepartmentProduct> products = visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartmentId);
         boolean direct = products.stream()
                 .filter(p -> !p.isDeleted())
-                .anyMatch(p ->
-                        p.getStatus() == VisitProductStatus.PENDING
-                        || p.getStatus() == VisitProductStatus.UNPAID
-                        || p.getStatus() == VisitProductStatus.CORRECTION_PENDING
-                );
+                .anyMatch(p -> p.getBillingState() != BillingState.BILLED);
         if (direct) return true;
         List<VisitDepartment> children = visitDepartmentRepository.findByParentVisitDepartmentId(visitDepartmentId);
         return children.stream().anyMatch(child -> resolveHasBillableProducts(child.getId()));
@@ -2765,6 +2758,8 @@ public class VisitDepartmentService {
                 productMapper.toDto(item.getProduct()),
                 item.getQuantity(),
                 item.getStatus(),
+                item.getBillingState(),
+                item.getExemptionMode(),
                 item.getSource(),
                 workerDto(item.getAddedBy(), preloaded),
                 workerDto(item.getBilledBy(), preloaded),
