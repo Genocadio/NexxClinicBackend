@@ -1557,6 +1557,15 @@ public class VisitDepartmentService {
         if (requestedStatus == null) {
             return ApiResponse.error("status is required.");
         }
+        // D1 follow-up: a department in billing edit mode must only be exited through
+        // completeBillEditing/cancelBillEditing (which restore its CORRECTION_PENDING
+        // products). Allowing the generic mutation to move it — e.g. to BILLING —
+        // silently strands those products and permanently blocks invoice generation.
+        if (currentStatus == VisitDepartmentStatus.DEPARTMENT_EDITING) {
+            return ApiResponse.error(
+                "Department is in billing edit mode. Use completeBillEditing or cancelBillEditing to exit edit mode first."
+            );
+        }
         // FINANCE may only move a department to a terminal state (COMPLETED/CANCELLED).
         // Clinical/administrative roles keep the full transition set.
         if (isFinanceOnlyRole(authUser)

@@ -869,10 +869,19 @@ public class VisitService {
         // Both final and draft consultation saves set department status to BILLING if there are
         // unbilled products. If all products are billed or no products exist, no status change is made
         // (departments are never transitioned to COMPLETED by consultation save).
+        //
+        // DEPARTMENT_EDITING is owned by the billing-edit workflow
+        // (startBillEditing/completeBillEditing/cancelBillEditing). Marking it BILLING
+        // here would silently exit edit mode while its products are still
+        // CORRECTION_PENDING, and every restore path then refuses because the
+        // department is no longer DEPARTMENT_EDITING — permanently blocking invoices
+        // and quick-bill. Skip departments in billing edit mode entirely.
         List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(input.visitId());
         List<VisitDepartment> newlyMarkedForBilling = new ArrayList<>();
         for (VisitDepartment dept : departments) {
-            if (dept.getStatus() != VisitDepartmentStatus.CANCELLED && dept.getStatus() != VisitDepartmentStatus.COMPLETED) {
+            if (dept.getStatus() != VisitDepartmentStatus.CANCELLED
+                    && dept.getStatus() != VisitDepartmentStatus.COMPLETED
+                    && dept.getStatus() != VisitDepartmentStatus.DEPARTMENT_EDITING) {
                 List<VisitDepartmentProduct> products = visitDepartmentProductRepository.findByVisitDepartmentId(dept.getId());
                 boolean hasUnbilled = products.stream().anyMatch(p -> !p.isDeleted() && (
                         p.getStatus() == VisitProductStatus.PENDING

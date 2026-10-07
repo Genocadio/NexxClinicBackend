@@ -393,8 +393,12 @@ public class StandaloneFormService {
         List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(visitId);
         List<VisitDepartment> newlyMarkedForBilling = new ArrayList<>();
         for (VisitDepartment dept : departments) {
+            // DEPARTMENT_EDITING is owned by the billing-edit workflow — marking it
+            // BILLING would silently exit edit mode while its products are still
+            // CORRECTION_PENDING (see VisitService.completeVisit guard). Skip it.
             if (dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.CANCELLED
-                    && dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.COMPLETED) {
+                    && dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.COMPLETED
+                    && dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.DEPARTMENT_EDITING) {
                 List<com.nexxserve.nexxclinic.entity.VisitDepartmentProduct> products = visitDepartmentProductRepository.findByVisitDepartmentId(dept.getId());
                 boolean hasUnbilled = products.stream().anyMatch(p -> !p.isDeleted() && (
                         p.getStatus() == com.nexxserve.nexxclinic.model.VisitProductStatus.PENDING
