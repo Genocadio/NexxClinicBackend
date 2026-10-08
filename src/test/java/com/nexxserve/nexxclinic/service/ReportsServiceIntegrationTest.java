@@ -62,6 +62,7 @@ class ReportsServiceIntegrationTest {
         assertEquals(admin.getId().toString(), data.get("workerId"));
         assertTrue((Boolean) data.get("hasClinician"));
         assertTrue((Boolean) data.get("hasFinance"));
+        assertTrue((Boolean) data.get("canViewFinance"));
         assertTrue((Boolean) data.get("isAdminOrManager"));
 
         assertNotNull(data.get("reception"));
@@ -80,5 +81,47 @@ class ReportsServiceIntegrationTest {
         Map<String, Object> clinician = (Map<String, Object>) data.get("clinician");
         assertNotNull(clinician.get("money"));
         assertNotNull(clinician.get("demographics"));
+    }
+
+    @Test
+    void receptionistReportDoesNotExposeFinanceData() {
+        Worker receptionist = new Worker();
+        receptionist.setUsername("testreceptionist");
+        receptionist.setFirstName("Reception");
+        receptionist.setLastName("User");
+        receptionist.setEmail("receptionist@clinic.com");
+        receptionist.setPhoneNumber("+250788000002");
+        receptionist.setPasswordHash("hashed");
+        receptionist.setAccountStatus(AccountStatus.ACTIVE);
+        receptionist.setRoles(Set.of(RoleName.RECEPTION));
+        receptionist = workerRepository.save(receptionist);
+
+        AuthenticatedUser authUser = new AuthenticatedUser(
+                receptionist.getId(),
+                "testreceptionist",
+                Set.of(RoleName.RECEPTION),
+                "tok-2",
+                Instant.now().plusSeconds(3600)
+        );
+
+        String today = LocalDate.now().toString();
+        ApiResponse response = reportsService.getUserReports(today, today, "today", null, authUser);
+
+        assertEquals(ResponseStatus.SUCCESS, response.status());
+        assertTrue(response.data() instanceof Map);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = (Map<String, Object>) response.data();
+
+        assertEquals(Boolean.FALSE, data.get("canViewFinance"));
+        assertNull(data.get("finance"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> clinician = (Map<String, Object>) data.get("clinician");
+        assertNull(clinician.get("money"));
+        assertTrue(((java.util.List<?>) clinician.get("encountersList")).isEmpty());
+
+        @SuppressWarnings("unchecked")
+        java.util.List<Map<String, Object>> timeline = (java.util.List<Map<String, Object>>) data.get("timeline");
+        assertTrue(timeline.stream().allMatch(bucket -> ((Number) bucket.get("finance")).intValue() == 0));
     }
 }

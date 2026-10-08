@@ -154,6 +154,10 @@ public class ReportsService {
             return ApiResponse.error("You do not have permission to view reports.");
         }
 
+        boolean canViewFinance = authUser.roles() != null && authUser.roles().stream().anyMatch(r ->
+                r == RoleName.FINANCE || r == RoleName.CLINICIAN
+        );
+
         LocalDateTime startDateTime = startDate.atStartOfDay();
         LocalDateTime endDateTime = endDate.atTime(LocalTime.MAX);
 
@@ -194,6 +198,7 @@ public class ReportsService {
                 hasNurse,
                 hasFinance,
                 isAdminOrManager,
+                canViewFinance,
                 allowedTabs,
                 startDate,
                 endDate,
@@ -354,6 +359,7 @@ public class ReportsService {
             boolean hasNurse,
             boolean hasFinance,
             boolean isAdminOrManager,
+            boolean canViewFinance,
             List<String> allowedTabs,
             LocalDate startDate,
             LocalDate endDate,
@@ -1100,6 +1106,22 @@ public class ReportsService {
         if (hasFinance) allActivities.addAll(financeActivities);
         allActivities.sort(timeDesc);
 
+        if (!canViewFinance) {
+            allActivities.removeIf(activity -> "FINANCE".equals(activity.get("role")));
+            allActivities.forEach(activity -> activity.remove("amount"));
+            receptionActivities.forEach(activity -> activity.remove("amount"));
+            clinicianActivities.forEach(activity -> activity.remove("amount"));
+            nurseActivities.forEach(activity -> activity.remove("amount"));
+            clinicianEncountersList.clear();
+            timelineMap.values().forEach(bucket -> {
+                bucket.put("finance", 0);
+                bucket.put("total",
+                        ((Number) bucket.get("reception")).intValue()
+                                + ((Number) bucket.get("clinician")).intValue()
+                                + ((Number) bucket.get("nurse")).intValue());
+            });
+        }
+
         // Peak hour
         String peakHourStr = "N/A";
         int maxHourCount = 0;
@@ -1224,7 +1246,7 @@ public class ReportsService {
         clinicianReport.put("prescriptionsCount", prescriptionsCount);
         clinicianReport.put("referralsCount", referralsCount);
         clinicianReport.put("productCategoryBreakdown", clinicianProductCategoryBreakdown);
-        clinicianReport.put("money", clinicianMoneyReport);
+        clinicianReport.put("money", canViewFinance ? clinicianMoneyReport : null);
         clinicianReport.put("demographics", clinicianDemographics);
         clinicianReport.put("encountersList", clinicianEncountersList);
         clinicianReport.put("activities", clinicianActivities);
@@ -1254,6 +1276,7 @@ public class ReportsService {
         result.put("hasClinician", hasClinician);
         result.put("hasNurse", hasNurse);
         result.put("hasFinance", hasFinance);
+        result.put("canViewFinance", canViewFinance);
         result.put("isAdminOrManager", isAdminOrManager);
         result.put("allowedTabs", allowedTabs);
         result.put("totalInteractions", allActivities.size());
@@ -1261,7 +1284,7 @@ public class ReportsService {
         result.put("reception", receptionReport);
         result.put("clinician", clinicianReport);
         result.put("nurse", nurseReport);
-        result.put("finance", financeReport);
+        result.put("finance", canViewFinance ? financeReport : null);
         result.put("timeline", timeline);
         result.put("allActivities", allActivities);
 

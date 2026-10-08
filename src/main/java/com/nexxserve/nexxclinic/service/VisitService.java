@@ -450,7 +450,19 @@ public class VisitService {
         // Meilisearch first (typo-tolerant, ranked); the DB spec below is the fallback.
         // Only invoke Meilisearch when there's a simple patientName search param without complex date range
         boolean hasSearchParam = patientName != null;
-        if (hasSearchParam && parsedFromDate == null && parsedToDate == null && meilisearchIndexService.isEnabled()) {
+        boolean restrictedClinicianSearch = authUser != null
+                && authUser.roles() != null
+                && authUser.roles().contains(RoleName.CLINICIAN)
+                && !authUser.roles().contains(RoleName.ADMIN)
+                && !authUser.roles().contains(RoleName.CLINIC_ADMIN)
+                && !authUser.roles().contains(RoleName.MANAGER)
+                && !authUser.roles().contains(RoleName.RECEPTION)
+                && !authUser.roles().contains(RoleName.NURSE)
+                && !(rolePermissionService != null
+                        && rolePermissionService.userHasAnyPermission(authUser, PermissionName.VISIT_VIEW_ALL));
+
+        if (hasSearchParam && !restrictedClinicianSearch
+                && parsedFromDate == null && parsedToDate == null && meilisearchIndexService.isEnabled()) {
             try {
                 MeilisearchIndexService.SearchHit hit = meilisearchIndexService.searchVisits(
                         patientName, statusFilter, activeOnly, visitDateEpochDay, page, size
@@ -565,10 +577,9 @@ public class VisitService {
                         roleScoped = true;
                         for (VisitDepartment vd : visitDepartmentRepository.findByDepartmentIdIn(userDeptIds)) {
                             if (vd.getVisit() != null && vd.getVisit().getId() != null && vd.getStatus() != VisitDepartmentStatus.CANCELLED) {
-                                boolean isPending = vd.getStatus() == VisitDepartmentStatus.PENDING;
                                 boolean unassigned = vd.getProcessors() == null || vd.getProcessors().isEmpty();
                                 boolean isAssignedToMe = vd.getProcessors() != null && vd.getProcessors().stream().anyMatch(p -> p != null && authUser.userId().equals(p.getId()));
-                                if (isPending || unassigned || isAssignedToMe) {
+                                if (unassigned || isAssignedToMe) {
                                     allowedVisitIds.add(vd.getVisit().getId());
                                 }
                             }

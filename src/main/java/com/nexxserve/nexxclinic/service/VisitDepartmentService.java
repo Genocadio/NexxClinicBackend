@@ -1678,12 +1678,41 @@ public class VisitDepartmentService {
             return ApiResponse.error("Cannot modify processors on a cancelled department.");
         }
 
+        boolean elevated = authUser != null && authUser.roles() != null
+                && authUser.roles().stream().anyMatch(role ->
+                        role == RoleName.ADMIN
+                                || role == RoleName.CLINIC_ADMIN
+                                || role == RoleName.MANAGER);
+        Worker actingUser = resolveWorker(authUser);
+        boolean isCurrentProcessor = actingUser != null
+                && department.getProcessors() != null
+                && department.getProcessors().stream().anyMatch(worker ->
+                        worker != null && actingUser.getId().equals(worker.getId()));
+        if (!elevated && !isCurrentProcessor) {
+            return ApiResponse.error("Only an existing processor or manager can add a processor.");
+        }
+
         Optional<Worker> processorOptional = workerRepository.findById(processorId);
         if (processorOptional.isEmpty()) {
             return ApiResponse.error("Processor not found.");
         }
 
-        addProcessorToVisitDepartment(department, processorOptional.get());
+        Worker processor = processorOptional.get();
+        boolean sameDepartment = processor.getDepartments() != null
+                && department.getDepartment() != null
+                && processor.getDepartments().stream().anyMatch(candidate ->
+                        candidate != null
+                                && department.getDepartment().getId().equals(candidate.getId()));
+        boolean clinician = processor.getRoles() != null && processor.getRoles().contains(RoleName.CLINICIAN);
+        if (!sameDepartment || !clinician) {
+            return ApiResponse.error("The selected processor must be an active clinician in this department.");
+        }
+
+        if (!processor.isActive()) {
+            return ApiResponse.error("The selected processor is not active.");
+        }
+
+        addProcessorToVisitDepartment(department, processor);
         VisitDepartment saved = visitDepartmentRepository.save(department);
         clinicEventPublisher.publishDepartmentStateChanged(saved, resolveWorker(authUser));
         return ApiResponse.success("Visit department processor added.", visitDepartmentToDto(saved));
