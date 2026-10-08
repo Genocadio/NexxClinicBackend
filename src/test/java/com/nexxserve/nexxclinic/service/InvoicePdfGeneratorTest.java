@@ -1,6 +1,7 @@
 package com.nexxserve.nexxclinic.service;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import com.nexxserve.nexxclinic.entity.ClinicContact;
 import com.nexxserve.nexxclinic.entity.ClinicProfile;
@@ -20,6 +21,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -120,6 +124,12 @@ class InvoicePdfGeneratorTest {
 
         assertTrue(Files.exists(invoiceFile));
         assertTrue(Files.size(invoiceFile) > 2000);
+        try (PDDocument document = Loader.loadPDF(invoiceFile.toFile())) {
+            String pdfText = new PDFTextStripper().getText(document);
+            assertTrue(pdfText.contains("Nexx Clinic"));
+            assertFalse(pdfText.contains("A4 Portrait Invoice"));
+            assertFalse(pdfText.contains("file:///"));
+        }
     }
 
     @Test

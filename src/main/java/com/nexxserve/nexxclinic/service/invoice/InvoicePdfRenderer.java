@@ -107,6 +107,7 @@ public class InvoicePdfRenderer implements Closeable {
             command.add("--disable-dev-shm-usage");
             command.add("--disable-gpu");
             command.add("--run-all-compositor-stages-before-draw");
+            command.add("--no-pdf-header-footer");
             command.add("--print-to-pdf=" + tempPdf.toAbsolutePath());
 
             // Paper size arguments
