@@ -2,6 +2,8 @@ package com.nexxserve.nexxclinic.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
@@ -12,6 +14,7 @@ import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import com.nexxserve.nexxclinic.model.VisitDepartmentDiagnosisType;
 
 @Entity
 @Table(name = "visit_department_diagnostics")
@@ -30,6 +33,13 @@ public class VisitDepartmentDiagnosis {
 
     @Column(name = "icd11_code")
     private String icd11Code;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "diagnosis_type", nullable = false, length = 16)
+    private VisitDepartmentDiagnosisType type = VisitDepartmentDiagnosisType.FINAL;
+
+    @Column(nullable = false, columnDefinition = "TEXT")
+    private String notes = "";
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -79,6 +89,22 @@ public class VisitDepartmentDiagnosis {
 
     public void setIcd11Code(String icd11Code) {
         this.icd11Code = icd11Code;
+    }
+
+    public VisitDepartmentDiagnosisType getType() {
+        return type;
+    }
+
+    public void setType(VisitDepartmentDiagnosisType type) {
+        this.type = type == null ? VisitDepartmentDiagnosisType.FINAL : type;
+    }
+
+    public String getNotes() {
+        return notes;
+    }
+
+    public void setNotes(String notes) {
+        this.notes = notes == null ? "" : notes;
     }
 
     public LocalDateTime getCreatedAt() {

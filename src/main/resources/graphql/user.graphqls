@@ -782,6 +782,8 @@ type VisitDepartmentDiagnosis {
   id: ID!
   diagnosisName: String!
   icd11Code: String
+  type: VisitDepartmentDiagnosisType!
+  notes: String!
   createdAt: String!
 }
 

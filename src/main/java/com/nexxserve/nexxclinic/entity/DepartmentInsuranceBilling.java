@@ -71,7 +71,7 @@ public class DepartmentInsuranceBilling {
     @Column(name = "outstanding_reason", length = 500)
     private String outstandingReason;
 
-    @Column
+    @Column(columnDefinition = "text")
     private String invoiceUrl;
 
     /**

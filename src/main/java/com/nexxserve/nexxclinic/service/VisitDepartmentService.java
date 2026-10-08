@@ -1896,9 +1896,87 @@ public class VisitDepartmentService {
         diagnosis.setVisitDepartment(visitDept);
         diagnosis.setDiagnosisName(input.diagnosisName().trim());
         diagnosis.setIcd11Code(input.icd11Code() == null || input.icd11Code().isBlank() ? null : input.icd11Code().trim());
+        diagnosis.setType(input.type());
+        diagnosis.setNotes(input.notes());
 
         visitDepartmentDiagnosisRepository.save(diagnosis);
         return ApiResponse.success("Diagnosis added successfully.", visitDepartmentToDto(visitDept));
+    }
+
+    @Transactional
+    public ApiResponse<VisitDepartmentDto> updateDiagnosisNotes(
+            UUID diagnosisId,
+            String notes,
+            AuthenticatedUser authUser
+    ) {
+        if (diagnosisId == null) {
+            return ApiResponse.error("diagnosisId is required.");
+        }
+        Optional<VisitDepartmentDiagnosis> diagnosisOptional =
+                visitDepartmentDiagnosisRepository.findById(diagnosisId);
+        if (diagnosisOptional.isEmpty()) {
+            return ApiResponse.error("Diagnosis not found.");
+        }
+
+        VisitDepartmentDiagnosis diagnosis = diagnosisOptional.get();
+        VisitDepartment visitDepartment = diagnosis.getVisitDepartment();
+        if (visitDepartment == null) {
+            return ApiResponse.error("Diagnosis visit department not found.");
+        }
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.CANCELLED) {
+            return ApiResponse.error("Cannot update diagnostics in a cancelled department.");
+        }
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.FINALISED) {
+            return ApiResponse.error("Cannot update diagnostics in a finalised department.");
+        }
+        if (visitDepartmentNoteService.hasUnreadDepartmentNotes(visitDepartment.getId(), authUser)) {
+            return ApiResponse.error("You have unread department notes. Please read them before continuing consultation.");
+        }
+
+        diagnosis.setNotes(notes);
+        visitDepartmentDiagnosisRepository.save(diagnosis);
+        return ApiResponse.success(
+                "Diagnosis notes updated successfully.",
+                visitDepartmentToDto(visitDepartment)
+        );
+    }
+
+    @Transactional
+    public ApiResponse<VisitDepartmentDto> removeDiagnosisFromVisitDepartment(
+            UUID diagnosisId,
+            AuthenticatedUser authUser
+    ) {
+        if (diagnosisId == null) {
+            return ApiResponse.error("diagnosisId is required.");
+        }
+
+        Optional<VisitDepartmentDiagnosis> diagnosisOptional =
+                visitDepartmentDiagnosisRepository.findById(diagnosisId);
+        if (diagnosisOptional.isEmpty()) {
+            return ApiResponse.error("Diagnosis not found.");
+        }
+
+        VisitDepartmentDiagnosis diagnosis = diagnosisOptional.get();
+        VisitDepartment visitDepartment = diagnosis.getVisitDepartment();
+        if (visitDepartment == null) {
+            return ApiResponse.error("Diagnosis visit department not found.");
+        }
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.CANCELLED) {
+            return ApiResponse.error("Cannot remove diagnostics from a cancelled department.");
+        }
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.FINALISED) {
+            return ApiResponse.error("Cannot remove diagnostics from a finalised department.");
+        }
+        if (visitDepartmentNoteService.hasUnreadDepartmentNotes(visitDepartment.getId(), authUser)) {
+            return ApiResponse.error("You have unread department notes. Please read them before continuing consultation.");
+        }
+
+        visitDepartmentDiagnosisRepository.delete(diagnosis);
+        visitDepartmentDiagnosisRepository.flush();
+        return ApiResponse.success(
+                "Diagnosis removed successfully.",
+                visitDepartmentToDto(visitDepartment)
+        );
     }
 
     @Transactional
@@ -2795,6 +2873,8 @@ public class VisitDepartmentService {
                 item.getId(),
                 item.getDiagnosisName(),
                 item.getIcd11Code(),
+                item.getType(),
+                item.getNotes(),
                 item.getCreatedAt()
         );
     }

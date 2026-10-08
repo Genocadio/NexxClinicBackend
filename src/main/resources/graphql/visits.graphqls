@@ -11,6 +11,13 @@ input AddDiagnosisInput {
   visitDepartmentId: String!
   diagnosisName: String!
   icd11Code: String
+  type: VisitDepartmentDiagnosisType
+  notes: String
+}
+
+enum VisitDepartmentDiagnosisType {
+  FINAL
+  HYPOTHESIS
 }
 
 """
@@ -74,6 +81,16 @@ extend type Mutation {
   Multiple diagnostics can be added to the same visit department.
   """
   addDiagnosis(input: AddDiagnosisInput!): VisitDepartmentResponse!
+
+  """
+  Remove a diagnosis from a visit department.
+  """
+  removeDiagnosis(diagnosisId: ID!): VisitDepartmentResponse!
+
+  """
+  Update the optional notes associated with a diagnosis.
+  """
+  updateDiagnosisNotes(diagnosisId: ID!, notes: String!): VisitDepartmentResponse!
 
   """
   Add a medication to a visit department.

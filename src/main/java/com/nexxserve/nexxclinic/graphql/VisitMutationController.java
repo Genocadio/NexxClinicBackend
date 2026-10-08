@@ -327,6 +327,25 @@ public class VisitMutationController {
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
     @MutationMapping
+    public ApiResponse removeDiagnosis(
+            @Argument UUID diagnosisId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitDepartmentService.removeDiagnosisFromVisitDepartment(diagnosisId, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
+    public ApiResponse updateDiagnosisNotes(
+            @Argument UUID diagnosisId,
+            @Argument String notes,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitDepartmentService.updateDiagnosisNotes(diagnosisId, notes, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
     public ApiResponse addVisitVitalSigns(
             @Argument @Valid AddVisitVitalSignsInput input,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
