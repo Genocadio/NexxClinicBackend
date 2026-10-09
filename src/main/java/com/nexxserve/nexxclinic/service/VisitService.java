@@ -658,6 +658,8 @@ public class VisitService {
         Set<UUID> departmentIds = normalizeDepartmentIds(input == null ? null : input.departmentIds());
 
         Specification<Visit> spec = (root, queryDef, builder) -> builder.equal(root.join("patient").get("id"), patientId);
+        spec = spec.and((root, queryDef, builder) ->
+                builder.notEqual(root.get("status"), VisitStatus.CANCELLED));
 
         if (dateWindow.start() != null) {
             spec = spec.and((root, queryDef, builder) -> builder.greaterThanOrEqualTo(root.get("visitDate"), dateWindow.start()));

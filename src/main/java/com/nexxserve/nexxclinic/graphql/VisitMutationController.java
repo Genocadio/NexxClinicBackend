@@ -380,6 +380,26 @@ public class VisitMutationController {
         return visitDepartmentService.addMedicationToVisitDepartment(input, authUser);
     }
 
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
+    public ApiResponse updateMedication(
+            @Argument UUID medicationId,
+            @Argument String medicationName,
+            @Argument String instructions,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitDepartmentService.updateMedication(medicationId, medicationName, instructions, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
+    public ApiResponse removeMedication(
+            @Argument UUID medicationId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitDepartmentService.removeMedication(medicationId, authUser);
+    }
+
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
     @MutationMapping
     public ApiResponse addVisitDepartmentNote(

@@ -1698,14 +1698,9 @@ public class VisitDepartmentService {
         }
 
         Worker processor = processorOptional.get();
-        boolean sameDepartment = processor.getDepartments() != null
-                && department.getDepartment() != null
-                && processor.getDepartments().stream().anyMatch(candidate ->
-                        candidate != null
-                                && department.getDepartment().getId().equals(candidate.getId()));
         boolean clinician = processor.getRoles() != null && processor.getRoles().contains(RoleName.CLINICIAN);
-        if (!sameDepartment || !clinician) {
-            return ApiResponse.error("The selected processor must be an active clinician in this department.");
+        if (!clinician) {
+            return ApiResponse.error("The selected processor must be an active clinician.");
         }
 
         if (!processor.isActive()) {
@@ -2050,6 +2045,56 @@ public class VisitDepartmentService {
 
         visitDepartmentMedicationRepository.save(medication);
         return ApiResponse.success("Medication added successfully.", visitDepartmentToDto(visitDept));
+    }
+
+    @Transactional
+    public ApiResponse<VisitDepartmentDto> updateMedication(
+            UUID medicationId, String medicationName, String instructions, AuthenticatedUser authUser) {
+        if (medicationId == null || medicationName == null || medicationName.isBlank()
+                || instructions == null || instructions.isBlank()) {
+            return ApiResponse.error("medicationId, medicationName and instructions are required.");
+        }
+        Optional<VisitDepartmentMedication> medicationOptional =
+                visitDepartmentMedicationRepository.findById(medicationId);
+        if (medicationOptional.isEmpty()) {
+            return ApiResponse.error("Medication not found.");
+        }
+        VisitDepartmentMedication medication = medicationOptional.get();
+        VisitDepartment visitDept = medication.getVisitDepartment();
+        if (visitDept.getStatus() == VisitDepartmentStatus.CANCELLED
+                || visitDept.getStatus() == VisitDepartmentStatus.FINALISED) {
+            return ApiResponse.error("Cannot edit medication in a " + visitDept.getStatus() + " department.");
+        }
+        if (visitDepartmentNoteService.hasUnreadDepartmentNotes(visitDept.getId(), authUser)) {
+            return ApiResponse.error("You have unread department notes. Please read them before continuing consultation.");
+        }
+        medication.setMedicationName(medicationName.trim());
+        medication.setInstructions(instructions.trim());
+        visitDepartmentMedicationRepository.save(medication);
+        return ApiResponse.success("Medication updated successfully.", visitDepartmentToDto(visitDept));
+    }
+
+    @Transactional
+    public ApiResponse<VisitDepartmentDto> removeMedication(UUID medicationId, AuthenticatedUser authUser) {
+        if (medicationId == null) {
+            return ApiResponse.error("medicationId is required.");
+        }
+        Optional<VisitDepartmentMedication> medicationOptional =
+                visitDepartmentMedicationRepository.findById(medicationId);
+        if (medicationOptional.isEmpty()) {
+            return ApiResponse.error("Medication not found.");
+        }
+        VisitDepartmentMedication medication = medicationOptional.get();
+        VisitDepartment visitDept = medication.getVisitDepartment();
+        if (visitDept.getStatus() == VisitDepartmentStatus.CANCELLED
+                || visitDept.getStatus() == VisitDepartmentStatus.FINALISED) {
+            return ApiResponse.error("Cannot remove medication in a " + visitDept.getStatus() + " department.");
+        }
+        if (visitDepartmentNoteService.hasUnreadDepartmentNotes(visitDept.getId(), authUser)) {
+            return ApiResponse.error("You have unread department notes. Please read them before continuing consultation.");
+        }
+        visitDepartmentMedicationRepository.delete(medication);
+        return ApiResponse.success("Medication removed successfully.", visitDepartmentToDto(visitDept));
     }
 
     // ─────────────────────────────────────────────────────────────
