@@ -80,7 +80,16 @@ public class BillingCarryForwardService {
      */
     public VisitBilling resolvePreviousBilling(UUID visitId) {
         List<VisitBilling> existingBillings = visitBillingRepository.findByVisitIdOrderByCreatedAtDesc(visitId);
-        return existingBillings.isEmpty() ? null : existingBillings.get(0);
+        List<VisitBilling> ordered = existingBillings.stream()
+            .sorted(java.util.Comparator
+                .comparingInt((VisitBilling billing) ->
+                    billing.getBillingVersion() == null ? 0 : billing.getBillingVersion().getVersion())
+                .reversed()
+                .thenComparing(
+                    VisitBilling::getCreatedAt,
+                    java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())))
+            .toList();
+        return ordered.isEmpty() ? null : ordered.get(0);
     }
 
     /**
@@ -106,19 +115,14 @@ public class BillingCarryForwardService {
 
         Set<UUID> carriedDepartmentIds = new HashSet<>();
         List<BillVisitInput.BillVisitDepartmentInput> carriedDepartments = new ArrayList<>();
+        List<BillVisitInput.BillVisitDepartmentInput> mergedRequestedDepartments = new ArrayList<>();
 
         for (VisitDepartmentBilling prevDeptBilling : previousBilling.getDepartments()) {
             if (prevDeptBilling == null || prevDeptBilling.getVisitDepartment() == null) {
                 continue;
             }
             UUID deptId = prevDeptBilling.getVisitDepartment().getId();
-            if (requestedDeptIds.contains(deptId)) {
-                continue;
-            }
 
-            // Skip departments whose billed products were all removed by a later
-            // edit — they have nothing to carry forward.
-            // Guard: getInsuranceBillings() may return null on legacy or corrupted data.
             List<BillVisitInput.BillVisitDepartmentProductInput> products =
                 (prevDeptBilling.getInsuranceBillings() == null
                     ? java.util.List.<DepartmentInsuranceBilling>of()
@@ -145,6 +149,38 @@ public class BillingCarryForwardService {
                         );
                     })
                     .toList();
+
+            if (requestedDeptIds.contains(deptId)) {
+                BillVisitInput.BillVisitDepartmentInput requested = input.departments().stream()
+                    .filter(department -> deptId.equals(department.visitDepartmentId()))
+                    .findFirst()
+                    .orElse(null);
+                if (requested != null && !products.isEmpty()) {
+                    Set<UUID> requestedProductIds = requested.products() == null
+                        ? Set.of()
+                        : requested.products().stream()
+                            .filter(product -> product != null)
+                            .map(BillVisitInput.BillVisitDepartmentProductInput::visitDepartmentProductId)
+                            .collect(java.util.stream.Collectors.toSet());
+                    List<BillVisitInput.BillVisitDepartmentProductInput> mergedProducts =
+                        new ArrayList<>(requested.products() == null ? List.of() : requested.products());
+                    products.stream()
+                        .filter(product -> !requestedProductIds.contains(product.visitDepartmentProductId()))
+                        .forEach(mergedProducts::add);
+                    mergedRequestedDepartments.add(new BillVisitInput.BillVisitDepartmentInput(
+                        requested.visitDepartmentId(),
+                        mergedProducts,
+                        requested.payments(),
+                        requested.note(),
+                        requested.outstandingType(),
+                        requested.outstandingReason()
+                    ));
+                }
+                continue;
+            }
+
+            // Skip departments whose billed products were all removed by a later
+            // edit — they have nothing to carry forward.
             if (products.isEmpty()) {
                 continue;
             }
@@ -195,11 +231,24 @@ public class BillingCarryForwardService {
         }
 
         List<BillVisitInput.BillVisitDepartmentInput> departmentsToProcess;
-        if (!carriedDepartments.isEmpty()) {
-            departmentsToProcess = new ArrayList<>(input.departments());
-            departmentsToProcess.addAll(carriedDepartments);
+        if (!mergedRequestedDepartments.isEmpty()) {
+            Map<UUID, BillVisitInput.BillVisitDepartmentInput> mergedByDepartment =
+                mergedRequestedDepartments.stream()
+                    .collect(java.util.stream.Collectors.toMap(
+                        BillVisitInput.BillVisitDepartmentInput::visitDepartmentId,
+                        department -> department
+                    ));
+            departmentsToProcess = input.departments().stream()
+                .map(department -> mergedByDepartment.getOrDefault(
+                    department.visitDepartmentId(),
+                    department
+                ))
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
         } else {
-            departmentsToProcess = input.departments();
+            departmentsToProcess = new ArrayList<>(input.departments());
+        }
+        if (!carriedDepartments.isEmpty()) {
+            departmentsToProcess.addAll(carriedDepartments);
         }
 
         return new CarryForwardResult(

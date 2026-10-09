@@ -117,7 +117,18 @@ public class BillingQueryService {
         if (list.isEmpty()) {
             return ApiResponse.success("No billing found for this visit department.", null);
         }
-        return ApiResponse.success("Visit department billing fetched.", billingDataMapper.visitDepartmentBillingToMap(list.get(0)));
+        com.nexxserve.nexxclinic.entity.VisitDepartmentBilling latest = list.stream()
+            .max(java.util.Comparator
+                .comparingInt((com.nexxserve.nexxclinic.entity.VisitDepartmentBilling billing) ->
+                    billing.getVisitBilling() != null
+                        && billing.getVisitBilling().getBillingVersion() != null
+                        ? billing.getVisitBilling().getBillingVersion().getVersion()
+                        : 0)
+                .thenComparing(
+                    com.nexxserve.nexxclinic.entity.VisitDepartmentBilling::getCreatedAt,
+                    java.util.Comparator.nullsFirst(java.util.Comparator.naturalOrder())))
+            .orElse(list.get(0));
+        return ApiResponse.success("Visit department billing fetched.", billingDataMapper.visitDepartmentBillingToMap(latest));
     }
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
@@ -129,7 +140,18 @@ public class BillingQueryService {
         if (list.isEmpty()) {
             return null;
         }
-        return billingDataMapper.visitDepartmentBillingToMap(list.get(0));
+        com.nexxserve.nexxclinic.entity.VisitDepartmentBilling latest = list.stream()
+            .max(java.util.Comparator
+                .comparingInt((com.nexxserve.nexxclinic.entity.VisitDepartmentBilling billing) ->
+                    billing.getVisitBilling() != null
+                        && billing.getVisitBilling().getBillingVersion() != null
+                        ? billing.getVisitBilling().getBillingVersion().getVersion()
+                        : 0)
+                .thenComparing(
+                    com.nexxserve.nexxclinic.entity.VisitDepartmentBilling::getCreatedAt,
+                    java.util.Comparator.nullsFirst(java.util.Comparator.naturalOrder())))
+            .orElse(list.get(0));
+        return billingDataMapper.visitDepartmentBillingToMap(latest);
     }
 
     @org.springframework.transaction.annotation.Transactional(readOnly = true)

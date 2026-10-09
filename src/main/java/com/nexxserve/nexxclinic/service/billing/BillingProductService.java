@@ -106,6 +106,17 @@ public class BillingProductService {
             return; // Billing has not been created yet for this department
         }
 
+        // Any clinical product change invalidates previously generated invoice
+        // documents. The next invoice must reflect the updated department.
+        for (VisitDepartmentBilling existingBilling : deptBillings) {
+            if (existingBilling.getInsuranceBillings() == null) {
+                continue;
+            }
+            for (DepartmentInsuranceBilling insuranceBilling : existingBilling.getInsuranceBillings()) {
+                insuranceBilling.setInvoiceUrl(null);
+            }
+        }
+
         VisitDepartmentBilling deptBilling = deptBillings.get(0);
         List<VisitBillingItem> items = visitBillingItemRepository.findByVisitDepartmentProductId(vdp.getId());
 
@@ -138,30 +149,9 @@ public class BillingProductService {
             visitBillingItemRepository.saveAndFlush(item);
             recalculateDepartmentBilling(deptBilling);
         } else if (!vdp.isDeleted()) {
-            // New clinical product added while billing exists -> auto-bill it into default bucket
-            List<DepartmentInsuranceBilling> buckets = departmentInsuranceBillingRepository.findByVisitDepartmentBillingId(deptBilling.getId());
-            DepartmentInsuranceBilling bucket = buckets.isEmpty() ? null : buckets.get(0);
-
-            if (bucket != null) {
-                BigDecimal unitPrice = pricingCalculator.resolveDefaultUnitPrice(vdp, bucket.getPatientInsurance());
-                BigDecimal qty = MoneyUtils.toQuantity(vdp.getQuantity());
-                BigDecimal lineTotal = MoneyUtils.toMoney(unitPrice.multiply(qty));
-
-                VisitBillingItem newItem = new VisitBillingItem();
-                newItem.setDepartmentInsuranceBilling(bucket);
-                newItem.setVisitDepartmentProduct(vdp);
-                newItem.setAppliedPatientInsurance(bucket.getPatientInsurance());
-                newItem.setUnitPriceSnapshot(unitPrice);
-                newItem.setQuantitySnapshot(qty);
-                newItem.setLineTotal(lineTotal);
-                newItem.setInsuranceCoveredAmount(MoneyUtils.ZERO);
-                newItem.setPatientPayableAmount(lineTotal);
-                newItem.setAppliedPatientSharePct(100);
-                newItem.setPatientShareSource(PatientShareSource.PROVIDER_DEFAULT);
-
-                visitBillingItemRepository.saveAndFlush(newItem);
-                recalculateDepartmentBilling(deptBilling);
-            }
+            // A product added after an earlier bill is a new unbilled clinical item.
+            // It must be picked up by the next explicit billing operation rather
+            // than being silently added to the existing billing version.
         }
     }
 

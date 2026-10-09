@@ -301,7 +301,7 @@ public class BillingProductServiceIntegrationTest {
     }
 
     @Test
-    void testDoctorAddsAndUpdatesProduct_automaticallySyncsToBilling() {
+    void testDoctorAddsProductAfterBillingAndNextBillCarriesForwardBothProducts() {
         // 1. Initial product and bill exist
         var clinicalAddInput1 = new CreateVisitDepartmentProductInput(
                 visit.getId(),
@@ -339,19 +339,18 @@ public class BillingProductServiceIntegrationTest {
         ApiResponse<VisitDepartmentDto> addRes = visitDepartmentService.addVisitDepartmentProduct(clinicalAddInput2, authUser);
         assertEquals(ResponseStatus.SUCCESS, addRes.status());
 
-        // Verify billing item was auto-created for the second product
+        // A clinical addition remains unbilled until the next explicit billing action.
         var secondVdp = visitDepartmentProductRepository
                 .findByVisitDepartmentIdAndProductId(visitDepartment.getId(), secondProduct.getId())
                 .orElseThrow();
         var billingItems = visitBillingItemRepository.findByVisitDepartmentProductId(secondVdp.getId());
-        assertEquals(1, billingItems.size());
-        assertEquals(new BigDecimal("5.00"), billingItems.get(0).getLineTotal());
+        assertEquals(0, billingItems.size());
 
-        // Verify department billing total was updated to 15.00 + 5.00 = 20.00
+        // The previous immutable billing version is unchanged until the next bill.
         var deptBillings = visitDepartmentBillingRepository.findByVisitDepartmentId(visitDepartment.getId());
-        assertEquals(new BigDecimal("20.00"), deptBillings.get(0).getTotalAmount());
+        assertEquals(new BigDecimal("15.00"), deptBillings.get(0).getTotalAmount());
 
-        // 3. Doctor updates quantity of second product to 4.0
+        // 3. New unbilled products remain editable before they are billed.
         var clinicalUpdateInput = new UpdateVisitDepartmentProductQuantityInput(
                 secondVdp.getId(),
                 new BigDecimal("4.0")
@@ -359,12 +358,19 @@ public class BillingProductServiceIntegrationTest {
         ApiResponse<VisitDepartmentDto> updateRes = visitDepartmentService.updateVisitDepartmentProductQuantity(clinicalUpdateInput);
         assertEquals(ResponseStatus.SUCCESS, updateRes.status());
 
-        // Verify billing item recalculated to 4 * 5.00 = 20.00, dept total = 15.00 + 20.00 = 35.00
-        var updatedBillingItem = visitBillingItemRepository.findByVisitDepartmentProductId(secondVdp.getId()).get(0);
-        assertEquals(new BigDecimal("20.00"), updatedBillingItem.getLineTotal());
+        // 4. Bill the new product. The new immutable version must carry the original
+        // product forward and include the newly billed product.
+        billVisitPrivate(secondVdp, new BigDecimal("20.00"));
+        var latestDeptBilling = visitDepartmentBillingRepository.findByVisitDepartmentId(visitDepartment.getId())
+                .stream()
+                .max(java.util.Comparator.comparingInt(billing ->
+                        billing.getVisitBilling().getBillingVersion().getVersion()))
+                .orElseThrow();
+        assertEquals(new BigDecimal("35.00"), latestDeptBilling.getTotalAmount());
+        assertEquals(2, latestDeptBilling.getInsuranceBillings().stream()
+                .mapToInt(insuranceBilling -> insuranceBilling.getItems().size())
+                .sum());
 
-        var updatedDeptBilling = visitDepartmentBillingRepository.findByVisitDepartmentId(visitDepartment.getId()).get(0);
-        assertEquals(new BigDecimal("35.00"), updatedDeptBilling.getTotalAmount());
     }
 
     @Test

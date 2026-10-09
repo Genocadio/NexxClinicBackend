@@ -1356,19 +1356,12 @@ public class VisitDepartmentService {
         if (item.getProduct() != null && !item.getProduct().isQuantifiable()) {
             return ApiResponse.error("Quantity cannot be modified for non-quantifiable products.");
         }
-        Visit visit = item.getVisitDepartment().getVisit();
         VisitDepartmentStatus deptStatus = item.getVisitDepartment().getStatus();
         boolean isDeptEditing = deptStatus == VisitDepartmentStatus.DEPARTMENT_EDITING;
 
-        // D2 fix: products in a department that has been BILLED are frozen for finance.
-        if (!isDeptEditing && deptStatus == VisitDepartmentStatus.BILLING
-                && visitDepartmentBillingRepository.existsByVisitDepartmentId(item.getVisitDepartment().getId())) {
-            return ApiResponse.error("Cannot change the quantity of a product in a billed department. Use startBillEditing to enter edit mode first.");
-        }
-
-        // E4: a BILLED/EXEMPTED/PATIENT_SHARE_EXEMPTED product's live quantity must not
-        // diverge from its billing snapshot. Quantity corrections go through editBillVisit.
-        // In DEPARTMENT_EDITING mode, quantity changes are allowed.
+        // A billed line's quantity must remain aligned with its billing snapshot.
+        // New unbilled lines may be adjusted normally even when their department
+        // contains other billed products.
         if (!isDeptEditing
                 && item.getBillingState() == BillingState.BILLED) {
             return ApiResponse.error("Cannot change the quantity of a billed or exempted product. Use startBillEditing to enter edit mode first.");
@@ -1461,9 +1454,10 @@ public class VisitDepartmentService {
             return ApiResponse.error("Profile products cannot be removed individually. Change the visit department's profile instead.");
         }
 
-        // D2 fix: products in a department that has been BILLED are frozen for finance.
+        // A department can contain billed history and still receive new products.
+        // Only the billed line itself (or a line with billing history) is frozen.
         if (!isDeptEditing && deptStatus == VisitDepartmentStatus.BILLING && affectedDepartmentId != null
-                && visitDepartmentBillingRepository.existsByVisitDepartmentId(affectedDepartmentId)) {
+                && item.getBillingState() == BillingState.BILLED) {
             return ApiResponse.error("Cannot remove a product from a billed department. Use startBillEditing to enter edit mode first.");
         }
 
@@ -1567,13 +1561,25 @@ public class VisitDepartmentService {
         }
         // FINANCE may only move a department to a terminal state (COMPLETED/CANCELLED).
         // Clinical/administrative roles keep the full transition set.
+        boolean reopeningBilledDepartment = currentStatus == VisitDepartmentStatus.BILLING
+                && requestedStatus == VisitDepartmentStatus.ACTIVE;
+        boolean openingCompletedDepartment = (currentStatus == VisitDepartmentStatus.COMPLETED
+                || currentStatus == VisitDepartmentStatus.FINALISED)
+                && requestedStatus == VisitDepartmentStatus.ACTIVE;
+        if (openingCompletedDepartment && !hasAdministrativeBillingRole(authUser)) {
+            return ApiResponse.error("Only finance, manager, or administrator users can open a completed visit.");
+        }
         if (isFinanceOnlyRole(authUser)
                 && requestedStatus != VisitDepartmentStatus.COMPLETED
-                && requestedStatus != VisitDepartmentStatus.CANCELLED) {
+                && requestedStatus != VisitDepartmentStatus.CANCELLED
+                && !reopeningBilledDepartment
+                && !openingCompletedDepartment) {
             return ApiResponse.error("FINANCE can only mark a department COMPLETED or CANCELLED.");
         }
         if (currentStatus == VisitDepartmentStatus.COMPLETED) {
-            return ApiResponse.error("A COMPLETED department is terminal and cannot be changed.");
+            if (!openingCompletedDepartment) {
+                return ApiResponse.error("A COMPLETED department is terminal and cannot be changed.");
+            }
         }
         if (currentStatus == VisitDepartmentStatus.CANCELLED) {
             Visit visit = department.getVisit();
@@ -1581,6 +1587,11 @@ public class VisitDepartmentService {
                     || visit.getStatus() == VisitStatus.COMPLETED
                     || visit.getStatus() == VisitStatus.FINALISED)) {
                 return ApiResponse.error("Cannot re-enable a department on a " + visit.getStatus() + " visit.");
+            }
+            if (openingCompletedDepartment) {
+                department.setCompletedAt(null);
+                department.setCompletedBy(null);
+                department.setBillingEditSourceStatus(null);
             }
             boolean canUncancel = authUser != null && authUser.roles() != null
                     && authUser.roles().stream().anyMatch(r ->
@@ -1602,6 +1613,7 @@ public class VisitDepartmentService {
         }
         if (currentStatus == VisitDepartmentStatus.BILLING
                 && requestedStatus != VisitDepartmentStatus.COMPLETED
+                && requestedStatus != VisitDepartmentStatus.ACTIVE
                 && visitDepartmentBillingRepository.existsByVisitDepartmentId(department.getId())) {
             return ApiResponse.error("A department that has been billed is frozen. Use editBillVisit to correct the billing.");
         }
@@ -1832,6 +1844,16 @@ public class VisitDepartmentService {
         }
         return authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.FINANCE)
                 || authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.ADMIN);
+    }
+
+    private boolean hasAdministrativeBillingRole(AuthenticatedUser authUser) {
+        if (authUser == null || authUser.roles() == null) {
+            return false;
+        }
+        return authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.FINANCE)
+                || authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.ADMIN)
+                || authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.CLINIC_ADMIN)
+                || authUser.roles().contains(com.nexxserve.nexxclinic.model.RoleName.MANAGER);
     }
 
     /**
