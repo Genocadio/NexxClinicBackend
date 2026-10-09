@@ -368,6 +368,13 @@ public class VisitDepartmentService {
             return ApiResponse.error("Cannot consult a cancelled visit.");
         }
 
+        if (profileId == null
+                && visitDepartment.getProfile() == null
+                && visitDepartment.getDepartment() != null
+                && departmentProfileRepository.findByDepartmentId(visitDepartment.getDepartment().getId()).size() > 1) {
+            return ApiResponse.error("Select a department profile before starting the consultation.");
+        }
+
         Worker actingUser = resolveWorker(authUser);
 
         // 1. If profileId is provided and different from current profile, apply it
