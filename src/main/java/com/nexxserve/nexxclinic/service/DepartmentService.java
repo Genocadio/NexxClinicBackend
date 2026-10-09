@@ -466,6 +466,10 @@ public class DepartmentService {
             }
 
             departmentProfileProductRepository.deleteByProfileId(profile.getId());
+            // The profile's product set is replaced below. Flush the bulk delete
+            // before inserting the replacement links, otherwise PostgreSQL can
+            // still see the old unique (profile_id, product_id) row.
+            departmentProfileProductRepository.flush();
 
             List<DepartmentProfileProduct> links = new ArrayList<>();
             for (UUID productId : productIds) {
