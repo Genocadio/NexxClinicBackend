@@ -249,7 +249,7 @@ public class BillingProductServiceIntegrationTest {
         VisitDepartmentDto deptDto = new VisitDepartmentDto(
                 visitDepartment.getId(), null, VisitDepartmentStatus.ACTIVE,
                 EncounterType.OUTPATIENT, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, LocalDateTime.now(), LocalDateTime.now()
+                null,                 null, null, null, null, null, null, LocalDateTime.now(), LocalDateTime.now()
         );
         Map<String, Object> deptBillingMap = visitBillingQueryController.departmentBilling(deptDto);
         assertNotNull(deptBillingMap);

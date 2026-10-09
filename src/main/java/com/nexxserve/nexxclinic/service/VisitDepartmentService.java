@@ -8,6 +8,7 @@ import com.nexxserve.nexxclinic.entity.Product;
 import com.nexxserve.nexxclinic.entity.Visit;
 import com.nexxserve.nexxclinic.entity.VisitDepartment;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentDiagnosis;
+import com.nexxserve.nexxclinic.entity.VisitDepartmentSymptom;
 import com.nexxserve.nexxclinic.entity.VisitBillingItem;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentMedication;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentProduct;
@@ -19,6 +20,7 @@ import com.nexxserve.nexxclinic.entity.VisitPreInstructionProductRequest;
 import com.nexxserve.nexxclinic.entity.Worker;
 import com.nexxserve.nexxclinic.graphql.input.AddChildVisitDepartmentInput;
 import com.nexxserve.nexxclinic.graphql.input.AddDiagnosisInput;
+import com.nexxserve.nexxclinic.graphql.input.AddSymptomInput;
 import com.nexxserve.nexxclinic.graphql.input.AddMedicationInput;
 import com.nexxserve.nexxclinic.graphql.input.AddVisitPreInstructionsInput;
 import com.nexxserve.nexxclinic.graphql.input.CreateVisitDepartmentProductInput;
@@ -40,6 +42,7 @@ import com.nexxserve.nexxclinic.repository.DepartmentProfileRepository;
 import com.nexxserve.nexxclinic.repository.DepartmentRepository;
 import com.nexxserve.nexxclinic.repository.ProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentDiagnosisRepository;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentSymptomRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentMedicationRepository;
 import com.nexxserve.nexxclinic.repository.VisitBillingItemRepository;
 import com.nexxserve.nexxclinic.model.AnswerStatus;
@@ -76,6 +79,7 @@ public class VisitDepartmentService {
     private final VisitDepartmentProductRepository visitDepartmentProductRepository;
     private final ConsultationAnswerRepository consultationAnswerRepository;
     private final VisitDepartmentDiagnosisRepository visitDepartmentDiagnosisRepository;
+    private final VisitDepartmentSymptomRepository visitDepartmentSymptomRepository;
     private final VisitDepartmentMedicationRepository visitDepartmentMedicationRepository;
     private final com.nexxserve.nexxclinic.repository.VisitPreInstructionRepository visitPreInstructionRepository;
     private final DepartmentRepository departmentRepository;
@@ -111,6 +115,7 @@ public class VisitDepartmentService {
             VisitDepartmentProductRepository visitDepartmentProductRepository,
             ConsultationAnswerRepository consultationAnswerRepository,
             VisitDepartmentDiagnosisRepository visitDepartmentDiagnosisRepository,
+            VisitDepartmentSymptomRepository visitDepartmentSymptomRepository,
             VisitDepartmentMedicationRepository visitDepartmentMedicationRepository,
             com.nexxserve.nexxclinic.repository.VisitPreInstructionRepository visitPreInstructionRepository,
             DepartmentRepository departmentRepository,
@@ -142,6 +147,7 @@ public class VisitDepartmentService {
         this.visitDepartmentProductRepository = visitDepartmentProductRepository;
         this.consultationAnswerRepository = consultationAnswerRepository;
         this.visitDepartmentDiagnosisRepository = visitDepartmentDiagnosisRepository;
+        this.visitDepartmentSymptomRepository = visitDepartmentSymptomRepository;
         this.visitDepartmentMedicationRepository = visitDepartmentMedicationRepository;
         this.visitPreInstructionRepository = visitPreInstructionRepository;
         this.departmentRepository = departmentRepository;
@@ -2033,6 +2039,86 @@ public class VisitDepartmentService {
     }
 
     @Transactional
+    public ApiResponse<VisitDepartmentDto> addSymptomToVisitDepartment(
+            AddSymptomInput input, AuthenticatedUser authUser) {
+        if (input == null || input.visitDepartmentId() == null
+                || input.symptomName() == null || input.symptomName().isBlank()) {
+            return ApiResponse.error("visitDepartmentId and symptomName are required.");
+        }
+        UUID visitDeptId;
+        try {
+            visitDeptId = UUID.fromString(input.visitDepartmentId());
+        } catch (IllegalArgumentException e) {
+            return ApiResponse.error("Invalid visitDepartmentId format.");
+        }
+        Optional<VisitDepartment> departmentOptional = visitDepartmentRepository.findById(visitDeptId);
+        if (departmentOptional.isEmpty()) {
+            return ApiResponse.error("Visit department not found.");
+        }
+        VisitDepartment department = departmentOptional.get();
+        if (department.getStatus() == VisitDepartmentStatus.CANCELLED
+                || department.getStatus() == VisitDepartmentStatus.FINALISED) {
+            return ApiResponse.error("Cannot add symptoms to a "
+                    + department.getStatus().name().toLowerCase() + " department.");
+        }
+        if (visitDepartmentNoteService.hasUnreadDepartmentNotes(department.getId(), authUser)) {
+            return ApiResponse.error("You have unread department notes. Please read them before continuing consultation.");
+        }
+        VisitDepartmentSymptom symptom = new VisitDepartmentSymptom();
+        symptom.setVisitDepartment(department);
+        symptom.setSymptomName(input.symptomName().trim());
+        symptom.setSonomedId(input.sonomedId() == null || input.sonomedId().isBlank()
+                ? null : input.sonomedId().trim());
+        symptom.setNotes(input.notes());
+        visitDepartmentSymptomRepository.save(symptom);
+        return ApiResponse.success("Symptom added successfully.", visitDepartmentToDto(department));
+    }
+
+    @Transactional
+    public ApiResponse<VisitDepartmentDto> updateSymptomNotes(
+            UUID symptomId, String notes, AuthenticatedUser authUser) {
+        if (symptomId == null) return ApiResponse.error("symptomId is required.");
+        Optional<VisitDepartmentSymptom> optional = visitDepartmentSymptomRepository.findById(symptomId);
+        if (optional.isEmpty()) return ApiResponse.error("Symptom not found.");
+        VisitDepartmentSymptom symptom = optional.get();
+        VisitDepartment department = symptom.getVisitDepartment();
+        if (department == null) return ApiResponse.error("Symptom visit department not found.");
+        if (department.getStatus() == VisitDepartmentStatus.CANCELLED
+                || department.getStatus() == VisitDepartmentStatus.FINALISED) {
+            return ApiResponse.error("Cannot update symptoms in a "
+                    + department.getStatus().name().toLowerCase() + " department.");
+        }
+        if (visitDepartmentNoteService.hasUnreadDepartmentNotes(department.getId(), authUser)) {
+            return ApiResponse.error("You have unread department notes. Please read them before continuing consultation.");
+        }
+        symptom.setNotes(notes);
+        visitDepartmentSymptomRepository.save(symptom);
+        return ApiResponse.success("Symptom notes updated successfully.", visitDepartmentToDto(department));
+    }
+
+    @Transactional
+    public ApiResponse<VisitDepartmentDto> removeSymptomFromVisitDepartment(
+            UUID symptomId, AuthenticatedUser authUser) {
+        if (symptomId == null) return ApiResponse.error("symptomId is required.");
+        Optional<VisitDepartmentSymptom> optional = visitDepartmentSymptomRepository.findById(symptomId);
+        if (optional.isEmpty()) return ApiResponse.error("Symptom not found.");
+        VisitDepartmentSymptom symptom = optional.get();
+        VisitDepartment department = symptom.getVisitDepartment();
+        if (department == null) return ApiResponse.error("Symptom visit department not found.");
+        if (department.getStatus() == VisitDepartmentStatus.CANCELLED
+                || department.getStatus() == VisitDepartmentStatus.FINALISED) {
+            return ApiResponse.error("Cannot remove symptoms from a "
+                    + department.getStatus().name().toLowerCase() + " department.");
+        }
+        if (visitDepartmentNoteService.hasUnreadDepartmentNotes(department.getId(), authUser)) {
+            return ApiResponse.error("You have unread department notes. Please read them before continuing consultation.");
+        }
+        visitDepartmentSymptomRepository.delete(symptom);
+        visitDepartmentSymptomRepository.flush();
+        return ApiResponse.success("Symptom removed successfully.", visitDepartmentToDto(department));
+    }
+
+    @Transactional
     public ApiResponse<VisitDepartmentDto> addMedicationToVisitDepartment(AddMedicationInput input) {
         return addMedicationToVisitDepartment(input, null);
     }
@@ -2311,6 +2397,7 @@ public class VisitDepartmentService {
                     List.of(),
                     List.of(),
                     List.of(),
+                    List.of(),
                     visitDepartmentNoteService.buildNotesSummary(visitDepartment.getId(), authUser),
                     visitDepartment.getAnswerId(),
                     hasFinalizedAnswersCycleGuard,
@@ -2336,6 +2423,11 @@ public class VisitDepartmentService {
         List<VisitDepartmentDiagnosisDto> diagnostics = canViewClinical
                 ? visitDepartmentDiagnosisRepository.findByVisitDepartmentId(visitDepartment.getId())
                         .stream().map(this::visitDepartmentDiagnosisToDto).toList()
+                : List.of();
+
+        List<VisitDepartmentSymptomDto> symptoms = canViewClinical
+                ? visitDepartmentSymptomRepository.findByVisitDepartmentId(visitDepartment.getId())
+                        .stream().map(this::visitDepartmentSymptomToDto).toList()
                 : List.of();
 
         List<VisitDepartmentMedicationDto> medications = canViewClinical
@@ -2368,6 +2460,7 @@ public class VisitDepartmentService {
                 processors,
                 products,
                 diagnostics,
+                symptoms,
                 medications,
                 preInstructions,
                 childVisitDepartments,
@@ -2977,6 +3070,16 @@ public class VisitDepartmentService {
                 item.getDiagnosisName(),
                 item.getIcd11Code(),
                 item.getType(),
+                item.getNotes(),
+                item.getCreatedAt()
+        );
+    }
+
+    public VisitDepartmentSymptomDto visitDepartmentSymptomToDto(VisitDepartmentSymptom item) {
+        return new VisitDepartmentSymptomDto(
+                item.getId(),
+                item.getSymptomName(),
+                item.getSonomedId(),
                 item.getNotes(),
                 item.getCreatedAt()
         );

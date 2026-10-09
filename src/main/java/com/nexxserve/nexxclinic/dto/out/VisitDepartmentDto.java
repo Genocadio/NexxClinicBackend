@@ -19,6 +19,7 @@ public record VisitDepartmentDto(
         List<WorkerDto> processors,
         List<VisitDepartmentProductDto> products,
         List<VisitDepartmentDiagnosisDto> diagnostics,
+        List<VisitDepartmentSymptomDto> symptoms,
         List<VisitDepartmentMedicationDto> medications,
         List<VisitPreInstructionDto> preInstructions,
         List<VisitDepartmentDto> childVisitDepartments,

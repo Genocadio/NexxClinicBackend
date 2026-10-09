@@ -681,6 +681,7 @@ type VisitDepartment {
   childVisitDepartments: [VisitDepartment!]!
   products: [VisitDepartmentProduct!]!
   diagnostics: [VisitDepartmentDiagnosis!]
+  symptoms: [VisitDepartmentSymptom!]
   hasFinalizedConsultationAnswers: Boolean
   hasBillableProducts: Boolean
   medications: [VisitDepartmentMedication!]
@@ -787,6 +788,14 @@ type VisitDepartmentDiagnosis {
   createdAt: String!
 }
 
+type VisitDepartmentSymptom {
+  id: ID!
+  symptomName: String!
+  sonomedId: String
+  notes: String!
+  createdAt: String!
+}
+
 type Icd11Suggestion {
   id: String
   code: String
@@ -808,6 +817,33 @@ type Icd11SearchResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
   data: Icd11SearchResult
+}
+
+type SnomedSuggestion {
+  id: String!
+  preferred: String!
+  synonyms: [String!]
+  fsn: String
+  """SNOMED provenance: reported, physical or finding (not a symptom/sign label)."""
+  type: String
+  bodySystem: [String!]
+  common: Boolean!
+  score: Float!
+}
+
+type SnomedSearchResult {
+  query: String!
+  limit: Int!
+  total: Int!
+  results: [SnomedSuggestion!]!
+  source: String!
+  releaseVersion: String
+}
+
+type SnomedSearchResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: SnomedSearchResult
 }
 
 type VisitDepartmentMedication {
@@ -1894,6 +1930,7 @@ type Query {
   getVisitDepartmentBilling(visitDepartmentId: ID!): VisitDepartmentBillingResponse!
   visitPriceEstimates(visitId: ID!): VisitPriceEstimatesListResponse!
   searchIcd11Diseases(query: String!, lang: String, limit: Int, chapter: String): Icd11SearchResponse!
+  searchSnomedSymptoms(query: String!, type: String, limit: Int): SnomedSearchResponse!
   clinicProfile: ClinicProfileResponse!
   lastPatientDepartmentVisit(visitId: ID!, departmentId: ID!): LastPatientDepartmentVisitResponse!
   insuranceCoverage(ruleId: ID!): InsuranceCoverageResponse!

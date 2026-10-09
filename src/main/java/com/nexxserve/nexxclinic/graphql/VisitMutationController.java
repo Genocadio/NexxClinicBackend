@@ -7,6 +7,7 @@ import com.nexxserve.nexxclinic.graphql.input.CreateVisitDepartmentProductInput;
 import com.nexxserve.nexxclinic.graphql.input.CreateVisitInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentProductStatusInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentStatusInput;
+import com.nexxserve.nexxclinic.graphql.input.AddSymptomInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdateVisitDepartmentProductQuantityInput;
 import com.nexxserve.nexxclinic.graphql.input.AddDiagnosisInput;
 import com.nexxserve.nexxclinic.graphql.input.AddMedicationInput;
@@ -332,6 +333,34 @@ public class VisitMutationController {
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         return visitDepartmentService.removeDiagnosisFromVisitDepartment(diagnosisId, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
+    public ApiResponse addSymptom(
+            @Argument @Valid AddSymptomInput input,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitDepartmentService.addSymptomToVisitDepartment(input, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
+    public ApiResponse removeSymptom(
+            @Argument UUID symptomId,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitDepartmentService.removeSymptomFromVisitDepartment(symptomId, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
+    @MutationMapping
+    public ApiResponse updateSymptomNotes(
+            @Argument UUID symptomId,
+            @Argument String notes,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitDepartmentService.updateSymptomNotes(symptomId, notes, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})

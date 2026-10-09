@@ -101,7 +101,7 @@ services:
       MEILI_URL: http://meilisearch:7700
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-nexxclinic_meili_master_key}
       MEILI_ENABLED: "true"
-      NEXXICD_URL: ${NEXXICD_URL:-}
+      NEXXICD_URL: ${NEXXICD_URL:-http://host.docker.internal:8082}
       # ── Storage ──
       STORAGE_TYPE: ${STORAGE_TYPE:-SUPABASE}
       LOCAL_STORAGE_PATH: /data/storage

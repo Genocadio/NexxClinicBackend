@@ -15,6 +15,16 @@ input AddDiagnosisInput {
   notes: String
 }
 
+"""
+Input for adding a sign or symptom to a visit department.
+"""
+input AddSymptomInput {
+  visitDepartmentId: String!
+  symptomName: String!
+  sonomedId: String
+  notes: String
+}
+
 enum VisitDepartmentDiagnosisType {
   FINAL
   HYPOTHESIS
@@ -91,6 +101,22 @@ extend type Mutation {
   Update the optional notes associated with a diagnosis.
   """
   updateDiagnosisNotes(diagnosisId: ID!, notes: String!): VisitDepartmentResponse!
+
+  """
+  Add a sign or symptom to a visit department.
+  The Sonomed identifier and notes are optional.
+  """
+  addSymptom(input: AddSymptomInput!): VisitDepartmentResponse!
+
+  """
+  Remove a sign or symptom from a visit department.
+  """
+  removeSymptom(symptomId: ID!): VisitDepartmentResponse!
+
+  """
+  Update the optional notes associated with a symptom.
+  """
+  updateSymptomNotes(symptomId: ID!, notes: String!): VisitDepartmentResponse!
 
   """
   Add a medication to a visit department.

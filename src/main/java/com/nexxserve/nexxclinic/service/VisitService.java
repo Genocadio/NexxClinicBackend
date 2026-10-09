@@ -32,9 +32,11 @@ import com.nexxserve.nexxclinic.model.VisitProductStatus;
 import com.nexxserve.nexxclinic.model.VisitStatus;
 import com.nexxserve.nexxclinic.entity.Department;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentDiagnosis;
+import com.nexxserve.nexxclinic.entity.VisitDepartmentSymptom;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentMedication;
 import com.nexxserve.nexxclinic.entity.VisitPreInstruction;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentDiagnosisRepository;
+import com.nexxserve.nexxclinic.repository.VisitDepartmentSymptomRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentMedicationRepository;
 import com.nexxserve.nexxclinic.repository.VisitPreInstructionRepository;
 import com.nexxserve.nexxclinic.repository.DepartmentRepository;
@@ -82,6 +84,7 @@ public class VisitService {
     private final VisitDepartmentRepository visitDepartmentRepository;
     private final VisitDepartmentProductRepository visitDepartmentProductRepository;
     private final VisitDepartmentDiagnosisRepository visitDepartmentDiagnosisRepository;
+    private final VisitDepartmentSymptomRepository visitDepartmentSymptomRepository;
     private final VisitDepartmentMedicationRepository visitDepartmentMedicationRepository;
     private final VisitPreInstructionRepository visitPreInstructionRepository;
     private final VisitBillingRepository visitBillingRepository;
@@ -118,6 +121,7 @@ public class VisitService {
             VisitDepartmentRepository visitDepartmentRepository,
             VisitDepartmentProductRepository visitDepartmentProductRepository,
             VisitDepartmentDiagnosisRepository visitDepartmentDiagnosisRepository,
+            VisitDepartmentSymptomRepository visitDepartmentSymptomRepository,
             VisitDepartmentMedicationRepository visitDepartmentMedicationRepository,
             VisitPreInstructionRepository visitPreInstructionRepository,
             VisitBillingRepository visitBillingRepository,
@@ -151,6 +155,7 @@ public class VisitService {
         this.visitDepartmentRepository = visitDepartmentRepository;
         this.visitDepartmentProductRepository = visitDepartmentProductRepository;
         this.visitDepartmentDiagnosisRepository = visitDepartmentDiagnosisRepository;
+        this.visitDepartmentSymptomRepository = visitDepartmentSymptomRepository;
         this.visitDepartmentMedicationRepository = visitDepartmentMedicationRepository;
         this.visitPreInstructionRepository = visitPreInstructionRepository;
         this.visitBillingRepository = visitBillingRepository;
@@ -1763,6 +1768,12 @@ public class VisitService {
                         .collect(Collectors.groupingBy(d -> d.getVisitDepartment().getId()))
                 : Map.of();
 
+        Map<UUID, List<VisitDepartmentSymptom>> symptomsByVdId = (canViewClinical && !allVdIds.isEmpty())
+                ? visitDepartmentSymptomRepository.findByVisitDepartmentIdIn(allVdIds).stream()
+                        .filter(s -> s.getVisitDepartment() != null && s.getVisitDepartment().getId() != null)
+                        .collect(Collectors.groupingBy(s -> s.getVisitDepartment().getId()))
+                : Map.of();
+
         Map<UUID, List<VisitDepartmentMedication>> medicationsByVdId = (canViewClinical && !allVdIds.isEmpty())
                 ? visitDepartmentMedicationRepository.findByVisitDepartmentIdIn(allVdIds).stream()
                         .filter(m -> m.getVisitDepartment() != null && m.getVisitDepartment().getId() != null)
@@ -1866,6 +1877,7 @@ public class VisitService {
                             childVdsByParentId,
                             productsByVdId,
                             diagnosesByVdId,
+                            symptomsByVdId,
                             medicationsByVdId,
                             preInstructionsByVdId,
                             totalNotesByVdId,
@@ -1938,6 +1950,7 @@ public class VisitService {
             Map<UUID, List<VisitDepartment>> childVdsByParentId,
             Map<UUID, List<VisitDepartmentProduct>> productsByVdId,
             Map<UUID, List<VisitDepartmentDiagnosis>> diagnosesByVdId,
+            Map<UUID, List<VisitDepartmentSymptom>> symptomsByVdId,
             Map<UUID, List<VisitDepartmentMedication>> medicationsByVdId,
             Map<UUID, List<VisitPreInstruction>> preInstructionsByVdId,
             Map<UUID, Long> totalNotesByVdId,
@@ -1970,6 +1983,7 @@ public class VisitService {
                     List.of(),
                     List.of(),
                     List.of(),
+                    List.of(),
                     new VisitDepartmentNotesSummaryDto(
                             totalNotesByVdId.getOrDefault(visitDepartment.getId(), 0L).intValue(),
                             newNotesByVdId.getOrDefault(visitDepartment.getId(), 0L).intValue()
@@ -1997,6 +2011,11 @@ public class VisitService {
                 ? diagnosesByVdId.getOrDefault(visitDepartment.getId(), List.of()).stream().map(visitDepartmentService::visitDepartmentDiagnosisToDto).toList()
                 : List.of();
 
+        List<VisitDepartmentSymptomDto> symptoms = canViewClinical
+                ? symptomsByVdId.getOrDefault(visitDepartment.getId(), List.of()).stream()
+                        .map(visitDepartmentService::visitDepartmentSymptomToDto).toList()
+                : List.of();
+
         List<VisitDepartmentMedicationDto> medications = canViewClinical
                 ? medicationsByVdId.getOrDefault(visitDepartment.getId(), List.of()).stream().map(visitDepartmentService::visitDepartmentMedicationToDto).toList()
                 : List.of();
@@ -2020,6 +2039,7 @@ public class VisitService {
                         childVdsByParentId,
                         productsByVdId,
                         diagnosesByVdId,
+                        symptomsByVdId,
                         medicationsByVdId,
                         preInstructionsByVdId,
                         totalNotesByVdId,
@@ -2055,6 +2075,7 @@ public class VisitService {
                 processors,
                 products,
                 diagnostics,
+                symptoms,
                 medications,
                 preInstructions,
                 childVisitDepartments,

@@ -3,9 +3,11 @@ package com.nexxserve.nexxclinic.graphql;
 import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.dto.out.Icd11SearchResult;
+import com.nexxserve.nexxclinic.dto.out.SnomedSearchResult;
 import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.security.HasRole;
 import com.nexxserve.nexxclinic.service.Icd11SearchService;
+import com.nexxserve.nexxclinic.service.SnomedSearchService;
 import org.springframework.graphql.data.method.annotation.Argument;
 import org.springframework.graphql.data.method.annotation.ContextValue;
 import org.springframework.graphql.data.method.annotation.QueryMapping;
@@ -15,9 +17,14 @@ import org.springframework.stereotype.Controller;
 public class Icd11QueryController {
 
     private final Icd11SearchService icd11SearchService;
+    private final SnomedSearchService snomedSearchService;
 
-    public Icd11QueryController(Icd11SearchService icd11SearchService) {
+    public Icd11QueryController(
+            Icd11SearchService icd11SearchService,
+            SnomedSearchService snomedSearchService
+    ) {
         this.icd11SearchService = icd11SearchService;
+        this.snomedSearchService = snomedSearchService;
     }
 
     @HasRole({RoleName.CLINICIAN, RoleName.NURSE, RoleName.CLINIC_ADMIN})
@@ -30,5 +37,16 @@ public class Icd11QueryController {
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         return icd11SearchService.search(query, lang, limit, chapter);
+    }
+
+    @HasRole({RoleName.CLINICIAN, RoleName.NURSE, RoleName.CLINIC_ADMIN})
+    @QueryMapping
+    public ApiResponse<SnomedSearchResult> searchSnomedSymptoms(
+            @Argument String query,
+            @Argument String type,
+            @Argument Integer limit,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return snomedSearchService.search(query, type, limit);
     }
 }
