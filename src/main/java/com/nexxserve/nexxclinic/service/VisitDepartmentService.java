@@ -417,13 +417,22 @@ public class VisitDepartmentService {
         }
 
         VisitDepartment saved = visitDepartmentRepository.save(visitDepartment);
-        if (saved.getVisit() != null) {
-            visitPriceEstimateService.recomputeEstimates(saved.getVisit().getId());
+        UUID visitId = saved.getVisit() != null ? saved.getVisit().getId() : null;
+        if (visitId != null) {
+            visitPriceEstimateService.recomputeEstimates(visitId);
         }
+
+        // recomputeEstimates() runs a @Modifying(clearAutomatically=true) bulk
+        // delete, which clears the persistence context and detaches `saved`.
+        // Re-fetch so the DTO mapping (notably the lazy DepartmentProfile
+        // proxy) runs against managed entities. Mirrors changeVisitDepartmentProfile.
+        VisitDepartment fresh = visitId != null
+                ? visitDepartmentRepository.findByIdWithVisitAndDepartment(saved.getId()).orElse(saved)
+                : saved;
 
         return ApiResponse.success(
                 "Consultation active.",
-                visitDepartmentToDto(saved, resolveVisitInsuranceProviderIds(saved.getVisit() != null ? saved.getVisit().getId() : null), authUser)
+                visitDepartmentToDto(fresh, resolveVisitInsuranceProviderIds(visitId), authUser)
         );
     }
 
@@ -812,7 +821,11 @@ public class VisitDepartmentService {
         }
 
         visitPriceEstimateService.recomputeEstimates(visit.getId());
-        return ApiResponse.success("Child visit department added.", visitDepartmentToDto(parent));
+        // recomputeEstimates() clears the persistence context (@Modifying(clearAutomatically=true)),
+        // detaching `parent`. Re-fetch so DTO mapping runs against a managed entity.
+        VisitDepartment freshParent = visitDepartmentRepository
+                .findByIdWithVisitAndDepartment(parent.getId()).orElse(parent);
+        return ApiResponse.success("Child visit department added.", visitDepartmentToDto(freshParent));
     }
 
     @Transactional
@@ -1296,19 +1309,26 @@ public class VisitDepartmentService {
             log.warn("Failed to recompute price estimates after adding product {} to visit {}: {}",
                 input.productId(), input.visitId(), ex.getMessage());
         }
+        // recomputeEstimates() clears the persistence context (@Modifying(clearAutomatically=true)),
+        // detaching `item`/`visitDepartment`. Re-fetch both so the billing sync and DTO mapping
+        // below run against managed entities.
+        VisitDepartmentProduct freshAddedItem = visitDepartmentProductRepository.findById(item.getId()).orElse(item);
+        VisitDepartment freshDept = visitDepartment.getId() != null
+                ? visitDepartmentRepository.findByIdWithVisitAndDepartment(visitDepartment.getId()).orElse(visitDepartment)
+                : visitDepartment;
         try {
-            billingProductService.syncClinicalProductChangeToBilling(item);
+            billingProductService.syncClinicalProductChangeToBilling(freshAddedItem);
         } catch (Exception ex) {
             log.warn("Failed to sync clinical product change to billing: {}", ex.getMessage());
         }
         clinicEventPublisher.publishProductChanged(
-            visitDepartment,
+            freshDept,
             product.getName(),
-            item.getQuantity() != null ? item.getQuantity().intValue() : 1,
+            freshAddedItem.getQuantity() != null ? freshAddedItem.getQuantity().intValue() : 1,
             "ADD",
             actingUser
         );
-        return ApiResponse.success("Product added to visit department.", visitDepartmentToDto(visitDepartment));
+        return ApiResponse.success("Product added to visit department.", visitDepartmentToDto(freshDept));
     }
 
     @Transactional
@@ -1350,8 +1370,18 @@ public class VisitDepartmentService {
 
         VisitDepartmentProduct saved = visitDepartmentProductRepository.save(item);
         deleteChildVisitDepartmentIfEmpty(saved.getVisitDepartment());
-        visitPriceEstimateService.recomputeEstimates(item.getVisitDepartment().getVisit().getId());
-        return ApiResponse.success("Visit department product status updated.", visitDepartmentToDto(saved.getVisitDepartment()));
+        UUID statusDeptId = saved.getVisitDepartment() != null ? saved.getVisitDepartment().getId() : null;
+        UUID statusVisitId = saved.getVisitDepartment() != null && saved.getVisitDepartment().getVisit() != null
+                ? saved.getVisitDepartment().getVisit().getId() : null;
+        if (statusVisitId != null) {
+            visitPriceEstimateService.recomputeEstimates(statusVisitId);
+        }
+        // recomputeEstimates() clears the persistence context (@Modifying(clearAutomatically=true)),
+        // detaching the department. Re-fetch so DTO mapping runs against a managed entity.
+        VisitDepartment statusDept = statusDeptId != null
+                ? visitDepartmentRepository.findByIdWithVisitAndDepartment(statusDeptId).orElse(saved.getVisitDepartment())
+                : saved.getVisitDepartment();
+        return ApiResponse.success("Visit department product status updated.", visitDepartmentToDto(statusDept));
     }
 
     @Transactional
@@ -1424,22 +1454,37 @@ public class VisitDepartmentService {
 
         VisitDepartmentProduct saved = visitDepartmentProductRepository.save(item);
         deleteChildVisitDepartmentIfEmpty(saved.getVisitDepartment() != null ? saved.getVisitDepartment().getId() : null);
-        if (saved.getVisitDepartment() != null && saved.getVisitDepartment().getVisit() != null) {
-            visitPriceEstimateService.recomputeEstimates(saved.getVisitDepartment().getVisit().getId());
+        UUID qtyDeptId = saved.getVisitDepartment() != null ? saved.getVisitDepartment().getId() : null;
+        UUID qtyVisitId = saved.getVisitDepartment() != null && saved.getVisitDepartment().getVisit() != null
+                ? saved.getVisitDepartment().getVisit().getId() : null;
+        String qtyProductName = saved.getProduct() != null ? saved.getProduct().getName() : "Product";
+        Integer qtyQuantity = saved.getQuantity() != null ? saved.getQuantity().intValue() : 1;
+        UUID qtyProductId = saved.getId();
+        if (qtyVisitId != null) {
+            visitPriceEstimateService.recomputeEstimates(qtyVisitId);
         }
+        // recomputeEstimates() clears the persistence context (@Modifying(clearAutomatically=true)),
+        // detaching `saved` and its lazy Product/VisitDepartment proxies. Re-fetch both so the
+        // billing sync and DTO mapping below run against managed entities.
+        VisitDepartmentProduct freshItem = qtyProductId != null
+                ? visitDepartmentProductRepository.findById(qtyProductId).orElse(saved)
+                : saved;
         try {
-            billingProductService.syncClinicalProductChangeToBilling(saved);
+            billingProductService.syncClinicalProductChangeToBilling(freshItem);
         } catch (Exception ex) {
             log.warn("Failed to sync clinical product change to billing: {}", ex.getMessage());
         }
+        VisitDepartment qtyDept = qtyDeptId != null
+                ? visitDepartmentRepository.findByIdWithVisitAndDepartment(qtyDeptId).orElse(freshItem.getVisitDepartment())
+                : freshItem.getVisitDepartment();
         clinicEventPublisher.publishProductChanged(
-            saved.getVisitDepartment(),
-            saved.getProduct() != null ? saved.getProduct().getName() : "Product",
-            saved.getQuantity() != null ? saved.getQuantity().intValue() : 1,
+            qtyDept,
+            qtyProductName,
+            qtyQuantity,
             "UPDATE",
             null
         );
-        return ApiResponse.success("Visit department product quantity updated.", visitDepartmentToDto(saved.getVisitDepartment()));
+        return ApiResponse.success("Visit department product quantity updated.", visitDepartmentToDto(qtyDept));
     }
 
     @Transactional
