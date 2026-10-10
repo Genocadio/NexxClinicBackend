@@ -184,6 +184,18 @@ public class VisitBillingService {
                     .currentTransactionStatus()
                     .setRollbackOnly();
             } else if (input != null && input.visitId() != null) {
+                // Per-department editing safety net: restore any DEPARTMENT_EDITING departments back to pre-edit status
+                for (com.nexxserve.nexxclinic.entity.VisitDepartment vd : visitDepartmentRepository.findByVisitId(input.visitId())) {
+                    if (vd.getStatus() == com.nexxserve.nexxclinic.model.VisitDepartmentStatus.DEPARTMENT_EDITING) {
+                        com.nexxserve.nexxclinic.model.VisitDepartmentStatus editSource =
+                            vd.getBillingEditSourceStatus() != null
+                                ? vd.getBillingEditSourceStatus()
+                                : com.nexxserve.nexxclinic.model.VisitDepartmentStatus.COMPLETED;
+                        vd.setBillingEditSourceStatus(null);
+                        vd.setStatus(editSource);
+                        visitDepartmentRepository.save(vd);
+                    }
+                }
                 visitRepository.findById(input.visitId()).ifPresent(v -> clinicEventPublisher.publishBillingCompleted(v, resolveWorker(authUser)));
             }
             return result;
