@@ -19,6 +19,7 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import org.hibernate.annotations.UuidGenerator;
 
 @Entity
 // N4 fix: the full (visit_department_id, product_id) unique constraint was removed.
@@ -31,6 +32,7 @@ public class VisitDepartmentProduct {
 
     @Id
     @GeneratedValue
+    @UuidGenerator(style = UuidGenerator.Style.VERSION_7)
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)

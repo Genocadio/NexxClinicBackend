@@ -15,6 +15,7 @@ import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import com.nexxserve.nexxclinic.model.VisitDepartmentDiagnosisType;
+import org.hibernate.annotations.UuidGenerator;
 
 @Entity
 @Table(name = "visit_department_diagnostics")
@@ -22,6 +23,7 @@ public class VisitDepartmentDiagnosis {
 
     @Id
     @GeneratedValue
+    @UuidGenerator(style = UuidGenerator.Style.VERSION_7)
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
