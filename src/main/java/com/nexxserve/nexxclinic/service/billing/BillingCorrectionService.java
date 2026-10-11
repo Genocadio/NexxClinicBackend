@@ -116,7 +116,11 @@ public class BillingCorrectionService {
                 return ApiResponse.error("Visit department not found.");
             }
             if (!vd.getVisit().getId().equals(visit.getId())) {
-                return ApiResponse.error("Visit department does not belong to the visit.");
+                return ApiResponse.error(
+                    "Visit department '" + dept.visitDepartmentId() +
+                    "' belongs to visit '" + vd.getVisit().getId() +
+                    "', not visit '" + visit.getId() + "'."
+                );
             }
 
             // B7 fix: validate updatedProducts vs billProducts quantity conflicts BEFORE

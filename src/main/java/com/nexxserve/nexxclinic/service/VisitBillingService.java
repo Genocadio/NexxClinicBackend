@@ -529,7 +529,9 @@ public class VisitBillingService {
 
             if (!rootVisitDepartment.getVisit().getId().equals(visit.getId())) {
                 return PreparedBill.error(
-                    "Visit department does not belong to the visit."
+                    "Visit department '" + departmentInput.visitDepartmentId() +
+                    "' belongs to visit '" + rootVisitDepartment.getVisit().getId() +
+                    "', not visit '" + visit.getId() + "'."
                 );
             }
 
