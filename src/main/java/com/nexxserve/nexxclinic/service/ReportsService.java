@@ -1602,11 +1602,11 @@ public class ReportsService {
 
         boolean canAccessClinicReports = authUser.roles() != null && authUser.roles().stream().anyMatch(r ->
                 r == RoleName.ADMIN || r == RoleName.MANAGER || r == RoleName.CLINIC_ADMIN
-                        || r == RoleName.FINANCE_REPORTS || r == RoleName.MEDICAL_REPORTS
+                        || r == RoleName.FINANCE_REPORTS
         );
 
         if (!canAccessClinicReports) {
-            return ApiResponse.unauthorised("You do not have permission to access clinic reports.");
+            return ApiResponse.unauthorised("You do not have permission to access financial reports.");
         }
 
         LocalDate today = LocalDate.now();
@@ -2474,5 +2474,255 @@ public class ReportsService {
             list.add(item);
         }
         return list;
+    }
+
+    @Transactional(readOnly = true)
+    public ApiResponse getDiagnosticReports(
+            String fromDate,
+            String toDate,
+            String periodInput,
+            UUID departmentId,
+            List<UUID> departmentIds,
+            UUID clinicianId,
+            List<UUID> clinicianIds,
+            AuthenticatedUser authUser
+    ) {
+        if (authUser == null || authUser.userId() == null) {
+            return ApiResponse.unauthenticated("Authentication is required to view diagnostic reports.");
+        }
+
+        boolean canAccessMedical = authUser.roles() != null && authUser.roles().stream().anyMatch(r ->
+                r == RoleName.ADMIN || r == RoleName.MANAGER || r == RoleName.CLINIC_ADMIN
+                        || r == RoleName.MEDICAL_REPORTS || r == RoleName.CLINICIAN
+        );
+
+        if (!canAccessMedical) {
+            return ApiResponse.unauthorised("You do not have permission to access medical & diagnostic reports.");
+        }
+
+        LocalDate today = LocalDate.now();
+        LocalDate startDate;
+        LocalDate endDate;
+
+        try {
+            if (fromDate != null && !fromDate.isBlank()) {
+                startDate = parseLocalDate(fromDate);
+            } else {
+                startDate = today;
+            }
+        } catch (Exception e) {
+            startDate = today;
+        }
+
+        try {
+            if (toDate != null && !toDate.isBlank()) {
+                endDate = parseLocalDate(toDate);
+            } else {
+                endDate = startDate;
+            }
+        } catch (Exception e) {
+            endDate = startDate;
+        }
+
+        if (endDate.isBefore(startDate)) {
+            LocalDate tmp = startDate;
+            startDate = endDate;
+            endDate = tmp;
+        }
+
+        String fromDateStr = startDate.format(DateTimeFormatter.ISO_LOCAL_DATE);
+        String toDateStr = endDate.format(DateTimeFormatter.ISO_LOCAL_DATE);
+
+        long diffDays = java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate);
+        String period = (periodInput != null && !periodInput.isBlank())
+                ? periodInput.toLowerCase().trim()
+                : (diffDays == 0 ? "today" : (diffDays <= 7 ? "week" : (diffDays <= 31 ? "month" : "custom")));
+
+        LocalDateTime startDateTime = startDate.atStartOfDay();
+        LocalDateTime endDateTime = endDate.atTime(LocalTime.MAX);
+
+        Specification<Visit> spec = (root, queryDef, builder) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(builder.or(
+                    builder.and(
+                            builder.greaterThanOrEqualTo(root.get("visitDate"), startDateTime),
+                            builder.lessThanOrEqualTo(root.get("visitDate"), endDateTime)
+                    ),
+                    builder.and(
+                            builder.greaterThanOrEqualTo(root.get("createdAt"), startDateTime),
+                            builder.lessThanOrEqualTo(root.get("createdAt"), endDateTime)
+                    )
+            ));
+            return builder.and(predicates.toArray(new Predicate[0]));
+        };
+
+        List<Visit> rawVisits = visitRepository.findAll(spec, Sort.by(Sort.Direction.DESC, "visitDate"));
+        List<VisitDto> visits = rawVisits.stream()
+                .map(v -> visitService.visitToDto(v, Set.of(), authUser))
+                .toList();
+
+        // Department ID filters
+        Set<String> filterDeptIdsSet = new HashSet<>();
+        if (departmentId != null) filterDeptIdsSet.add(departmentId.toString());
+        if (departmentIds != null) {
+            for (UUID d : departmentIds) {
+                if (d != null) filterDeptIdsSet.add(d.toString());
+            }
+        }
+
+        // Clinician ID filters
+        Set<String> filterClinicianIdsSet = new HashSet<>();
+        if (clinicianId != null) filterClinicianIdsSet.add(clinicianId.toString());
+        if (clinicianIds != null) {
+            for (UUID c : clinicianIds) {
+                if (c != null) filterClinicianIdsSet.add(c.toString());
+            }
+        }
+
+        List<Map<String, Object>> diagnosticReportsList = new ArrayList<>();
+
+        for (VisitDto visit : visits) {
+            if (visit == null) continue;
+            String patientId = visit.patient() != null && visit.patient().id() != null ? visit.patient().id().toString() : "";
+            String patientName = "Unknown Patient";
+            String patientIdentifier = "";
+            String patientGender = "";
+            Integer patientAge = null;
+
+            if (visit.patient() != null) {
+                String pfn = visit.patient().firstName() != null ? visit.patient().firstName().trim() : "";
+                String pln = visit.patient().lastName() != null ? visit.patient().lastName().trim() : "";
+                patientName = (!pfn.isEmpty() || !pln.isEmpty()) ? (pfn + " " + pln).trim() : (visit.patient().fullName() != null ? visit.patient().fullName() : "Patient");
+                patientIdentifier = visit.patient().patientIdentifier() != null ? visit.patient().patientIdentifier() : "";
+                patientGender = visit.patient().gender() != null ? visit.patient().gender().name() : "";
+                patientAge = calculatePatientAge(visit.patient().dateOfBirth() != null ? visit.patient().dateOfBirth().toString() : null, null);
+            }
+
+            String vTime = visit.visitDate() != null ? visit.visitDate().toString() : "";
+
+            if (visit.departments() != null) {
+                for (VisitDepartmentDto dept : visit.departments()) {
+                    if (!filterDeptIdsSet.isEmpty()) {
+                        if (dept.department() == null || dept.department().id() == null || !filterDeptIdsSet.contains(dept.department().id().toString())) {
+                            continue;
+                        }
+                    }
+
+                    if (!filterClinicianIdsSet.isEmpty()) {
+                        boolean matchDeptClin = isProcessorInSet(dept.processors(), filterClinicianIdsSet) ||
+                                (dept.completedBy() != null && isUserInSet(dept.completedBy().id(), filterClinicianIdsSet)) ||
+                                (dept.diagnostics() != null && dept.diagnostics().stream().anyMatch(d ->
+                                        d.addedBy() != null && isUserInSet(d.addedBy().id(), filterClinicianIdsSet)
+                                )) ||
+                                (dept.symptoms() != null && dept.symptoms().stream().anyMatch(s ->
+                                        s.addedBy() != null && isUserInSet(s.addedBy().id(), filterClinicianIdsSet)
+                                )) ||
+                                (dept.medications() != null && dept.medications().stream().anyMatch(m ->
+                                        m.addedBy() != null && isUserInSet(m.addedBy().id(), filterClinicianIdsSet)
+                                ));
+                        if (!matchDeptClin) continue;
+                    }
+
+                    String deptId = dept.department() != null && dept.department().id() != null ? dept.department().id().toString() : (dept.id() != null ? dept.id().toString() : "");
+                    String deptName = dept.department() != null && dept.department().name() != null ? dept.department().name() : "Consultation";
+                    String deptTime = dept.startedAt() != null ? dept.startedAt().toString() : (dept.createdAt() != null ? dept.createdAt().toString() : vTime);
+
+                    String clinName = "N/A";
+                    String clinIdStr = "";
+                    if (dept.completedBy() != null && dept.completedBy().id() != null) {
+                        clinIdStr = dept.completedBy().id().toString();
+                        String fn = dept.completedBy().firstName() != null ? dept.completedBy().firstName() : "";
+                        String ln = dept.completedBy().lastName() != null ? dept.completedBy().lastName() : "";
+                        clinName = (fn + " " + ln).trim();
+                    } else if (dept.processors() != null && !dept.processors().isEmpty()) {
+                        var p0 = dept.processors().iterator().next();
+                        if (p0 != null && p0.id() != null) {
+                            clinIdStr = p0.id().toString();
+                            String fn = p0.firstName() != null ? p0.firstName() : "";
+                            String ln = p0.lastName() != null ? p0.lastName() : "";
+                            clinName = (fn + " " + ln).trim();
+                        }
+                    }
+
+                    if (dept.diagnostics() != null && !dept.diagnostics().isEmpty()) {
+                        List<String> deptSymptoms = new ArrayList<>();
+                        if (dept.symptoms() != null) {
+                            for (VisitDepartmentSymptomDto s : dept.symptoms()) {
+                                if (s != null && s.symptomName() != null && !s.symptomName().isBlank()) {
+                                    deptSymptoms.add(s.symptomName().trim());
+                                }
+                            }
+                        }
+
+                        List<String> deptMedications = new ArrayList<>();
+                        if (dept.medications() != null) {
+                            for (VisitDepartmentMedicationDto m : dept.medications()) {
+                                if (m != null && m.medicationName() != null && !m.medicationName().isBlank()) {
+                                    deptMedications.add(m.medicationName().trim());
+                                }
+                            }
+                        }
+
+                        for (VisitDepartmentDiagnosisDto diag : dept.diagnostics()) {
+                            if (diag == null) continue;
+                            String dName = diag.diagnosisName() != null ? diag.diagnosisName().trim() : "";
+                            if (dName.isEmpty()) continue;
+
+                            String icdCode = diag.icd11Code() != null ? diag.icd11Code().trim() : "";
+                            String diagType = diag.type() != null ? diag.type().name() : "FINAL";
+
+                            String diagClinId = clinIdStr;
+                            String diagClinName = clinName;
+                            if (diag.addedBy() != null && diag.addedBy().id() != null) {
+                                diagClinId = diag.addedBy().id().toString();
+                                String afn = diag.addedBy().firstName() != null ? diag.addedBy().firstName() : "";
+                                String aln = diag.addedBy().lastName() != null ? diag.addedBy().lastName() : "";
+                                String fullName = (afn + " " + aln).trim();
+                                if (!fullName.isEmpty()) {
+                                    diagClinName = fullName;
+                                }
+                            }
+
+                            // If specific clinician filter is applied, only include diagnoses authored by or belonging to them
+                            if (!filterClinicianIdsSet.isEmpty()) {
+                                boolean diagMatchesClin = isUserInSet(diag.addedBy() != null ? diag.addedBy().id() : null, filterClinicianIdsSet) ||
+                                        filterClinicianIdsSet.contains(clinIdStr);
+                                if (!diagMatchesClin) continue;
+                            }
+
+                            Map<String, Object> diagRecord = new HashMap<>();
+                            diagRecord.put("id", diag.id() != null ? diag.id().toString() : ("diag-" + diagnosticReportsList.size()));
+                            diagRecord.put("visitId", visit.id() != null ? visit.id().toString() : "");
+                            diagRecord.put("diagnosisName", dName);
+                            diagRecord.put("icd11Code", icdCode);
+                            diagRecord.put("type", diagType);
+                            diagRecord.put("notes", diag.notes() != null ? diag.notes() : "");
+                            diagRecord.put("patientId", patientId);
+                            diagRecord.put("patientName", patientName);
+                            diagRecord.put("patientIdentifier", patientIdentifier);
+                            diagRecord.put("patientGender", patientGender);
+                            diagRecord.put("patientAge", patientAge);
+                            diagRecord.put("departmentId", deptId);
+                            diagRecord.put("departmentName", deptName);
+                            diagRecord.put("clinicianId", diagClinId);
+                            diagRecord.put("clinicianName", diagClinName);
+                            diagRecord.put("date", deptTime);
+                            diagRecord.put("symptoms", deptSymptoms);
+                            diagRecord.put("medications", deptMedications);
+
+                            diagnosticReportsList.add(diagRecord);
+                        }
+                    }
+                }
+            }
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("period", period);
+        result.put("fromDate", fromDateStr);
+        result.put("toDate", toDateStr);
+        result.put("diagnosticReports", diagnosticReportsList);
+
+        return ApiResponse.success("Diagnostic reports generated successfully.", result);
     }
 }

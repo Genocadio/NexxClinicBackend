@@ -1948,6 +1948,7 @@ type Query {
   permissions: PermissionListResponse!
   getUserReports(fromDate: String, toDate: String, period: String, workerId: ID): UserReportsResponse!
   getClinicReports(fromDate: String, toDate: String, period: String, departmentId: ID, departmentIds: [ID], clinicianId: ID, clinicianIds: [ID], insuranceId: ID, insuranceIds: [ID], isPrivateOnly: Boolean): UserReportsResponse!
+  getDiagnosticReports(fromDate: String, toDate: String, period: String, departmentId: ID, departmentIds: [ID], clinicianId: ID, clinicianIds: [ID]): UserReportsResponse!
 }
 
 type Mutation {

@@ -44,7 +44,8 @@ public class ReportsQueryController {
     @HasRole({
         RoleName.ADMIN,
         RoleName.CLINIC_ADMIN,
-        RoleName.MANAGER
+        RoleName.MANAGER,
+        RoleName.FINANCE_REPORTS
     })
     @QueryMapping
     public ApiResponse getClinicReports(
@@ -61,5 +62,26 @@ public class ReportsQueryController {
         @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         return reportsService.getClinicReports(fromDate, toDate, period, departmentId, departmentIds, clinicianId, clinicianIds, insuranceId, insuranceIds, isPrivateOnly, authUser);
+    }
+
+    @HasRole({
+        RoleName.ADMIN,
+        RoleName.CLINIC_ADMIN,
+        RoleName.MANAGER,
+        RoleName.MEDICAL_REPORTS,
+        RoleName.CLINICIAN
+    })
+    @QueryMapping
+    public ApiResponse getDiagnosticReports(
+        @Argument("fromDate") String fromDate,
+        @Argument("toDate") String toDate,
+        @Argument("period") String period,
+        @Argument("departmentId") UUID departmentId,
+        @Argument("departmentIds") List<UUID> departmentIds,
+        @Argument("clinicianId") UUID clinicianId,
+        @Argument("clinicianIds") List<UUID> clinicianIds,
+        @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return reportsService.getDiagnosticReports(fromDate, toDate, period, departmentId, departmentIds, clinicianId, clinicianIds, authUser);
     }
 }
