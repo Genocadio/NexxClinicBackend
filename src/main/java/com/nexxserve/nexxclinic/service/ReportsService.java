@@ -1896,6 +1896,15 @@ public class ReportsService {
                                 (dept.products() != null && dept.products().stream().anyMatch(p ->
                                         (p.processor() != null && isUserInSet(p.processor().id(), filterClinicianIdsSet)) ||
                                         (p.addedBy() != null && isUserInSet(p.addedBy().id(), filterClinicianIdsSet))
+                                )) ||
+                                (dept.diagnostics() != null && dept.diagnostics().stream().anyMatch(d ->
+                                        d.addedBy() != null && isUserInSet(d.addedBy().id(), filterClinicianIdsSet)
+                                )) ||
+                                (dept.symptoms() != null && dept.symptoms().stream().anyMatch(s ->
+                                        s.addedBy() != null && isUserInSet(s.addedBy().id(), filterClinicianIdsSet)
+                                )) ||
+                                (dept.medications() != null && dept.medications().stream().anyMatch(m ->
+                                        m.addedBy() != null && isUserInSet(m.addedBy().id(), filterClinicianIdsSet)
                                 ));
                         if (!matchDeptClin) continue;
                     }
@@ -2260,6 +2269,18 @@ public class ReportsService {
                             String icdCode = diag.icd11Code() != null ? diag.icd11Code().trim() : "";
                             String diagType = diag.type() != null ? diag.type().name() : "FINAL";
 
+                            String diagClinId = clinIdStr;
+                            String diagClinName = clinName;
+                            if (diag.addedBy() != null && diag.addedBy().id() != null) {
+                                diagClinId = diag.addedBy().id().toString();
+                                String afn = diag.addedBy().firstName() != null ? diag.addedBy().firstName() : "";
+                                String aln = diag.addedBy().lastName() != null ? diag.addedBy().lastName() : "";
+                                String fullName = (afn + " " + aln).trim();
+                                if (!fullName.isEmpty()) {
+                                    diagClinName = fullName;
+                                }
+                            }
+
                             Map<String, Object> diagRecord = new HashMap<>();
                             diagRecord.put("id", diag.id() != null ? diag.id().toString() : ("diag-" + diagnosticReportsList.size()));
                             diagRecord.put("visitId", visit.id() != null ? visit.id().toString() : "");
@@ -2274,8 +2295,8 @@ public class ReportsService {
                             diagRecord.put("patientAge", patientAge);
                             diagRecord.put("departmentId", deptId);
                             diagRecord.put("departmentName", deptName);
-                            diagRecord.put("clinicianId", clinIdStr);
-                            diagRecord.put("clinicianName", clinName);
+                            diagRecord.put("clinicianId", diagClinId);
+                            diagRecord.put("clinicianName", diagClinName);
                             diagRecord.put("date", deptTime);
                             diagRecord.put("symptoms", deptSymptoms);
                             diagRecord.put("medications", deptMedications);

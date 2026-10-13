@@ -8,5 +8,6 @@ public record VisitDepartmentSymptomDto(
         String symptomName,
         String sonomedId,
         String notes,
+        WorkerDto addedBy,
         LocalDateTime createdAt
 ) {}

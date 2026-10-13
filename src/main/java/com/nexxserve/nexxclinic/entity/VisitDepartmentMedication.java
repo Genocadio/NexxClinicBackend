@@ -33,6 +33,10 @@ public class VisitDepartmentMedication {
     @Column(nullable = false)
     private String instructions;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "added_by_id")
+    private Worker addedBy;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -81,6 +85,14 @@ public class VisitDepartmentMedication {
 
     public void setInstructions(String instructions) {
         this.instructions = instructions;
+    }
+
+    public Worker getAddedBy() {
+        return addedBy;
+    }
+
+    public void setAddedBy(Worker addedBy) {
+        this.addedBy = addedBy;
     }
 
     public LocalDateTime getCreatedAt() {

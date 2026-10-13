@@ -10,5 +10,6 @@ public record VisitDepartmentDiagnosisDto(
         String icd11Code,
         VisitDepartmentDiagnosisType type,
         String notes,
+        WorkerDto addedBy,
         LocalDateTime createdAt
 ) {}

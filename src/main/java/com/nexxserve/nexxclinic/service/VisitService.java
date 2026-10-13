@@ -2008,16 +2008,18 @@ public class VisitService {
                 .toList();
 
         List<VisitDepartmentDiagnosisDto> diagnostics = canViewClinical
-                ? diagnosesByVdId.getOrDefault(visitDepartment.getId(), List.of()).stream().map(visitDepartmentService::visitDepartmentDiagnosisToDto).toList()
+                ? diagnosesByVdId.getOrDefault(visitDepartment.getId(), List.of()).stream()
+                        .map(diag -> visitDepartmentService.visitDepartmentDiagnosisToDto(diag, preloadedWorkers)).toList()
                 : List.of();
 
         List<VisitDepartmentSymptomDto> symptoms = canViewClinical
                 ? symptomsByVdId.getOrDefault(visitDepartment.getId(), List.of()).stream()
-                        .map(visitDepartmentService::visitDepartmentSymptomToDto).toList()
+                        .map(sym -> visitDepartmentService.visitDepartmentSymptomToDto(sym, preloadedWorkers)).toList()
                 : List.of();
 
         List<VisitDepartmentMedicationDto> medications = canViewClinical
-                ? medicationsByVdId.getOrDefault(visitDepartment.getId(), List.of()).stream().map(visitDepartmentService::visitDepartmentMedicationToDto).toList()
+                ? medicationsByVdId.getOrDefault(visitDepartment.getId(), List.of()).stream()
+                        .map(med -> visitDepartmentService.visitDepartmentMedicationToDto(med, preloadedWorkers)).toList()
                 : List.of();
 
         List<VisitPreInstructionDto> preInstructions = canViewClinical

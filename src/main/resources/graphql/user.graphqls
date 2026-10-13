@@ -787,6 +787,7 @@ type VisitDepartmentDiagnosis {
   icd11Code: String
   type: VisitDepartmentDiagnosisType!
   notes: String!
+  addedBy: Worker
   createdAt: String!
 }
 
@@ -795,6 +796,7 @@ type VisitDepartmentSymptom {
   symptomName: String!
   sonomedId: String
   notes: String!
+  addedBy: Worker
   createdAt: String!
 }
 
@@ -852,6 +854,7 @@ type VisitDepartmentMedication {
   id: ID!
   medicationName: String!
   instructions: String!
+  addedBy: Worker
   createdAt: String!
 }
 

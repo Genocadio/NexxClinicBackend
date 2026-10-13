@@ -7,5 +7,6 @@ public record VisitDepartmentMedicationDto(
         UUID id,
         String medicationName,
         String instructions,
+        WorkerDto addedBy,
         LocalDateTime createdAt
 ) {}

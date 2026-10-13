@@ -2002,6 +2002,10 @@ public class VisitDepartmentService {
         diagnosis.setIcd11Code(input.icd11Code() == null || input.icd11Code().isBlank() ? null : input.icd11Code().trim());
         diagnosis.setType(input.type());
         diagnosis.setNotes(input.notes());
+        Worker actingUser = resolveWorker(authUser);
+        if (actingUser != null) {
+            diagnosis.setAddedBy(actingUser);
+        }
 
         visitDepartmentDiagnosisRepository.save(diagnosis);
         return ApiResponse.success("Diagnosis added successfully.", visitDepartmentToDto(visitDept));
@@ -2115,6 +2119,10 @@ public class VisitDepartmentService {
         symptom.setSonomedId(input.sonomedId() == null || input.sonomedId().isBlank()
                 ? null : input.sonomedId().trim());
         symptom.setNotes(input.notes());
+        Worker actingUser = resolveWorker(authUser);
+        if (actingUser != null) {
+            symptom.setAddedBy(actingUser);
+        }
         visitDepartmentSymptomRepository.save(symptom);
         return ApiResponse.success("Symptom added successfully.", visitDepartmentToDto(department));
     }
@@ -2202,6 +2210,10 @@ public class VisitDepartmentService {
         medication.setVisitDepartment(visitDept);
         medication.setMedicationName(input.medicationName().trim());
         medication.setInstructions(input.instructions().trim());
+        Worker actingUser = resolveWorker(authUser);
+        if (actingUser != null) {
+            medication.setAddedBy(actingUser);
+        }
 
         visitDepartmentMedicationRepository.save(medication);
         return ApiResponse.success("Medication added successfully.", visitDepartmentToDto(visitDept));
@@ -3111,31 +3123,49 @@ public class VisitDepartmentService {
     }
 
     public VisitDepartmentDiagnosisDto visitDepartmentDiagnosisToDto(VisitDepartmentDiagnosis item) {
+        return visitDepartmentDiagnosisToDto(item, null);
+    }
+
+    public VisitDepartmentDiagnosisDto visitDepartmentDiagnosisToDto(VisitDepartmentDiagnosis item, PreloadedWorkers preloaded) {
+        if (item == null) return null;
         return new VisitDepartmentDiagnosisDto(
                 item.getId(),
                 item.getDiagnosisName(),
                 item.getIcd11Code(),
                 item.getType(),
                 item.getNotes(),
+                workerDto(item.getAddedBy(), preloaded),
                 item.getCreatedAt()
         );
     }
 
     public VisitDepartmentSymptomDto visitDepartmentSymptomToDto(VisitDepartmentSymptom item) {
+        return visitDepartmentSymptomToDto(item, null);
+    }
+
+    public VisitDepartmentSymptomDto visitDepartmentSymptomToDto(VisitDepartmentSymptom item, PreloadedWorkers preloaded) {
+        if (item == null) return null;
         return new VisitDepartmentSymptomDto(
                 item.getId(),
                 item.getSymptomName(),
                 item.getSonomedId(),
                 item.getNotes(),
+                workerDto(item.getAddedBy(), preloaded),
                 item.getCreatedAt()
         );
     }
 
     public VisitDepartmentMedicationDto visitDepartmentMedicationToDto(VisitDepartmentMedication item) {
+        return visitDepartmentMedicationToDto(item, null);
+    }
+
+    public VisitDepartmentMedicationDto visitDepartmentMedicationToDto(VisitDepartmentMedication item, PreloadedWorkers preloaded) {
+        if (item == null) return null;
         return new VisitDepartmentMedicationDto(
                 item.getId(),
                 item.getMedicationName(),
                 item.getInstructions(),
+                workerDto(item.getAddedBy(), preloaded),
                 item.getCreatedAt()
         );
     }
