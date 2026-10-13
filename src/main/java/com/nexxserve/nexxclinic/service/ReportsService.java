@@ -2262,12 +2262,14 @@ public class ReportsService {
 
                             Map<String, Object> diagRecord = new HashMap<>();
                             diagRecord.put("id", diag.id() != null ? diag.id().toString() : ("diag-" + diagnosticReportsList.size()));
+                            diagRecord.put("visitId", visit.id() != null ? visit.id().toString() : "");
                             diagRecord.put("diagnosisName", dName);
                             diagRecord.put("icd11Code", icdCode);
                             diagRecord.put("type", diagType);
                             diagRecord.put("notes", diag.notes() != null ? diag.notes() : "");
                             diagRecord.put("patientId", patientId);
                             diagRecord.put("patientName", patientName);
+                            diagRecord.put("patientIdentifier", patientIdentifier);
                             diagRecord.put("patientGender", patientGender);
                             diagRecord.put("patientAge", patientAge);
                             diagRecord.put("departmentId", deptId);
