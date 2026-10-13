@@ -17,6 +17,8 @@ enum RoleName {
   NURSE
   CLINICIAN
   ADMIN
+  MEDICAL_REPORTS
+  FINANCE_REPORTS
 }
 
 enum AccountStatus {
@@ -1942,6 +1944,7 @@ type Query {
   role(id: ID, name: String): RoleResponse!
   permissions: PermissionListResponse!
   getUserReports(fromDate: String, toDate: String, period: String, workerId: ID): UserReportsResponse!
+  getClinicReports(fromDate: String, toDate: String, period: String, departmentId: ID, departmentIds: [ID], clinicianId: ID, clinicianIds: [ID], insuranceId: ID, insuranceIds: [ID], isPrivateOnly: Boolean): UserReportsResponse!
 }
 
 type Mutation {

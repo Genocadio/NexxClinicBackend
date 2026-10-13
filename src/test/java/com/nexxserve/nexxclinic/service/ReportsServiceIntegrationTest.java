@@ -71,6 +71,7 @@ class ReportsServiceIntegrationTest {
         assertNotNull(data.get("finance"));
         assertNotNull(data.get("timeline"));
         assertNotNull(data.get("allActivities"));
+        assertNotNull(data.get("demographics"));
 
         @SuppressWarnings("unchecked")
         Map<String, Object> finance = (Map<String, Object>) data.get("finance");

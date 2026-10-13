@@ -2678,7 +2678,8 @@ public class VisitDepartmentService {
             if (authUser.roles().contains(RoleName.ADMIN)
                     || authUser.roles().contains(RoleName.CLINIC_ADMIN)
                     || authUser.roles().contains(RoleName.MANAGER)
-                    || authUser.roles().contains(RoleName.CLINICIAN)) {
+                    || authUser.roles().contains(RoleName.CLINICIAN)
+                    || authUser.roles().contains(RoleName.MEDICAL_REPORTS)) {
                 return true;
             }
         }

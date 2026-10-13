@@ -3,8 +3,11 @@ package com.nexxserve.nexxclinic.service;
 import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.dto.out.PatientInsuranceDto;
+import com.nexxserve.nexxclinic.dto.out.VisitDepartmentDiagnosisDto;
 import com.nexxserve.nexxclinic.dto.out.VisitDepartmentDto;
+import com.nexxserve.nexxclinic.dto.out.VisitDepartmentMedicationDto;
 import com.nexxserve.nexxclinic.dto.out.VisitDepartmentProductDto;
+import com.nexxserve.nexxclinic.dto.out.VisitDepartmentSymptomDto;
 import com.nexxserve.nexxclinic.dto.out.VisitDto;
 import com.nexxserve.nexxclinic.dto.out.VisitVitalSignsGroupDto;
 import com.nexxserve.nexxclinic.dto.out.VitalMeasurementDto;
@@ -151,11 +154,16 @@ public class ReportsService {
         if (hasReception) allowedTabs.add("reception");
 
         if (allowedTabs.isEmpty()) {
-            return ApiResponse.error("You do not have permission to view reports.");
+            if (isAdminOrManager) {
+                allowedTabs.add("clinician");
+                allowedTabs.add("finance");
+            } else {
+                return ApiResponse.error("You do not have permission to view reports.");
+            }
         }
 
         boolean canViewFinance = authUser.roles() != null && authUser.roles().stream().anyMatch(r ->
-                r == RoleName.FINANCE || r == RoleName.CLINICIAN
+                r == RoleName.FINANCE || r == RoleName.CLINICIAN || r == RoleName.ADMIN || r == RoleName.MANAGER
         );
 
         LocalDateTime startDateTime = startDate.atStartOfDay();
@@ -346,6 +354,16 @@ public class ReportsService {
         return processors.stream().anyMatch(p -> p != null && p.id() != null && p.id().toString().equals(workerId));
     }
 
+    private boolean isUserInSet(UUID userId, Set<String> allowedIds) {
+        if (userId == null || allowedIds == null || allowedIds.isEmpty()) return false;
+        return allowedIds.contains(userId.toString());
+    }
+
+    private boolean isProcessorInSet(List<com.nexxserve.nexxclinic.dto.out.WorkerDto> processors, Set<String> allowedIds) {
+        if (processors == null || processors.isEmpty() || allowedIds == null || allowedIds.isEmpty()) return false;
+        return processors.stream().anyMatch(p -> p != null && p.id() != null && allowedIds.contains(p.id().toString()));
+    }
+
     private Map<String, Object> calculateReportsData(
             List<VisitDto> visits,
             String workerId,
@@ -399,6 +417,16 @@ public class ReportsService {
         int clinicianDurationCount = 0;
         Map<String, Integer> clinicianEncountersByHour = new LinkedHashMap<>();
 
+        Set<String> overallPatientsSet = new HashSet<>();
+        int overallMaleCount = 0;
+        int overallFemaleCount = 0;
+        int overallOtherGenderCount = 0;
+        double overallTotalAgeSum = 0;
+        int overallAgeCount = 0;
+        int overallUnder18Count = 0;
+        int overallAdults18to50Count = 0;
+        int overallSeniors50plusCount = 0;
+
         int vitalsRecordedCount = 0;
         int triageEncountersCount = 0;
         int nursingActsCount = 0;
@@ -432,6 +460,8 @@ public class ReportsService {
         double clinicianGiveawayAmount = 0;
         int clinicianLoanCount = 0;
         int clinicianGiveawayCount = 0;
+        double clinicianPendingBillingAmount = 0;
+        int clinicianPendingBillingCount = 0;
 
         double clinicianProductTurnoverTotal = 0;
         double clinicianProductItemsApprovedCount = 0;
@@ -842,6 +872,13 @@ public class ReportsService {
                                 if (isBilledOrExempted) {
                                     clinicianProductTurnoverTotal += lineTotal;
                                     clinicianProductItemsApprovedCount += qty;
+                                    if (isExempted && !isClinicianOnDept) {
+                                        clinicianGiveawayAmount += lineTotal;
+                                        clinicianGiveawayCount += (int) Math.round(qty);
+                                    }
+                                } else {
+                                    clinicianPendingBillingAmount += lineTotal;
+                                    clinicianPendingBillingCount += (int) Math.round(qty);
                                 }
 
                                 if (!clinicianProductTurnoverByCategory.containsKey(prodType)) {
@@ -1079,6 +1116,28 @@ public class ReportsService {
 
             if (patientTouchedByWorker && !patientId.isEmpty()) {
                 uniquePatientsSet.add(patientId);
+                if (!overallPatientsSet.contains(patientId)) {
+                    overallPatientsSet.add(patientId);
+                    String gen = visit.patient() != null && visit.patient().gender() != null ? visit.patient().gender().name() : "";
+                    if (gen.equalsIgnoreCase("MALE") || gen.startsWith("M")) {
+                        overallMaleCount++;
+                    } else if (gen.equalsIgnoreCase("FEMALE") || gen.startsWith("F")) {
+                        overallFemaleCount++;
+                    } else {
+                        overallOtherGenderCount++;
+                    }
+
+                    Integer pAge = (visit.patient() != null)
+                            ? calculatePatientAge(visit.patient().dateOfBirth() != null ? visit.patient().dateOfBirth().toString() : null, visit.patient().age())
+                            : null;
+                    if (pAge != null) {
+                        overallTotalAgeSum += pAge;
+                        overallAgeCount++;
+                        if (pAge < 18) overallUnder18Count++;
+                        else if (pAge <= 50) overallAdults18to50Count++;
+                        else overallSeniors50plusCount++;
+                    }
+                }
             }
         }
 
@@ -1150,6 +1209,26 @@ public class ReportsService {
         clinicianDemographics.put("peakActivityHour", peakHourStr);
         clinicianDemographics.put("encountersByHour", clinicianEncountersByHour);
 
+        Map<String, Object> overallAgeBrackets = new HashMap<>();
+        overallAgeBrackets.put("under18", overallUnder18Count);
+        overallAgeBrackets.put("adults18to50", overallAdults18to50Count);
+        overallAgeBrackets.put("seniors50plus", overallSeniors50plusCount);
+
+        Map<String, Object> overallDemographics = new HashMap<>();
+        if (!clinicianPatientsSet.isEmpty() || consultationsCount > 0) {
+            overallDemographics = clinicianDemographics;
+        } else {
+            overallDemographics.put("totalPatientsCount", overallPatientsSet.size() > 0 ? overallPatientsSet.size() : uniquePatientsSet.size());
+            overallDemographics.put("maleCount", overallMaleCount);
+            overallDemographics.put("femaleCount", overallFemaleCount);
+            overallDemographics.put("otherGenderCount", overallOtherGenderCount);
+            overallDemographics.put("averageAge", overallAgeCount > 0 ? Math.round((overallTotalAgeSum / overallAgeCount) * 10.0) / 10.0 : 0.0);
+            overallDemographics.put("ageBrackets", overallAgeBrackets);
+            overallDemographics.put("averageEncounterTimeMinutes", clinicianDurationCount > 0 ? Math.round((double) clinicianTotalDurationMinutes / clinicianDurationCount) : 0);
+            overallDemographics.put("peakActivityHour", peakHourStr);
+            overallDemographics.put("encountersByHour", clinicianEncountersByHour);
+        }
+
         // Timelines formatted
         List<Map<String, Object>> timeline = formatActivityTimeline(timelineMap, isDailyView, isWeeklyView);
         List<Map<String, Object>> moneyTimeline = formatMoneyTimeline(moneyTimelineMap, isDailyView, isWeeklyView);
@@ -1217,6 +1296,8 @@ public class ReportsService {
         clinicianMoneyReport.put("outstandingBalance", Math.max(0, clinicianGross - clinicianInsuranceCoveredAmount - clinicianPatientCashCollected - clinicianGiveawayAmount));
         clinicianMoneyReport.put("loanCount", clinicianLoanCount);
         clinicianMoneyReport.put("giveawayCount", clinicianGiveawayCount);
+        clinicianMoneyReport.put("pendingBillingAmount", clinicianPendingBillingAmount);
+        clinicianMoneyReport.put("pendingBillingCount", clinicianPendingBillingCount);
         clinicianMoneyReport.put("totalProductTurnover", clinicianProductTurnoverTotal);
         clinicianMoneyReport.put("productItemsApprovedCount", clinicianProductItemsApprovedCount);
         clinicianMoneyReport.put("productTurnoverByCategory", clinicianProductTurnoverByCategory);
@@ -1281,6 +1362,7 @@ public class ReportsService {
         result.put("allowedTabs", allowedTabs);
         result.put("totalInteractions", allActivities.size());
         result.put("uniquePatientsTouched", uniquePatientsSet.size());
+        result.put("demographics", overallDemographics);
         result.put("reception", receptionReport);
         result.put("clinician", clinicianReport);
         result.put("nurse", nurseReport);
@@ -1453,5 +1535,921 @@ public class ReportsService {
         } catch (Exception e) {
             return 0.0;
         }
+    }
+
+    @Transactional(readOnly = true)
+    public ApiResponse getClinicReports(
+            String fromDate,
+            String toDate,
+            String periodInput,
+            UUID departmentId,
+            UUID clinicianId,
+            UUID insuranceId,
+            Boolean isPrivateOnly,
+            AuthenticatedUser authUser
+    ) {
+        return getClinicReports(fromDate, toDate, periodInput, departmentId, null, clinicianId, null, insuranceId, isPrivateOnly, authUser);
+    }
+
+    @Transactional(readOnly = true)
+    public ApiResponse getClinicReports(
+            String fromDate,
+            String toDate,
+            String periodInput,
+            UUID departmentId,
+            UUID clinicianId,
+            List<UUID> clinicianIds,
+            UUID insuranceId,
+            Boolean isPrivateOnly,
+            AuthenticatedUser authUser
+    ) {
+        return getClinicReports(fromDate, toDate, periodInput, departmentId, null, clinicianId, clinicianIds, insuranceId, isPrivateOnly, authUser);
+    }
+
+    @Transactional(readOnly = true)
+    public ApiResponse getClinicReports(
+            String fromDate,
+            String toDate,
+            String periodInput,
+            UUID departmentId,
+            List<UUID> departmentIds,
+            UUID clinicianId,
+            List<UUID> clinicianIds,
+            UUID insuranceId,
+            Boolean isPrivateOnly,
+            AuthenticatedUser authUser
+    ) {
+        return getClinicReports(fromDate, toDate, periodInput, departmentId, departmentIds, clinicianId, clinicianIds, insuranceId, null, isPrivateOnly, authUser);
+    }
+
+    @Transactional(readOnly = true)
+    public ApiResponse getClinicReports(
+            String fromDate,
+            String toDate,
+            String periodInput,
+            UUID departmentId,
+            List<UUID> departmentIds,
+            UUID clinicianId,
+            List<UUID> clinicianIds,
+            UUID insuranceId,
+            List<UUID> insuranceIds,
+            Boolean isPrivateOnly,
+            AuthenticatedUser authUser
+    ) {
+        if (authUser == null || authUser.userId() == null) {
+            return ApiResponse.unauthenticated("Authentication is required to view reports.");
+        }
+
+        boolean canAccessClinicReports = authUser.roles() != null && authUser.roles().stream().anyMatch(r ->
+                r == RoleName.ADMIN || r == RoleName.MANAGER || r == RoleName.CLINIC_ADMIN
+                        || r == RoleName.FINANCE_REPORTS || r == RoleName.MEDICAL_REPORTS
+        );
+
+        if (!canAccessClinicReports) {
+            return ApiResponse.unauthorised("You do not have permission to access clinic reports.");
+        }
+
+        LocalDate today = LocalDate.now();
+        LocalDate startDate;
+        LocalDate endDate;
+
+        try {
+            if (fromDate != null && !fromDate.isBlank()) {
+                startDate = parseLocalDate(fromDate);
+            } else {
+                startDate = today;
+            }
+        } catch (Exception e) {
+            startDate = today;
+        }
+
+        try {
+            if (toDate != null && !toDate.isBlank()) {
+                endDate = parseLocalDate(toDate);
+            } else {
+                endDate = startDate;
+            }
+        } catch (Exception e) {
+            endDate = startDate;
+        }
+
+        if (endDate.isBefore(startDate)) {
+            LocalDate tmp = startDate;
+            startDate = endDate;
+            endDate = tmp;
+        }
+
+        String fromDateStr = startDate.format(DateTimeFormatter.ISO_LOCAL_DATE);
+        String toDateStr = endDate.format(DateTimeFormatter.ISO_LOCAL_DATE);
+
+        long diffDays = java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate);
+        String period = (periodInput != null && !periodInput.isBlank())
+                ? periodInput.toLowerCase().trim()
+                : (diffDays == 0 ? "today" : (diffDays <= 7 ? "week" : (diffDays <= 31 ? "month" : "custom")));
+
+        LocalDateTime startDateTime = startDate.atStartOfDay();
+        LocalDateTime endDateTime = endDate.atTime(LocalTime.MAX);
+
+        Specification<Visit> spec = (root, queryDef, builder) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(builder.or(
+                    builder.and(
+                            builder.greaterThanOrEqualTo(root.get("visitDate"), startDateTime),
+                            builder.lessThanOrEqualTo(root.get("visitDate"), endDateTime)
+                    ),
+                    builder.and(
+                            builder.greaterThanOrEqualTo(root.get("createdAt"), startDateTime),
+                            builder.lessThanOrEqualTo(root.get("createdAt"), endDateTime)
+                    )
+            ));
+            return builder.and(predicates.toArray(new Predicate[0]));
+        };
+
+        List<Visit> rawVisits = visitRepository.findAll(spec, Sort.by(Sort.Direction.DESC, "visitDate"));
+
+        List<VisitDto> visits = rawVisits.stream()
+                .map(v -> visitService.visitToDto(v, Set.of(), authUser))
+                .toList();
+
+        Map<String, Object> reportData = calculateClinicReportsData(
+                visits,
+                period,
+                fromDateStr,
+                toDateStr,
+                startDate,
+                endDate,
+                diffDays,
+                departmentId,
+                departmentIds,
+                clinicianId,
+                clinicianIds,
+                insuranceId,
+                insuranceIds,
+                isPrivateOnly
+        );
+
+        return ApiResponse.success("Clinic reports generated successfully.", reportData);
+    }
+
+    private Map<String, Object> calculateClinicReportsData(
+            List<VisitDto> visits,
+            String period,
+            String fromDate,
+            String toDate,
+            LocalDate startDate,
+            LocalDate endDate,
+            long diffDays,
+            UUID filterDeptId,
+            List<UUID> filterDeptIds,
+            UUID filterClinicianId,
+            List<UUID> filterClinicianIds,
+            UUID filterInsuranceId,
+            List<UUID> filterInsuranceIds,
+            Boolean filterPrivateOnly
+    ) {
+        boolean isDailyView = "today".equals(period) || fromDate.equals(toDate) || diffDays == 0;
+        boolean isWeeklyView = !isDailyView && ("week".equals(period) || diffDays <= 7);
+
+        Set<String> uniquePatientsSet = new HashSet<>();
+        int maleCount = 0;
+        int femaleCount = 0;
+        int otherGenderCount = 0;
+        List<Integer> patientAges = new ArrayList<>();
+        int under18 = 0;
+        int adults18to50 = 0;
+        int seniors50plus = 0;
+
+        int totalVisitsCount = 0;
+        Map<String, Integer> encountersByHour = new HashMap<>();
+
+        double totalGrossBilled = 0;
+        double insuranceCoveredAmount = 0;
+        double patientShareAmount = 0;
+        double patientCashCollected = 0;
+        double patientLoanAmount = 0;
+        double giveawayAmount = 0;
+        double waiverAmount = 0;
+        double pendingBillingAmount = 0;
+
+        int loanCount = 0;
+        int giveawayCount = 0;
+        int waiverCount = 0;
+        int pendingBillingCount = 0;
+
+        double momoCollected = 0;
+        double cashCollected = 0;
+        double cardCollected = 0;
+        double bankTransferCollected = 0;
+        double otherCollected = 0;
+
+        Map<String, Map<String, Object>> paymentModesBreakdownMap = new HashMap<>();
+        Map<String, Map<String, Object>> insuranceBreakdownMap = new HashMap<>();
+        Map<String, Map<String, Object>> departmentBreakdownMap = new HashMap<>();
+        Map<String, Map<String, Object>> clinicianBreakdownMap = new HashMap<>();
+        Map<String, Map<String, Object>> categoryBreakdownMap = new HashMap<>();
+
+        Map<String, Map<String, Double>> moneyTimelineMap = new LinkedHashMap<>();
+
+        List<Map<String, Object>> waiversList = new ArrayList<>();
+        List<Map<String, Object>> giveawaysList = new ArrayList<>();
+        List<Map<String, Object>> adjustmentsList = new ArrayList<>();
+        List<Map<String, Object>> loansList = new ArrayList<>();
+        List<Map<String, Object>> diagnosticReportsList = new ArrayList<>();
+
+        if (isDailyView) {
+            for (int h = 6; h <= 20; h++) {
+                String hKey = String.format("%02d:00", h);
+                moneyTimelineMap.put(hKey, createClinicMoneyTimelineBucket());
+            }
+        } else if (diffDays <= 31) {
+            LocalDate cur = startDate;
+            while (!cur.isAfter(endDate)) {
+                String dKey = cur.format(DateTimeFormatter.ISO_LOCAL_DATE);
+                moneyTimelineMap.put(dKey, createClinicMoneyTimelineBucket());
+                cur = cur.plusDays(1);
+            }
+        }
+
+        Set<String> filterDeptIdsSet = new HashSet<>();
+        if (filterDeptId != null) {
+            filterDeptIdsSet.add(filterDeptId.toString());
+        }
+        if (filterDeptIds != null) {
+            for (UUID did : filterDeptIds) {
+                if (did != null) filterDeptIdsSet.add(did.toString());
+            }
+        }
+
+        Set<String> filterClinicianIdsSet = new HashSet<>();
+        if (filterClinicianId != null) {
+            filterClinicianIdsSet.add(filterClinicianId.toString());
+        }
+        if (filterClinicianIds != null) {
+            for (UUID cid : filterClinicianIds) {
+                if (cid != null) filterClinicianIdsSet.add(cid.toString());
+            }
+        }
+
+        Set<String> filterInsuranceIdsSet = new HashSet<>();
+        if (filterInsuranceId != null) {
+            filterInsuranceIdsSet.add(filterInsuranceId.toString());
+        }
+        if (filterInsuranceIds != null) {
+            for (UUID iid : filterInsuranceIds) {
+                if (iid != null) filterInsuranceIdsSet.add(iid.toString());
+            }
+        }
+
+        for (VisitDto visit : visits) {
+            String vTime = visit.visitDate() != null ? visit.visitDate().toString() : "";
+            if (!isWithinDateRange(vTime, fromDate, toDate)) continue;
+
+            boolean hasInsurance = visit.linkedInsurances() != null && !visit.linkedInsurances().isEmpty();
+
+            // Payer filter
+            if (Boolean.TRUE.equals(filterPrivateOnly) && hasInsurance) {
+                continue;
+            }
+
+            if (!filterInsuranceIdsSet.isEmpty()) {
+                boolean matchesIns = visit.linkedInsurances() != null && visit.linkedInsurances().stream().anyMatch(ins -> {
+                    if (ins.id() != null && filterInsuranceIdsSet.contains(ins.id().toString())) return true;
+                    if (ins.insuranceProvider() != null && ins.insuranceProvider().id() != null && filterInsuranceIdsSet.contains(ins.insuranceProvider().id().toString())) return true;
+                    return false;
+                });
+                if (!matchesIns) continue;
+            }
+
+            // Department filter for visit
+            if (!filterDeptIdsSet.isEmpty()) {
+                boolean hasMatchingDept = visit.departments() != null && visit.departments().stream().anyMatch(d ->
+                        d.department() != null && d.department().id() != null && filterDeptIdsSet.contains(d.department().id().toString())
+                );
+                if (!hasMatchingDept) continue;
+            }
+
+            // Clinician filter for visit
+            if (!filterClinicianIdsSet.isEmpty()) {
+                boolean hasMatchingClinician = visit.departments() != null && visit.departments().stream().anyMatch(d ->
+                        isProcessorInSet(d.processors(), filterClinicianIdsSet) ||
+                        (d.completedBy() != null && isUserInSet(d.completedBy().id(), filterClinicianIdsSet)) ||
+                        (d.products() != null && d.products().stream().anyMatch(p ->
+                                (p.processor() != null && isUserInSet(p.processor().id(), filterClinicianIdsSet)) ||
+                                (p.addedBy() != null && isUserInSet(p.addedBy().id(), filterClinicianIdsSet))
+                        ))
+                );
+                if (!hasMatchingClinician) continue;
+            }
+
+            totalVisitsCount++;
+
+            // Patient demographics
+            String patientId = visit.patient() != null && visit.patient().id() != null ? visit.patient().id().toString() : "";
+            String patientName = "Patient";
+            String patientIdentifier = "";
+            String patientPhone = "";
+            String patientGender = "";
+            Integer patientAge = null;
+
+            if (visit.patient() != null) {
+                String fn = visit.patient().firstName() != null ? visit.patient().firstName().trim() : "";
+                String ln = visit.patient().lastName() != null ? visit.patient().lastName().trim() : "";
+                patientName = (!fn.isEmpty() || !ln.isEmpty()) ? (fn + " " + ln).trim() : (visit.patient().fullName() != null ? visit.patient().fullName() : "Patient");
+                patientIdentifier = visit.patient().patientIdentifier() != null ? visit.patient().patientIdentifier() : "";
+                patientPhone = visit.patient().primaryPhoneNumber() != null ? visit.patient().primaryPhoneNumber() : "";
+                patientGender = visit.patient().gender() != null ? visit.patient().gender().name() : "";
+
+                patientAge = calculatePatientAge(visit.patient().dateOfBirth() != null ? visit.patient().dateOfBirth().toString() : null, null);
+
+                if (!patientId.isEmpty() && uniquePatientsSet.add(patientId)) {
+                    if ("MALE".equalsIgnoreCase(patientGender)) maleCount++;
+                    else if ("FEMALE".equalsIgnoreCase(patientGender)) femaleCount++;
+                    else otherGenderCount++;
+
+                    if (patientAge != null) {
+                        patientAges.add(patientAge);
+                        if (patientAge < 18) under18++;
+                        else if (patientAge <= 50) adults18to50++;
+                        else seniors50plus++;
+                    }
+                }
+            }
+
+            LocalDateTime vDateTime = parseDateTime(vTime);
+            if (vDateTime != null) {
+                String hKey = String.format("%02d:00", vDateTime.getHour());
+                encountersByHour.put(hKey, encountersByHour.getOrDefault(hKey, 0) + 1);
+            }
+
+            // Iterate departments
+            if (visit.departments() != null) {
+                for (VisitDepartmentDto dept : visit.departments()) {
+                    if (!filterDeptIdsSet.isEmpty()) {
+                        if (dept.department() == null || dept.department().id() == null || !filterDeptIdsSet.contains(dept.department().id().toString())) {
+                            continue;
+                        }
+                    }
+
+                    if (!filterClinicianIdsSet.isEmpty()) {
+                        boolean matchDeptClin = isProcessorInSet(dept.processors(), filterClinicianIdsSet) ||
+                                (dept.completedBy() != null && isUserInSet(dept.completedBy().id(), filterClinicianIdsSet)) ||
+                                (dept.products() != null && dept.products().stream().anyMatch(p ->
+                                        (p.processor() != null && isUserInSet(p.processor().id(), filterClinicianIdsSet)) ||
+                                        (p.addedBy() != null && isUserInSet(p.addedBy().id(), filterClinicianIdsSet))
+                                ));
+                        if (!matchDeptClin) continue;
+                    }
+
+                    String deptId = dept.department() != null && dept.department().id() != null ? dept.department().id().toString() : (dept.id() != null ? dept.id().toString() : "");
+                    String deptName = dept.department() != null && dept.department().name() != null ? dept.department().name() : "Consultation";
+                    String deptTime = dept.startedAt() != null ? dept.startedAt().toString() : (dept.createdAt() != null ? dept.createdAt().toString() : vTime);
+
+                    // Resolve primary clinician for department
+                    String clinName = "N/A";
+                    String clinIdStr = "";
+                    if (dept.completedBy() != null && dept.completedBy().id() != null) {
+                        clinIdStr = dept.completedBy().id().toString();
+                        String fn = dept.completedBy().firstName() != null ? dept.completedBy().firstName() : "";
+                        String ln = dept.completedBy().lastName() != null ? dept.completedBy().lastName() : "";
+                        clinName = (fn + " " + ln).trim();
+                    } else if (dept.processors() != null && !dept.processors().isEmpty()) {
+                        var p0 = dept.processors().iterator().next();
+                        if (p0 != null && p0.id() != null) {
+                            clinIdStr = p0.id().toString();
+                            String fn = p0.firstName() != null ? p0.firstName() : "";
+                            String ln = p0.lastName() != null ? p0.lastName() : "";
+                            clinName = (fn + " " + ln).trim();
+                        }
+                    }
+
+                    Map<String, Object> deptBilling = (dept.id() != null) ? billingQueryService.departmentBilling(dept.id()) : null;
+
+                    double deptGross = 0;
+                    double deptInsCov = 0;
+                    double deptPatPay = 0;
+                    double deptPaid = 0;
+                    double deptLoan = 0;
+                    double deptGiveaway = 0;
+                    double deptWaiver = 0;
+                    double deptPending = 0;
+
+                    if (deptBilling != null) {
+                        Object insListObj = deptBilling.get("insuranceBillings");
+                        if (insListObj instanceof List<?> list && !list.isEmpty()) {
+                            for (Object itemObj : list) {
+                                if (itemObj instanceof Map<?, ?> ib) {
+                                    String insName = resolveVisitInsuranceAcronym(dept, visit, deptBilling, hasInsurance);
+                                    Object pIns = ib.get("patientInsurance");
+                                    if (pIns instanceof Map<?, ?> pMap) {
+                                        Object prov = pMap.get("insuranceProvider");
+                                        if (prov instanceof Map<?, ?> provMap) {
+                                            String acr = getInsuranceAcronym((String) provMap.get("name"), (String) provMap.get("acronym"));
+                                            if (acr != null) insName = acr;
+                                        }
+                                    }
+
+                                    double tot = toDouble(ib.get("totalAmount"));
+                                    double insCov = toDouble(ib.get("insuranceCoveredAmount"));
+                                    double patPay = toDouble(ib.get("patientPayableAmount"));
+                                    double paid = toDouble(ib.get("paidAmount"));
+                                    double outstanding = toDouble(ib.get("outstandingAmount"));
+                                    String outstandingType = ib.get("outstandingType") != null ? ib.get("outstandingType").toString() : "";
+                                    String outstandingReason = ib.get("outstandingReason") != null ? ib.get("outstandingReason").toString() : "";
+
+                                    boolean isGiveaway = "GIVEAWAY".equalsIgnoreCase(outstandingType);
+                                    boolean isLoan = "LOAN".equalsIgnoreCase(outstandingType) || (!isGiveaway && outstanding > 0);
+
+                                    double loanVal = isLoan ? outstanding : 0;
+                                    double giveVal = isGiveaway ? outstanding : 0;
+
+                                    deptGross += tot;
+                                    deptInsCov += insCov;
+                                    deptPatPay += patPay;
+                                    deptPaid += paid;
+                                    deptLoan += loanVal;
+                                    deptGiveaway += giveVal;
+
+                                    totalGrossBilled += tot;
+                                    insuranceCoveredAmount += insCov;
+                                    patientShareAmount += patPay;
+                                    patientCashCollected += paid;
+
+                                    if (loanVal > 0) {
+                                        patientLoanAmount += loanVal;
+                                        loanCount++;
+                                        Map<String, Object> loanEntry = new HashMap<>();
+                                        loanEntry.put("id", "loan-" + dept.id() + "-" + loansList.size());
+                                        loanEntry.put("patientName", patientName);
+                                        loanEntry.put("patientIdentifier", patientIdentifier);
+                                        loanEntry.put("patientPhone", patientPhone);
+                                        loanEntry.put("departmentName", deptName);
+                                        loanEntry.put("clinicianName", clinName);
+                                        loanEntry.put("totalBilled", patPay);
+                                        loanEntry.put("paidAmount", paid);
+                                        loanEntry.put("outstandingAmount", loanVal);
+                                        loanEntry.put("reason", outstandingReason.isBlank() ? "Outstanding patient balance" : outstandingReason);
+                                        loanEntry.put("status", paid > 0 ? "PARTIALLY_PAID" : "UNPAID");
+                                        loanEntry.put("date", deptTime);
+                                        loansList.add(loanEntry);
+                                    }
+
+                                    if (giveVal > 0) {
+                                        giveawayAmount += giveVal;
+                                        giveawayCount++;
+                                        Map<String, Object> giveEntry = new HashMap<>();
+                                        giveEntry.put("id", "give-" + dept.id() + "-" + giveawaysList.size());
+                                        giveEntry.put("patientName", patientName);
+                                        giveEntry.put("patientIdentifier", patientIdentifier);
+                                        giveEntry.put("departmentName", deptName);
+                                        giveEntry.put("clinicianName", clinName);
+                                        giveEntry.put("amount", giveVal);
+                                        giveEntry.put("productName", "Absorbed department balance");
+                                        giveEntry.put("reason", outstandingReason.isBlank() ? "Clinic absorbed" : outstandingReason);
+                                        giveEntry.put("date", deptTime);
+                                        giveawaysList.add(giveEntry);
+                                    }
+
+                                    accumulateInsuranceSummary(insuranceBreakdownMap, insName, tot, insCov, patPay, paid, loanVal, giveVal);
+                                }
+                            }
+                        } else {
+                            double tot = toDouble(deptBilling.get("totalAmount"));
+                            double insCov = toDouble(deptBilling.get("insuranceCoveredAmount"));
+                            double patPay = toDouble(deptBilling.get("patientPayableAmount"));
+                            double paid = toDouble(deptBilling.get("paidAmount"));
+                            double outstanding = toDouble(deptBilling.get("outstandingAmount"));
+
+                            deptGross += tot;
+                            deptInsCov += insCov;
+                            deptPatPay += patPay;
+                            deptPaid += paid;
+
+                            totalGrossBilled += tot;
+                            insuranceCoveredAmount += insCov;
+                            patientShareAmount += patPay;
+                            patientCashCollected += paid;
+
+                            if (outstanding > 0) {
+                                deptLoan += outstanding;
+                                patientLoanAmount += outstanding;
+                                loanCount++;
+                                Map<String, Object> loanEntry = new HashMap<>();
+                                loanEntry.put("id", "loan-" + dept.id() + "-" + loansList.size());
+                                loanEntry.put("patientName", patientName);
+                                loanEntry.put("patientIdentifier", patientIdentifier);
+                                loanEntry.put("patientPhone", patientPhone);
+                                loanEntry.put("departmentName", deptName);
+                                loanEntry.put("clinicianName", clinName);
+                                loanEntry.put("totalBilled", patPay);
+                                loanEntry.put("paidAmount", paid);
+                                loanEntry.put("outstandingAmount", outstanding);
+                                loanEntry.put("reason", "Outstanding patient balance");
+                                loanEntry.put("status", paid > 0 ? "PARTIALLY_PAID" : "UNPAID");
+                                loanEntry.put("date", deptTime);
+                                loansList.add(loanEntry);
+                            }
+                        }
+
+                        // Collect payment modes
+                        Object paymentsObj = deptBilling.get("payments");
+                        if (paymentsObj instanceof List<?> pList) {
+                            for (Object payObj : pList) {
+                                if (payObj instanceof Map<?, ?> pay) {
+                                    double payAmt = toDouble(pay.get("amount"));
+                                    if (payAmt <= 0) continue;
+                                    String rawMethod = pay.get("paymentMethod") != null ? pay.get("paymentMethod").toString().toUpperCase() : "CASH";
+                                    String methodKey = "CASH";
+                                    if (rawMethod.contains("MOBILE") || rawMethod.contains("MOMO") || rawMethod.contains("MTN") || rawMethod.contains("AIRTEL")) {
+                                        methodKey = "MOBILE_MONEY";
+                                        momoCollected += payAmt;
+                                    } else if (rawMethod.contains("CARD") || rawMethod.contains("POS") || rawMethod.contains("VISA") || rawMethod.contains("MASTERCARD")) {
+                                        methodKey = "CARD";
+                                        cardCollected += payAmt;
+                                    } else if (rawMethod.contains("BANK") || rawMethod.contains("TRANSFER")) {
+                                        methodKey = "BANK_TRANSFER";
+                                        bankTransferCollected += payAmt;
+                                    } else if (rawMethod.contains("CASH")) {
+                                        methodKey = "CASH";
+                                        cashCollected += payAmt;
+                                    } else {
+                                        methodKey = rawMethod;
+                                        otherCollected += payAmt;
+                                    }
+
+                                    if (!paymentModesBreakdownMap.containsKey(methodKey)) {
+                                        Map<String, Object> pModeMap = new HashMap<>();
+                                        pModeMap.put("amount", 0.0);
+                                        pModeMap.put("count", 0);
+                                        paymentModesBreakdownMap.put(methodKey, pModeMap);
+                                    }
+                                    Map<String, Object> pmEntry = paymentModesBreakdownMap.get(methodKey);
+                                    pmEntry.put("amount", toDouble(pmEntry.get("amount")) + payAmt);
+                                    pmEntry.put("count", (int) pmEntry.get("count") + 1);
+                                }
+                            }
+                        }
+                    }
+
+                    // Products inspection (Category breakdown, Waivers, Adjustments, Pending billing)
+                    if (dept.products() != null) {
+                        for (VisitDepartmentProductDto prod : dept.products()) {
+                            String pStatus = prod.status() != null ? prod.status().name() : "";
+                            String prodName = prod.product() != null && prod.product().name() != null ? prod.product().name() : "Item";
+                            String prodType = prod.product() != null && prod.product().type() != null ? prod.product().type().name() : "CONSULTATION";
+                            double qty = prod.quantity() != null ? prod.quantity().doubleValue() : 1.0;
+
+                            Map<String, Object> pBillingItem = (prod.id() != null) ? billingQueryService.productBillingItem(prod.id()) : null;
+                            double catalogPrice = prod.product() != null && prod.product().clinicPrice() != null ? prod.product().clinicPrice().doubleValue() : 0.0;
+                            double unitPrice = (pBillingItem != null && pBillingItem.get("unitPriceSnapshot") != null)
+                                    ? toDouble(pBillingItem.get("unitPriceSnapshot"))
+                                    : catalogPrice;
+                            double lineTotal = qty * unitPrice;
+
+                            // Category accumulation
+                            if (!categoryBreakdownMap.containsKey(prodType)) {
+                                Map<String, Object> catMap = new HashMap<>();
+                                catMap.put("count", 0.0);
+                                catMap.put("totalAmount", 0.0);
+                                categoryBreakdownMap.put(prodType, catMap);
+                            }
+                            Map<String, Object> cEntry = categoryBreakdownMap.get(prodType);
+                            cEntry.put("count", toDouble(cEntry.get("count")) + qty);
+                            cEntry.put("totalAmount", toDouble(cEntry.get("totalAmount")) + lineTotal);
+
+                            // Waivers check
+                            if ("EXEMPTED".equals(pStatus)) {
+                                waiverAmount += lineTotal;
+                                waiverCount++;
+                                deptWaiver += lineTotal;
+                                Map<String, Object> wEntry = new HashMap<>();
+                                wEntry.put("id", "waive-" + prod.id());
+                                wEntry.put("patientName", patientName);
+                                wEntry.put("patientIdentifier", patientIdentifier);
+                                wEntry.put("departmentName", deptName);
+                                wEntry.put("clinicianName", clinName);
+                                wEntry.put("amount", lineTotal);
+                                wEntry.put("waiverType", "FULL");
+                                wEntry.put("productName", prodName);
+                                wEntry.put("reason", "Full clinical waiver exemption");
+                                wEntry.put("date", deptTime);
+                                waiversList.add(wEntry);
+                            } else if ("PATIENT_SHARE_EXEMPTED".equals(pStatus)) {
+                                double patShare = (pBillingItem != null && pBillingItem.get("patientPayableAmount") != null)
+                                        ? toDouble(pBillingItem.get("patientPayableAmount"))
+                                        : lineTotal;
+                                waiverAmount += patShare;
+                                waiverCount++;
+                                deptWaiver += patShare;
+                                Map<String, Object> wEntry = new HashMap<>();
+                                wEntry.put("id", "waive-" + prod.id());
+                                wEntry.put("patientName", patientName);
+                                wEntry.put("patientIdentifier", patientIdentifier);
+                                wEntry.put("departmentName", deptName);
+                                wEntry.put("clinicianName", clinName);
+                                wEntry.put("amount", patShare);
+                                wEntry.put("waiverType", "PATIENT_SHARE");
+                                wEntry.put("productName", prodName);
+                                wEntry.put("reason", "Patient share waived");
+                                wEntry.put("date", deptTime);
+                                waiversList.add(wEntry);
+                            }
+
+                            // Price adjustment check
+                            if (catalogPrice > 0 && Math.abs(catalogPrice - unitPrice) > 0.01) {
+                                Map<String, Object> adj = new HashMap<>();
+                                adj.put("id", "adj-" + prod.id());
+                                adj.put("patientName", patientName);
+                                adj.put("patientIdentifier", patientIdentifier);
+                                adj.put("departmentName", deptName);
+                                adj.put("clinicianName", clinName);
+                                adj.put("productName", prodName);
+                                adj.put("originalPrice", catalogPrice);
+                                adj.put("adjustedPrice", unitPrice);
+                                adj.put("difference", Math.abs(catalogPrice - unitPrice) * qty);
+                                adj.put("reason", catalogPrice > unitPrice ? "Price discount override" : "Custom price adjustment");
+                                adj.put("date", deptTime);
+                                adjustmentsList.add(adj);
+                            }
+
+                            // Pending on billing check
+                            boolean isUnbilled = !"BILLED".equals(pStatus) && !"EXEMPTED".equals(pStatus) && !"PATIENT_SHARE_EXEMPTED".equals(pStatus);
+                            if (isUnbilled && lineTotal > 0) {
+                                pendingBillingAmount += lineTotal;
+                                pendingBillingCount++;
+                                deptPending += lineTotal;
+                            }
+                        }
+                    }
+
+                    // Department summary accumulation
+                    if (!departmentBreakdownMap.containsKey(deptId)) {
+                        Map<String, Object> dMap = new HashMap<>();
+                        dMap.put("departmentId", deptId);
+                        dMap.put("name", deptName);
+                        dMap.put("gross", 0.0);
+                        dMap.put("insurance", 0.0);
+                        dMap.put("patientPaid", 0.0);
+                        dMap.put("loans", 0.0);
+                        dMap.put("giveaways", 0.0);
+                        dMap.put("waivers", 0.0);
+                        dMap.put("pending", 0.0);
+                        dMap.put("visitsCount", 0);
+                        departmentBreakdownMap.put(deptId, dMap);
+                    }
+                    Map<String, Object> dEntry = departmentBreakdownMap.get(deptId);
+                    dEntry.put("gross", toDouble(dEntry.get("gross")) + deptGross);
+                    dEntry.put("insurance", toDouble(dEntry.get("insurance")) + deptInsCov);
+                    dEntry.put("patientPaid", toDouble(dEntry.get("patientPaid")) + deptPaid);
+                    dEntry.put("loans", toDouble(dEntry.get("loans")) + deptLoan);
+                    dEntry.put("giveaways", toDouble(dEntry.get("giveaways")) + deptGiveaway);
+                    dEntry.put("waivers", toDouble(dEntry.get("waivers")) + deptWaiver);
+                    dEntry.put("pending", toDouble(dEntry.get("pending")) + deptPending);
+                    dEntry.put("visitsCount", (int) dEntry.get("visitsCount") + 1);
+
+                    // Clinician summary accumulation
+                    if (!clinIdStr.isEmpty()) {
+                        if (!clinicianBreakdownMap.containsKey(clinIdStr)) {
+                            Map<String, Object> cMap = new HashMap<>();
+                            cMap.put("clinicianId", clinIdStr);
+                            cMap.put("name", clinName);
+                            cMap.put("consultationsCount", 0);
+                            cMap.put("gross", 0.0);
+                            cMap.put("insurance", 0.0);
+                            cMap.put("patientPaid", 0.0);
+                            cMap.put("pending", 0.0);
+                            cMap.put("waivers", 0.0);
+                            clinicianBreakdownMap.put(clinIdStr, cMap);
+                        }
+                        Map<String, Object> cEntry = clinicianBreakdownMap.get(clinIdStr);
+                        cEntry.put("consultationsCount", (int) cEntry.get("consultationsCount") + 1);
+                        cEntry.put("gross", toDouble(cEntry.get("gross")) + deptGross);
+                        cEntry.put("insurance", toDouble(cEntry.get("insurance")) + deptInsCov);
+                        cEntry.put("patientPaid", toDouble(cEntry.get("patientPaid")) + deptPaid);
+                        cEntry.put("pending", toDouble(cEntry.get("pending")) + deptPending);
+                        cEntry.put("waivers", toDouble(cEntry.get("waivers")) + deptWaiver);
+                    }
+
+                    // Bump timeline
+                    bumpClinicMoneyTimeline(moneyTimelineMap, deptTime, deptGross, deptPaid, deptInsCov, deptLoan, deptGiveaway, deptWaiver, isDailyView);
+
+                    // Collect clinical diagnostics for epidemiological / diagnostic reports
+                    if (dept.diagnostics() != null && !dept.diagnostics().isEmpty()) {
+                        List<String> deptSymptoms = new ArrayList<>();
+                        if (dept.symptoms() != null) {
+                            for (VisitDepartmentSymptomDto s : dept.symptoms()) {
+                                if (s != null && s.symptomName() != null && !s.symptomName().isBlank()) {
+                                    deptSymptoms.add(s.symptomName().trim());
+                                }
+                            }
+                        }
+
+                        List<String> deptMedications = new ArrayList<>();
+                        if (dept.medications() != null) {
+                            for (VisitDepartmentMedicationDto m : dept.medications()) {
+                                if (m != null && m.medicationName() != null && !m.medicationName().isBlank()) {
+                                    deptMedications.add(m.medicationName().trim());
+                                }
+                            }
+                        }
+
+                        for (VisitDepartmentDiagnosisDto diag : dept.diagnostics()) {
+                            if (diag == null) continue;
+                            String dName = diag.diagnosisName() != null ? diag.diagnosisName().trim() : "";
+                            if (dName.isEmpty()) continue;
+
+                            String icdCode = diag.icd11Code() != null ? diag.icd11Code().trim() : "";
+                            String diagType = diag.type() != null ? diag.type().name() : "FINAL";
+
+                            Map<String, Object> diagRecord = new HashMap<>();
+                            diagRecord.put("id", diag.id() != null ? diag.id().toString() : ("diag-" + diagnosticReportsList.size()));
+                            diagRecord.put("diagnosisName", dName);
+                            diagRecord.put("icd11Code", icdCode);
+                            diagRecord.put("type", diagType);
+                            diagRecord.put("notes", diag.notes() != null ? diag.notes() : "");
+                            diagRecord.put("patientId", patientId);
+                            diagRecord.put("patientName", patientName);
+                            diagRecord.put("patientGender", patientGender);
+                            diagRecord.put("patientAge", patientAge);
+                            diagRecord.put("departmentId", deptId);
+                            diagRecord.put("departmentName", deptName);
+                            diagRecord.put("clinicianId", clinIdStr);
+                            diagRecord.put("clinicianName", clinName);
+                            diagRecord.put("date", deptTime);
+                            diagRecord.put("symptoms", deptSymptoms);
+                            diagRecord.put("medications", deptMedications);
+
+                            diagnosticReportsList.add(diagRecord);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Reconcile payment modes with patient cash collected
+        double totalPaymentModesCollected = momoCollected + cashCollected + cardCollected + bankTransferCollected + otherCollected;
+        if (patientCashCollected > totalPaymentModesCollected) {
+            double diff = patientCashCollected - totalPaymentModesCollected;
+            cashCollected += diff;
+            if (!paymentModesBreakdownMap.containsKey("CASH")) {
+                Map<String, Object> cMap = new HashMap<>();
+                cMap.put("amount", 0.0);
+                cMap.put("count", 0);
+                paymentModesBreakdownMap.put("CASH", cMap);
+            }
+            Map<String, Object> cEntry = paymentModesBreakdownMap.get("CASH");
+            cEntry.put("amount", toDouble(cEntry.get("amount")) + diff);
+            cEntry.put("count", (int) cEntry.get("count") + 1);
+        }
+
+        // Peak hour
+        String peakActivityHour = "N/A";
+        int maxEncounters = 0;
+        for (Map.Entry<String, Integer> e : encountersByHour.entrySet()) {
+            if (e.getValue() > maxEncounters) {
+                maxEncounters = e.getValue();
+                peakActivityHour = e.getKey();
+            }
+        }
+        if (!"N/A".equals(peakActivityHour)) {
+            try {
+                int h = Integer.parseInt(peakActivityHour.substring(0, 2));
+                peakActivityHour = formatHourRange(h);
+            } catch (Exception ignored) {}
+        }
+
+        double avgAge = patientAges.isEmpty() ? 0 : patientAges.stream().mapToInt(Integer::intValue).average().orElse(0.0);
+        double totalSettled = insuranceCoveredAmount + patientCashCollected + giveawayAmount + waiverAmount;
+        int settlementRatePct = totalGrossBilled > 0 ? (int) Math.min(100, Math.round((totalSettled / totalGrossBilled) * 100)) : 100;
+        double outstandingBalance = Math.max(0, totalGrossBilled - insuranceCoveredAmount - patientCashCollected - giveawayAmount - waiverAmount);
+
+        List<Map<String, Object>> insuranceBreakdown = new ArrayList<>(insuranceBreakdownMap.values());
+        insuranceBreakdown.sort((a, b) -> Double.compare(toDouble(b.get("totalAmount")), toDouble(a.get("totalAmount"))));
+
+        List<Map<String, Object>> departmentBreakdown = new ArrayList<>(departmentBreakdownMap.values());
+        departmentBreakdown.sort((a, b) -> Double.compare(toDouble(b.get("gross")), toDouble(a.get("gross"))));
+
+        List<Map<String, Object>> clinicianBreakdown = new ArrayList<>(clinicianBreakdownMap.values());
+        clinicianBreakdown.sort((a, b) -> Double.compare(toDouble(b.get("gross")), toDouble(a.get("gross"))));
+
+        List<Map<String, Object>> moneyTimeline = formatClinicMoneyTimeline(moneyTimelineMap, isDailyView, isWeeklyView);
+
+        // Assemble overview
+        Map<String, Object> overview = new HashMap<>();
+        overview.put("totalPatients", uniquePatientsSet.size());
+        overview.put("totalVisits", totalVisitsCount);
+        overview.put("maleCount", maleCount);
+        overview.put("femaleCount", femaleCount);
+        overview.put("otherGenderCount", otherGenderCount);
+        overview.put("averageAge", (int) Math.round(avgAge));
+        overview.put("ageBrackets", Map.of("under18", under18, "adults18to50", adults18to50, "seniors50plus", seniors50plus));
+        overview.put("peakActivityHour", peakActivityHour);
+        overview.put("totalGrossBilled", totalGrossBilled);
+        overview.put("insuranceCoveredAmount", insuranceCoveredAmount);
+        overview.put("patientShareAmount", patientShareAmount);
+        overview.put("patientCashCollected", patientCashCollected);
+        overview.put("patientLoanAmount", patientLoanAmount);
+        overview.put("giveawayAmount", giveawayAmount);
+        overview.put("waiverAmount", waiverAmount);
+        overview.put("pendingBillingAmount", pendingBillingAmount);
+        overview.put("outstandingBalance", outstandingBalance);
+        overview.put("loanCount", loanCount);
+        overview.put("giveawayCount", giveawayCount);
+        overview.put("waiverCount", waiverCount);
+        overview.put("pendingBillingCount", pendingBillingCount);
+        overview.put("settlementRatePct", settlementRatePct);
+
+        // Assemble financial breakdown
+        Map<String, Object> financialBreakdown = new HashMap<>();
+        financialBreakdown.put("momoCollected", momoCollected);
+        financialBreakdown.put("cashCollected", cashCollected);
+        financialBreakdown.put("cardCollected", cardCollected);
+        financialBreakdown.put("bankTransferCollected", bankTransferCollected);
+        financialBreakdown.put("otherCollected", otherCollected);
+        financialBreakdown.put("paymentModesBreakdown", paymentModesBreakdownMap);
+        financialBreakdown.put("insuranceBreakdown", insuranceBreakdown);
+        financialBreakdown.put("categoryBreakdown", categoryBreakdownMap);
+        financialBreakdown.put("departmentBreakdown", departmentBreakdown);
+        financialBreakdown.put("clinicianBreakdown", clinicianBreakdown);
+        financialBreakdown.put("moneyTimeline", moneyTimeline);
+
+        // Assemble deep reports
+        Map<String, Object> deepReports = new HashMap<>();
+        deepReports.put("waivers", waiversList);
+        deepReports.put("giveaways", giveawaysList);
+        deepReports.put("adjustments", adjustmentsList);
+        deepReports.put("loans", loansList);
+        deepReports.put("diagnosticReports", diagnosticReportsList);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("period", period);
+        result.put("fromDate", fromDate);
+        result.put("toDate", toDate);
+        result.put("overview", overview);
+        result.put("financialBreakdown", financialBreakdown);
+        result.put("deepReports", deepReports);
+        result.put("diagnosticReports", diagnosticReportsList);
+
+        return result;
+    }
+
+    private Map<String, Double> createClinicMoneyTimelineBucket() {
+        Map<String, Double> m = new HashMap<>();
+        m.put("gross", 0.0);
+        m.put("collected", 0.0);
+        m.put("insurance", 0.0);
+        m.put("loan", 0.0);
+        m.put("giveaway", 0.0);
+        m.put("waiver", 0.0);
+        return m;
+    }
+
+    private void bumpClinicMoneyTimeline(
+            Map<String, Map<String, Double>> moneyTimelineMap,
+            String timestamp,
+            double gross,
+            double collected,
+            double insCov,
+            double loan,
+            double giveaway,
+            double waiver,
+            boolean isDailyView
+    ) {
+        if (timestamp == null || timestamp.isBlank() || moneyTimelineMap.isEmpty()) return;
+        LocalDateTime dt = parseDateTime(timestamp);
+        if (dt == null) return;
+        String key = isDailyView
+                ? String.format("%02d:00", dt.getHour())
+                : dt.format(DateTimeFormatter.ISO_LOCAL_DATE);
+        Map<String, Double> bucket = moneyTimelineMap.get(key);
+        if (bucket != null) {
+            bucket.put("gross", bucket.getOrDefault("gross", 0.0) + gross);
+            bucket.put("collected", bucket.getOrDefault("collected", 0.0) + collected);
+            bucket.put("insurance", bucket.getOrDefault("insurance", 0.0) + insCov);
+            bucket.put("loan", bucket.getOrDefault("loan", 0.0) + loan);
+            bucket.put("giveaway", bucket.getOrDefault("giveaway", 0.0) + giveaway);
+            bucket.put("waiver", bucket.getOrDefault("waiver", 0.0) + waiver);
+        }
+    }
+
+    private List<Map<String, Object>> formatClinicMoneyTimeline(
+            Map<String, Map<String, Double>> timelineMap,
+            boolean isDailyView,
+            boolean isWeeklyView
+    ) {
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (Map.Entry<String, Map<String, Double>> entry : timelineMap.entrySet()) {
+            Map<String, Object> item = new HashMap<>();
+            item.put("label", formatTimelineLabel(entry.getKey(), isDailyView, isWeeklyView));
+            item.put("rawKey", entry.getKey());
+            Map<String, Double> bucket = entry.getValue();
+            item.put("gross", bucket.getOrDefault("gross", 0.0));
+            item.put("collected", bucket.getOrDefault("collected", 0.0));
+            item.put("insurance", bucket.getOrDefault("insurance", 0.0));
+            item.put("loan", bucket.getOrDefault("loan", 0.0));
+            item.put("giveaway", bucket.getOrDefault("giveaway", 0.0));
+            item.put("waiver", bucket.getOrDefault("waiver", 0.0));
+            list.add(item);
+        }
+        return list;
     }
 }

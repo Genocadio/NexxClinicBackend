@@ -8,5 +8,7 @@ public enum RoleName {
     RECEPTION,
     NURSE,
     CLINICIAN,
-    ADMIN
+    ADMIN,
+    MEDICAL_REPORTS,
+    FINANCE_REPORTS
 }
