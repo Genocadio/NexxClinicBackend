@@ -11,6 +11,7 @@ import com.nexxserve.nexxclinic.dto.out.VisitDepartmentSymptomDto;
 import com.nexxserve.nexxclinic.dto.out.VisitDto;
 import com.nexxserve.nexxclinic.dto.out.VisitVitalSignsGroupDto;
 import com.nexxserve.nexxclinic.dto.out.VitalMeasurementDto;
+import com.nexxserve.nexxclinic.dto.out.WorkerDto;
 import com.nexxserve.nexxclinic.entity.Visit;
 import com.nexxserve.nexxclinic.entity.Worker;
 import com.nexxserve.nexxclinic.model.RoleName;
@@ -2269,17 +2270,9 @@ public class ReportsService {
                             String icdCode = diag.icd11Code() != null ? diag.icd11Code().trim() : "";
                             String diagType = diag.type() != null ? diag.type().name() : "FINAL";
 
-                            String diagClinId = clinIdStr;
-                            String diagClinName = clinName;
-                            if (diag.addedBy() != null && diag.addedBy().id() != null) {
-                                diagClinId = diag.addedBy().id().toString();
-                                String afn = diag.addedBy().firstName() != null ? diag.addedBy().firstName() : "";
-                                String aln = diag.addedBy().lastName() != null ? diag.addedBy().lastName() : "";
-                                String fullName = (afn + " " + aln).trim();
-                                if (!fullName.isEmpty()) {
-                                    diagClinName = fullName;
-                                }
-                            }
+                            Map.Entry<String, String> resolvedClin = resolveDiagnosisClinician(diag, dept, clinIdStr, clinName);
+                            String diagClinId = resolvedClin.getKey();
+                            String diagClinName = resolvedClin.getValue();
 
                             Map<String, Object> diagRecord = new HashMap<>();
                             diagRecord.put("id", diag.id() != null ? diag.id().toString() : ("diag-" + diagnosticReportsList.size()));
@@ -2629,19 +2622,29 @@ public class ReportsService {
 
                     String clinName = "N/A";
                     String clinIdStr = "";
-                    if (dept.completedBy() != null && dept.completedBy().id() != null) {
+                    if (dept.processors() != null && !dept.processors().isEmpty()) {
+                        // Find first clinical processor
+                        WorkerDto chosenProcessor = null;
+                        for (WorkerDto p : dept.processors()) {
+                            if (p != null && isClinicalWorker(p)) {
+                                chosenProcessor = p;
+                                break;
+                            }
+                        }
+                        if (chosenProcessor == null) {
+                            chosenProcessor = dept.processors().iterator().next();
+                        }
+                        if (chosenProcessor != null && chosenProcessor.id() != null) {
+                            clinIdStr = chosenProcessor.id().toString();
+                            String fn = chosenProcessor.firstName() != null ? chosenProcessor.firstName() : "";
+                            String ln = chosenProcessor.lastName() != null ? chosenProcessor.lastName() : "";
+                            clinName = (fn + " " + ln).trim();
+                        }
+                    } else if (dept.completedBy() != null && dept.completedBy().id() != null) {
                         clinIdStr = dept.completedBy().id().toString();
                         String fn = dept.completedBy().firstName() != null ? dept.completedBy().firstName() : "";
                         String ln = dept.completedBy().lastName() != null ? dept.completedBy().lastName() : "";
                         clinName = (fn + " " + ln).trim();
-                    } else if (dept.processors() != null && !dept.processors().isEmpty()) {
-                        var p0 = dept.processors().iterator().next();
-                        if (p0 != null && p0.id() != null) {
-                            clinIdStr = p0.id().toString();
-                            String fn = p0.firstName() != null ? p0.firstName() : "";
-                            String ln = p0.lastName() != null ? p0.lastName() : "";
-                            clinName = (fn + " " + ln).trim();
-                        }
                     }
 
                     if (dept.diagnostics() != null && !dept.diagnostics().isEmpty()) {
@@ -2671,22 +2674,13 @@ public class ReportsService {
                             String icdCode = diag.icd11Code() != null ? diag.icd11Code().trim() : "";
                             String diagType = diag.type() != null ? diag.type().name() : "FINAL";
 
-                            String diagClinId = clinIdStr;
-                            String diagClinName = clinName;
-                            if (diag.addedBy() != null && diag.addedBy().id() != null) {
-                                diagClinId = diag.addedBy().id().toString();
-                                String afn = diag.addedBy().firstName() != null ? diag.addedBy().firstName() : "";
-                                String aln = diag.addedBy().lastName() != null ? diag.addedBy().lastName() : "";
-                                String fullName = (afn + " " + aln).trim();
-                                if (!fullName.isEmpty()) {
-                                    diagClinName = fullName;
-                                }
-                            }
+                            Map.Entry<String, String> resolvedClin = resolveDiagnosisClinician(diag, dept, clinIdStr, clinName);
+                            String diagClinId = resolvedClin.getKey();
+                            String diagClinName = resolvedClin.getValue();
 
                             // If specific clinician filter is applied, only include diagnoses authored by or belonging to them
                             if (!filterClinicianIdsSet.isEmpty()) {
-                                boolean diagMatchesClin = isUserInSet(diag.addedBy() != null ? diag.addedBy().id() : null, filterClinicianIdsSet) ||
-                                        filterClinicianIdsSet.contains(clinIdStr);
+                                boolean diagMatchesClin = filterClinicianIdsSet.contains(diagClinId);
                                 if (!diagMatchesClin) continue;
                             }
 
@@ -2724,5 +2718,79 @@ public class ReportsService {
         result.put("diagnosticReports", diagnosticReportsList);
 
         return ApiResponse.success("Diagnostic reports generated successfully.", result);
+    }
+
+    /**
+     * Resolves the clinical author for a department diagnosis.
+     * Prioritizes the diagnosis's explicit author (`addedBy`), then clinical processors,
+     * and avoids attributing diagnosis authorship to finance/cashier staff who only completed or billed the department.
+     */
+    private Map.Entry<String, String> resolveDiagnosisClinician(
+            VisitDepartmentDiagnosisDto diag,
+            VisitDepartmentDto dept,
+            String deptDefaultClinId,
+            String deptDefaultClinName
+    ) {
+        // 1. If diagnosis has an explicit addedBy:
+        if (diag != null && diag.addedBy() != null && diag.addedBy().id() != null) {
+            boolean hasClinicalRole = isClinicalWorker(diag.addedBy());
+            boolean isOnlyFinanceOrReception = isOnlyAdministrativeOrFinance(diag.addedBy());
+            // If the user is a clinician OR not purely a cashier/billing staff, attribute to them
+            if (hasClinicalRole || !isOnlyFinanceOrReception) {
+                String afn = diag.addedBy().firstName() != null ? diag.addedBy().firstName().trim() : "";
+                String aln = diag.addedBy().lastName() != null ? diag.addedBy().lastName().trim() : "";
+                String fullName = (afn + " " + aln).trim();
+                return Map.entry(diag.addedBy().id().toString(), fullName.isEmpty() ? "Clinician" : fullName);
+            }
+        }
+
+        // 2. Fall back to department's clinical processor:
+        if (dept != null && dept.processors() != null && !dept.processors().isEmpty()) {
+            // First try to find a processor with CLINICIAN role
+            for (WorkerDto p : dept.processors()) {
+                if (p != null && p.id() != null && isClinicalWorker(p)) {
+                    String fn = p.firstName() != null ? p.firstName().trim() : "";
+                    String ln = p.lastName() != null ? p.lastName().trim() : "";
+                    String fullName = (fn + " " + ln).trim();
+                    return Map.entry(p.id().toString(), fullName.isEmpty() ? "Clinician" : fullName);
+                }
+            }
+            // Otherwise take the first processor
+            var p0 = dept.processors().iterator().next();
+            if (p0 != null && p0.id() != null) {
+                String fn = p0.firstName() != null ? p0.firstName().trim() : "";
+                String ln = p0.lastName() != null ? p0.lastName().trim() : "";
+                String fullName = (fn + " " + ln).trim();
+                return Map.entry(p0.id().toString(), fullName.isEmpty() ? "Clinician" : fullName);
+            }
+        }
+
+        // 3. Fall back to completedBy only if completedBy has a clinical role
+        if (dept != null && dept.completedBy() != null && dept.completedBy().id() != null) {
+            if (isClinicalWorker(dept.completedBy())) {
+                String fn = dept.completedBy().firstName() != null ? dept.completedBy().firstName().trim() : "";
+                String ln = dept.completedBy().lastName() != null ? dept.completedBy().lastName().trim() : "";
+                String fullName = (fn + " " + ln).trim();
+                return Map.entry(dept.completedBy().id().toString(), fullName.isEmpty() ? "Clinician" : fullName);
+            }
+        }
+
+        // 4. Default fallback
+        return Map.entry(deptDefaultClinId != null ? deptDefaultClinId : "",
+                (deptDefaultClinName != null && !deptDefaultClinName.isBlank()) ? deptDefaultClinName : "Clinician");
+    }
+
+    private boolean isClinicalWorker(WorkerDto worker) {
+        if (worker == null || worker.roles() == null) return false;
+        return worker.roles().stream().anyMatch(r ->
+                r == RoleName.CLINICIAN || r == RoleName.NURSE
+        );
+    }
+
+    private boolean isOnlyAdministrativeOrFinance(WorkerDto worker) {
+        if (worker == null || worker.roles() == null || worker.roles().isEmpty()) return false;
+        boolean hasClinical = worker.roles().stream().anyMatch(r -> r == RoleName.CLINICIAN || r == RoleName.NURSE);
+        if (hasClinical) return false;
+        return worker.roles().stream().anyMatch(r -> r == RoleName.FINANCE || r == RoleName.RECEPTION);
     }
 }
