@@ -15,6 +15,8 @@ import com.nexxserve.nexxclinic.dto.out.WorkerDto;
 import com.nexxserve.nexxclinic.entity.Visit;
 import com.nexxserve.nexxclinic.entity.Worker;
 import com.nexxserve.nexxclinic.model.RoleName;
+import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
+import com.nexxserve.nexxclinic.model.VisitStatus;
 import com.nexxserve.nexxclinic.repository.VisitRepository;
 import com.nexxserve.nexxclinic.repository.WorkerRepository;
 import com.nexxserve.nexxclinic.service.billing.BillingQueryService;
@@ -170,9 +172,10 @@ public class ReportsService {
         LocalDateTime startDateTime = startDate.atStartOfDay();
         LocalDateTime endDateTime = endDate.atTime(LocalTime.MAX);
 
-        // Query all visits in range
+        // Query all non-cancelled visits in range
         Specification<Visit> spec = (root, queryDef, builder) -> {
             List<Predicate> predicates = new ArrayList<>();
+            predicates.add(builder.notEqual(root.get("status"), VisitStatus.CANCELLED));
             predicates.add(builder.or(
                     builder.and(
                             builder.greaterThanOrEqualTo(root.get("visitDate"), startDateTime),
@@ -543,6 +546,9 @@ public class ReportsService {
             // 2. Departments
             if (visit.departments() != null) {
                 for (VisitDepartmentDto dept : visit.departments()) {
+                    if (dept == null || dept.status() == VisitDepartmentStatus.CANCELLED) {
+                        continue;
+                    }
                     Map<String, Object> deptBilling = (dept.id() != null) ? billingQueryService.departmentBilling(dept.id()) : null;
 
                     String deptTime = dept.startedAt() != null ? dept.startedAt().toString() : (dept.createdAt() != null ? dept.createdAt().toString() : visitDate);
@@ -1653,6 +1659,7 @@ public class ReportsService {
 
         Specification<Visit> spec = (root, queryDef, builder) -> {
             List<Predicate> predicates = new ArrayList<>();
+            predicates.add(builder.notEqual(root.get("status"), VisitStatus.CANCELLED));
             predicates.add(builder.or(
                     builder.and(
                             builder.greaterThanOrEqualTo(root.get("visitDate"), startDateTime),
@@ -1885,6 +1892,9 @@ public class ReportsService {
             // Iterate departments
             if (visit.departments() != null) {
                 for (VisitDepartmentDto dept : visit.departments()) {
+                    if (dept == null || dept.status() == VisitDepartmentStatus.CANCELLED) {
+                        continue;
+                    }
                     if (!filterDeptIdsSet.isEmpty()) {
                         if (dept.department() == null || dept.department().id() == null || !filterDeptIdsSet.contains(dept.department().id().toString())) {
                             continue;
@@ -2536,6 +2546,7 @@ public class ReportsService {
 
         Specification<Visit> spec = (root, queryDef, builder) -> {
             List<Predicate> predicates = new ArrayList<>();
+            predicates.add(builder.notEqual(root.get("status"), VisitStatus.CANCELLED));
             predicates.add(builder.or(
                     builder.and(
                             builder.greaterThanOrEqualTo(root.get("visitDate"), startDateTime),
@@ -2595,6 +2606,9 @@ public class ReportsService {
 
             if (visit.departments() != null) {
                 for (VisitDepartmentDto dept : visit.departments()) {
+                    if (dept == null || dept.status() == VisitDepartmentStatus.CANCELLED) {
+                        continue;
+                    }
                     if (!filterDeptIdsSet.isEmpty()) {
                         if (dept.department() == null || dept.department().id() == null || !filterDeptIdsSet.contains(dept.department().id().toString())) {
                             continue;

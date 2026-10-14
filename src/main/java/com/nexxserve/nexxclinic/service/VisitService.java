@@ -1088,6 +1088,17 @@ public class VisitService {
             log.warn("Could not delete linked insurances for visit {}: {}", visitId, e.getMessage());
         }
 
+        // 7b. Delete any residual pre-instructions directly linked to this visit
+        try {
+            List<VisitPreInstruction> residualPreInstructions = visitPreInstructionRepository.findByVisitIdOrderByCreatedAtAsc(visitId);
+            if (!residualPreInstructions.isEmpty()) {
+                visitPreInstructionRepository.deleteAll(residualPreInstructions);
+                visitPreInstructionRepository.flush();
+            }
+        } catch (Exception e) {
+            log.warn("Could not delete residual pre-instructions for visit {}: {}", visitId, e.getMessage());
+        }
+
         // 8. Finally delete the visit record itself
         visitRepository.deleteById(visitId);
         meilisearchIndexService.deleteVisit(visitId);

@@ -1061,6 +1061,18 @@ public class VisitDepartmentService {
             warnings.add("Could not delete diagnoses: " + e.getMessage());
         }
 
+        // 7b. Batch-delete symptoms
+        try {
+            List<VisitDepartmentSymptom> symptoms =
+                    visitDepartmentSymptomRepository.findByVisitDepartmentId(deptId);
+            if (!symptoms.isEmpty()) {
+                visitDepartmentSymptomRepository.deleteAllInBatch(symptoms);
+            }
+        } catch (Exception e) {
+            log.warn("Could not delete symptoms for department {}: {}", deptId, e.getMessage());
+            warnings.add("Could not delete symptoms: " + e.getMessage());
+        }
+
         // 8. Batch-delete medications
         try {
             List<VisitDepartmentMedication> meds =
@@ -1073,12 +1085,13 @@ public class VisitDepartmentService {
             warnings.add("Could not delete medications: " + e.getMessage());
         }
 
-        // 9. Batch-delete pre-instructions
+        // 9. Batch-delete pre-instructions (cascades to product requests and medications)
         try {
             List<VisitPreInstruction> preInstructions =
                     visitPreInstructionRepository.findByVisitDepartmentIdOrderByCreatedAtAsc(deptId);
             if (!preInstructions.isEmpty()) {
-                visitPreInstructionRepository.deleteAllInBatch(preInstructions);
+                visitPreInstructionRepository.deleteAll(preInstructions);
+                visitPreInstructionRepository.flush();
             }
         } catch (Exception e) {
             log.warn("Could not delete pre-instructions for department {}: {}", deptId, e.getMessage());
