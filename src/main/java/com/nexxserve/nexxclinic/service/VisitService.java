@@ -45,7 +45,9 @@ import com.nexxserve.nexxclinic.repository.PatientRepository;
 import com.nexxserve.nexxclinic.repository.ProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitBillingRepository;
 import com.nexxserve.nexxclinic.entity.ConsultationAnswer;
+import com.nexxserve.nexxclinic.entity.StandaloneFormAnswer;
 import com.nexxserve.nexxclinic.repository.ConsultationAnswerRepository;
+import com.nexxserve.nexxclinic.repository.StandaloneFormAnswerRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentNoteRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
@@ -109,6 +111,7 @@ public class VisitService {
     private final MeilisearchIndexService meilisearchIndexService;
     private final VisitPriceEstimateService visitPriceEstimateService;
     private final ConsultationAnswerRepository consultationAnswerRepository;
+    private final StandaloneFormAnswerRepository standaloneFormAnswerRepository;
     private final RolePermissionService rolePermissionService;
     private final com.nexxserve.nexxclinic.service.billing.BillingProductService billingProductService;
     private final VisitDepartmentNoteService visitDepartmentNoteService;
@@ -144,6 +147,7 @@ public class VisitService {
             MeilisearchIndexService meilisearchIndexService,
             @Lazy VisitPriceEstimateService visitPriceEstimateService,
             ConsultationAnswerRepository consultationAnswerRepository,
+            StandaloneFormAnswerRepository standaloneFormAnswerRepository,
             @Lazy RolePermissionService rolePermissionService,
             @Lazy com.nexxserve.nexxclinic.service.billing.BillingProductService billingProductService,
             @Lazy VisitDepartmentNoteService visitDepartmentNoteService,
@@ -178,6 +182,7 @@ public class VisitService {
         this.meilisearchIndexService = meilisearchIndexService;
         this.visitPriceEstimateService = visitPriceEstimateService;
         this.consultationAnswerRepository = consultationAnswerRepository;
+        this.standaloneFormAnswerRepository = standaloneFormAnswerRepository;
         this.rolePermissionService = rolePermissionService;
         this.billingProductService = billingProductService;
         this.visitDepartmentNoteService = visitDepartmentNoteService;
@@ -1148,9 +1153,18 @@ public class VisitService {
             if (dept.getStatus() == VisitDepartmentStatus.COMPLETED) {
                 // Check consultation answers
                 if (dept.getAnswerId() != null) {
-                    Optional<ConsultationAnswer> answerOpt = consultationAnswerRepository.findById(dept.getAnswerId());
-                    if (answerOpt.isPresent()) {
-                        AnswerStatus answerStatus = answerOpt.get().getStatus();
+                    AnswerStatus answerStatus = null;
+                    Optional<StandaloneFormAnswer> standaloneOpt = standaloneFormAnswerRepository.findById(dept.getAnswerId());
+                    if (standaloneOpt.isPresent()) {
+                        answerStatus = standaloneOpt.get().getStatus();
+                    } else {
+                        Optional<ConsultationAnswer> answerOpt = consultationAnswerRepository.findById(dept.getAnswerId());
+                        if (answerOpt.isPresent()) {
+                            answerStatus = answerOpt.get().getStatus();
+                        }
+                    }
+
+                    if (answerStatus != null) {
                         if (answerStatus != AnswerStatus.FINAL && answerStatus != AnswerStatus.SUBMITTED) {
                             return ApiResponse.error("Cannot finalise: department '" + dept.getDepartment().getName() + "' has draft consultation answers.");
                         }
@@ -1817,10 +1831,19 @@ public class VisitService {
                 .map(VisitDepartment::getAnswerId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        Map<UUID, ConsultationAnswer> answersById = answerIds.isEmpty()
-                ? Map.of()
-                : consultationAnswerRepository.findAllById(answerIds).stream()
-                        .collect(Collectors.toMap(ConsultationAnswer::getId, a -> a, (a, b) -> a));
+        Map<UUID, AnswerStatus> answerStatusesById = new HashMap<>();
+        if (!answerIds.isEmpty()) {
+            consultationAnswerRepository.findAllById(answerIds).forEach(a -> {
+                if (a.getId() != null && a.getStatus() != null) {
+                    answerStatusesById.put(a.getId(), a.getStatus());
+                }
+            });
+            standaloneFormAnswerRepository.findAllById(answerIds).forEach(a -> {
+                if (a.getId() != null && a.getStatus() != null) {
+                    answerStatusesById.put(a.getId(), a.getStatus());
+                }
+            });
+        }
 
         List<VisitVitalSignsGroup> allVitalGroups = visitVitalSignsGroupRepository.findByVisitIdInOrderByCreatedAtAsc(visitIds);
         Set<UUID> allGroupIds = allVitalGroups.stream().map(VisitVitalSignsGroup::getId).filter(Objects::nonNull).collect(Collectors.toSet());
@@ -1893,7 +1916,7 @@ public class VisitService {
                             preInstructionsByVdId,
                             totalNotesByVdId,
                             newNotesByVdId,
-                            answersById,
+                            answerStatusesById,
                             canViewClinical
                     ))
                     .toList();
@@ -1966,7 +1989,7 @@ public class VisitService {
             Map<UUID, List<VisitPreInstruction>> preInstructionsByVdId,
             Map<UUID, Long> totalNotesByVdId,
             Map<UUID, Long> newNotesByVdId,
-            Map<UUID, ConsultationAnswer> answersById,
+            Map<UUID, AnswerStatus> answerStatusesById,
             boolean canViewClinical
     ) {
         if (visitDepartment == null) {
@@ -2057,13 +2080,13 @@ public class VisitService {
                         preInstructionsByVdId,
                         totalNotesByVdId,
                         newNotesByVdId,
-                        answersById,
+                        answerStatusesById,
                         canViewClinical
                 ))
                 .toList();
 
-        ConsultationAnswer ans = visitDepartment.getAnswerId() != null ? answersById.get(visitDepartment.getAnswerId()) : null;
-        boolean hasFinalized = ans != null && (ans.getStatus() == AnswerStatus.FINAL || ans.getStatus() == AnswerStatus.SUBMITTED);
+        AnswerStatus ansStatus = visitDepartment.getAnswerId() != null ? answerStatusesById.get(visitDepartment.getAnswerId()) : null;
+        boolean hasFinalized = ansStatus == AnswerStatus.FINAL || ansStatus == AnswerStatus.SUBMITTED;
 
         boolean directBillable = productsByVdId.getOrDefault(visitDepartment.getId(), List.of()).stream()
                 .filter(p -> !p.isDeleted())

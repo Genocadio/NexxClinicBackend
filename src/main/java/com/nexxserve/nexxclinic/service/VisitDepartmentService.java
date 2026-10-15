@@ -47,7 +47,9 @@ import com.nexxserve.nexxclinic.repository.VisitDepartmentMedicationRepository;
 import com.nexxserve.nexxclinic.repository.VisitBillingItemRepository;
 import com.nexxserve.nexxclinic.model.AnswerStatus;
 import com.nexxserve.nexxclinic.entity.ConsultationAnswer;
+import com.nexxserve.nexxclinic.entity.StandaloneFormAnswer;
 import com.nexxserve.nexxclinic.repository.ConsultationAnswerRepository;
+import com.nexxserve.nexxclinic.repository.StandaloneFormAnswerRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentProductRepository;
 import com.nexxserve.nexxclinic.repository.VisitDepartmentRepository;
 import com.nexxserve.nexxclinic.repository.DepartmentInsuranceBillingRepository;
@@ -78,6 +80,7 @@ public class VisitDepartmentService {
     private final VisitDepartmentRepository visitDepartmentRepository;
     private final VisitDepartmentProductRepository visitDepartmentProductRepository;
     private final ConsultationAnswerRepository consultationAnswerRepository;
+    private final StandaloneFormAnswerRepository standaloneFormAnswerRepository;
     private final VisitDepartmentDiagnosisRepository visitDepartmentDiagnosisRepository;
     private final VisitDepartmentSymptomRepository visitDepartmentSymptomRepository;
     private final VisitDepartmentMedicationRepository visitDepartmentMedicationRepository;
@@ -114,6 +117,7 @@ public class VisitDepartmentService {
             VisitDepartmentRepository visitDepartmentRepository,
             VisitDepartmentProductRepository visitDepartmentProductRepository,
             ConsultationAnswerRepository consultationAnswerRepository,
+            StandaloneFormAnswerRepository standaloneFormAnswerRepository,
             VisitDepartmentDiagnosisRepository visitDepartmentDiagnosisRepository,
             VisitDepartmentSymptomRepository visitDepartmentSymptomRepository,
             VisitDepartmentMedicationRepository visitDepartmentMedicationRepository,
@@ -146,6 +150,7 @@ public class VisitDepartmentService {
         this.visitDepartmentRepository = visitDepartmentRepository;
         this.visitDepartmentProductRepository = visitDepartmentProductRepository;
         this.consultationAnswerRepository = consultationAnswerRepository;
+        this.standaloneFormAnswerRepository = standaloneFormAnswerRepository;
         this.visitDepartmentDiagnosisRepository = visitDepartmentDiagnosisRepository;
         this.visitDepartmentSymptomRepository = visitDepartmentSymptomRepository;
         this.visitDepartmentMedicationRepository = visitDepartmentMedicationRepository;
@@ -1101,7 +1106,12 @@ public class VisitDepartmentService {
         // 10. Delete consultation answers for this visit + department
         try {
             if (vd.getAnswerId() != null) {
-                consultationAnswerRepository.deleteById(vd.getAnswerId());
+                if (standaloneFormAnswerRepository.existsById(vd.getAnswerId())) {
+                    standaloneFormAnswerRepository.deleteById(vd.getAnswerId());
+                }
+                if (consultationAnswerRepository.existsById(vd.getAnswerId())) {
+                    consultationAnswerRepository.deleteById(vd.getAnswerId());
+                }
             }
             if (visitId != null && departmentId != null) {
                 List<ConsultationAnswer> answers =
@@ -3039,7 +3049,13 @@ public class VisitDepartmentService {
         if (visitDepartment.getAnswerId() == null) {
             return false; // no answers submitted yet
         }
-        Optional<ConsultationAnswer> answerOpt = consultationAnswerRepository.findById(visitDepartment.getAnswerId());
+        UUID answerId = visitDepartment.getAnswerId();
+        Optional<StandaloneFormAnswer> standaloneOpt = standaloneFormAnswerRepository.findById(answerId);
+        if (standaloneOpt.isPresent()) {
+            AnswerStatus status = standaloneOpt.get().getStatus();
+            return status == AnswerStatus.FINAL || status == AnswerStatus.SUBMITTED;
+        }
+        Optional<ConsultationAnswer> answerOpt = consultationAnswerRepository.findById(answerId);
         if (answerOpt.isEmpty()) {
             return false;
         }
