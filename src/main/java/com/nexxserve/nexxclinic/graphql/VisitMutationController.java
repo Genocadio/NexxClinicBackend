@@ -409,7 +409,7 @@ public class VisitMutationController {
         return visitDepartmentService.addMedicationToVisitDepartment(input, authUser);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
     @MutationMapping
     public ApiResponse updateMedication(
             @Argument UUID medicationId,
@@ -420,7 +420,7 @@ public class VisitMutationController {
         return visitDepartmentService.updateMedication(medicationId, medicationName, instructions, authUser);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.NURSE, RoleName.CLINICIAN})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
     @MutationMapping
     public ApiResponse removeMedication(
             @Argument UUID medicationId,

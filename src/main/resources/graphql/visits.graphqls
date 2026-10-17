@@ -126,6 +126,16 @@ extend type Mutation {
   addMedication(input: AddMedicationInput!): VisitDepartmentResponse!
 
   """
+  Update medication details (medication name and instructions).
+  """
+  updateMedication(medicationId: ID!, medicationName: String!, instructions: String!): VisitDepartmentResponse!
+
+  """
+  Remove a medication from a visit department.
+  """
+  removeMedication(medicationId: ID!): VisitDepartmentResponse!
+
+  """
   Record one or more vital sign measurements for a visit.
   Each vital sign item must include measurementName, value, and unit.
   """
