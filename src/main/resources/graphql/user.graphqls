@@ -1728,6 +1728,11 @@ input SearchVisitsInput {
   activeOnly: Boolean
   status: VisitStatus
   patientName: String
+  answersFilter: String
+  gender: Gender
+  dob: String
+  minAge: Int
+  maxAge: Int
   page: Int
   size: Int
 }

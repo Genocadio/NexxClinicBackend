@@ -72,6 +72,9 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -458,8 +461,15 @@ public class VisitService {
         }
 
         // Meilisearch first (typo-tolerant, ranked); the DB spec below is the fallback.
-        // Only invoke Meilisearch when there's a simple patientName search param without complex date range
+        // Only invoke Meilisearch when there's a simple patientName search param without complex date range or relational filters
         boolean hasSearchParam = patientName != null;
+        boolean hasFilterParam = input != null && (
+                input.answersFilter() != null ||
+                input.gender() != null ||
+                input.dob() != null ||
+                input.minAge() != null ||
+                input.maxAge() != null
+        );
         boolean restrictedClinicianSearch = authUser != null
                 && authUser.roles() != null
                 && authUser.roles().contains(RoleName.CLINICIAN)
@@ -471,7 +481,7 @@ public class VisitService {
                 && !(rolePermissionService != null
                         && rolePermissionService.userHasAnyPermission(authUser, PermissionName.VISIT_VIEW_ALL));
 
-        if (hasSearchParam && !restrictedClinicianSearch
+        if (hasSearchParam && !restrictedClinicianSearch && !hasFilterParam
                 && parsedFromDate == null && parsedToDate == null && meilisearchIndexService.isEnabled()) {
             try {
                 MeilisearchIndexService.SearchHit hit = meilisearchIndexService.searchVisits(
@@ -550,6 +560,47 @@ public class VisitService {
             );
         }
 
+        if (input != null && input.answersFilter() != null && !input.answersFilter().isBlank()) {
+            Specification<Visit> answersSpec = buildAnswersFilterSpecification(input.answersFilter());
+            if (answersSpec != null) {
+                spec = spec.and(answersSpec);
+            }
+        }
+
+        if (input != null && input.gender() != null) {
+            spec = spec.and((root, queryDef, builder) ->
+                    builder.equal(root.join("patient").get("gender"), input.gender())
+            );
+        }
+
+        if (input != null && input.dob() != null && !input.dob().isBlank()) {
+            String rawDob = input.dob().trim();
+            spec = spec.and((root, queryDef, builder) -> {
+                try {
+                    LocalDate parsedDob = LocalDate.parse(rawDob, DateTimeFormatter.ISO_LOCAL_DATE);
+                    return builder.equal(root.join("patient").get("dateOfBirth"), parsedDob);
+                } catch (Exception ignored) {
+                    return builder.like(root.join("patient").get("dateOfBirth").as(String.class), "%" + rawDob + "%");
+                }
+            });
+        }
+
+        if (input != null && (input.minAge() != null || input.maxAge() != null)) {
+            LocalDate today = LocalDate.now();
+            if (input.minAge() != null) {
+                LocalDate maxDobForMinAge = today.minusYears(input.minAge());
+                spec = spec.and((root, queryDef, builder) ->
+                        builder.lessThanOrEqualTo(root.join("patient").get("dateOfBirth"), maxDobForMinAge)
+                );
+            }
+            if (input.maxAge() != null) {
+                LocalDate minDobForMaxAge = today.minusYears(input.maxAge() + 1).plusDays(1);
+                spec = spec.and((root, queryDef, builder) ->
+                        builder.greaterThanOrEqualTo(root.join("patient").get("dateOfBirth"), minDobForMaxAge)
+                );
+            }
+        }
+
         // Role-based Scoping:
         // Admin, Clinic Admin, Manager, Reception, and Nurse see all visits (hasViewAll).
         // Finance sees all visits billed or with department status BILLING.
@@ -610,6 +661,83 @@ public class VisitService {
         List<VisitDto> visits = visitsToDtos(visitPage.getContent(), Set.of(), authUser);
 
         return ApiResponse.success("Visits fetched.", visits, new PaginationDto(visitPage.getTotalElements(), visitPage.getSize(), visitPage.getNumber(), visitPage.getTotalPages()));
+    }
+
+    private Specification<Visit> buildAnswersFilterSpecification(String filterType) {
+        if (filterType == null || filterType.isBlank() || "all".equalsIgnoreCase(filterType.trim())) {
+            return null;
+        }
+
+        String mode = filterType.trim().toLowerCase();
+        if (!"finalised".equals(mode) && !"finalized".equals(mode) && !"pending".equals(mode)) {
+            return null;
+        }
+
+        return (root, queryDef, builder) -> {
+            // Cancelled visits are never included in finalised or pending answer filters
+            Predicate notCancelled = builder.notEqual(root.get("status"), VisitStatus.CANCELLED);
+
+            // Subquery 1: Visit has non-cancelled department with status FINALISED
+            Subquery<UUID> deptFinalisedSubquery = queryDef.subquery(UUID.class);
+            Root<VisitDepartment> vdRoot1 = deptFinalisedSubquery.from(VisitDepartment.class);
+            deptFinalisedSubquery.select(vdRoot1.get("visit").get("id"))
+                    .where(
+                            builder.equal(vdRoot1.get("visit"), root),
+                            builder.equal(vdRoot1.get("status"), VisitDepartmentStatus.FINALISED)
+                    );
+
+            // Subquery 2: Visit has non-cancelled department whose answerId is in StandaloneFormAnswer with status FINAL / SUBMITTED
+            Subquery<UUID> standaloneFinalSubquery = queryDef.subquery(UUID.class);
+            Root<StandaloneFormAnswer> sfaRoot = standaloneFinalSubquery.from(StandaloneFormAnswer.class);
+            standaloneFinalSubquery.select(sfaRoot.get("id"))
+                    .where(sfaRoot.get("status").in(AnswerStatus.FINAL, AnswerStatus.SUBMITTED));
+
+            Subquery<UUID> vdWithFinalStandaloneSubquery = queryDef.subquery(UUID.class);
+            Root<VisitDepartment> vdRoot2 = vdWithFinalStandaloneSubquery.from(VisitDepartment.class);
+            vdWithFinalStandaloneSubquery.select(vdRoot2.get("visit").get("id"))
+                    .where(
+                            builder.equal(vdRoot2.get("visit"), root),
+                            builder.notEqual(vdRoot2.get("status"), VisitDepartmentStatus.CANCELLED),
+                            vdRoot2.get("answerId").in(standaloneFinalSubquery)
+                    );
+
+            // Subquery 3: Visit has non-cancelled department whose answerId is in ConsultationAnswer with status FINAL / SUBMITTED
+            Subquery<UUID> consultFinalSubquery = queryDef.subquery(UUID.class);
+            Root<ConsultationAnswer> caRoot1 = consultFinalSubquery.from(ConsultationAnswer.class);
+            consultFinalSubquery.select(caRoot1.get("id"))
+                    .where(caRoot1.get("status").in(AnswerStatus.FINAL, AnswerStatus.SUBMITTED));
+
+            Subquery<UUID> vdWithFinalConsultSubquery = queryDef.subquery(UUID.class);
+            Root<VisitDepartment> vdRoot3 = vdWithFinalConsultSubquery.from(VisitDepartment.class);
+            vdWithFinalConsultSubquery.select(vdRoot3.get("visit").get("id"))
+                    .where(
+                            builder.equal(vdRoot3.get("visit"), root),
+                            builder.notEqual(vdRoot3.get("status"), VisitDepartmentStatus.CANCELLED),
+                            vdRoot3.get("answerId").in(consultFinalSubquery)
+                    );
+
+            // Subquery 4: Visit has ConsultationAnswer directly linked to visitId with status FINAL / SUBMITTED
+            Subquery<UUID> caDirectSubquery = queryDef.subquery(UUID.class);
+            Root<ConsultationAnswer> caRoot2 = caDirectSubquery.from(ConsultationAnswer.class);
+            caDirectSubquery.select(caRoot2.get("visitId"))
+                    .where(
+                            builder.equal(caRoot2.get("visitId"), root.get("id")),
+                            caRoot2.get("status").in(AnswerStatus.FINAL, AnswerStatus.SUBMITTED)
+                    );
+
+            Predicate isFinalisedPredicate = builder.or(
+                    builder.exists(deptFinalisedSubquery),
+                    builder.exists(vdWithFinalStandaloneSubquery),
+                    builder.exists(vdWithFinalConsultSubquery),
+                    builder.exists(caDirectSubquery)
+            );
+
+            if ("finalised".equals(mode) || "finalized".equals(mode)) {
+                return builder.and(notCancelled, isFinalisedPredicate);
+            } else {
+                return builder.and(notCancelled, builder.not(isFinalisedPredicate));
+            }
+        };
     }
 
     private LocalDateTime parseDateTimeOrStartOfDay(String raw) {
