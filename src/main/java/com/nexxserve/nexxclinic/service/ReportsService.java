@@ -594,10 +594,11 @@ public class ReportsService {
                             isWithinDateRange(p.createdAt() != null ? p.createdAt().toString() : deptTime, fromDate, toDate)
                     );
 
-                    boolean isClinicianOnDept = isProcessorMatch(dept.processors(), workerId) ||
-                            (dept.completedBy() != null && isUserMatch(dept.completedBy().id(), workerId)) ||
+                    boolean isClinicianOnDept = hasClinician && (
+                            isProcessorMatch(dept.processors(), workerId) ||
                             hasWorkerPrescribedOnDept ||
-                            (isDeptAddedByWorker && !isTriage);
+                            (isDeptAddedByWorker && !isTriage)
+                    );
 
                     boolean isDeptInPeriod = isWithinDateRange(deptTime, fromDate, toDate) || hasWorkerPrescribedInPeriod;
                     String effectiveDeptTime = deptTime;
@@ -825,6 +826,9 @@ public class ReportsService {
                         bumpMoneyTimeline(clinicianMoneyTimelineMap, effectiveDeptTime, encounterGross, encounterInsCov, encounterPaid, encounterLoan, encounterGiveaway, isDailyView);
 
                         accumulateDepartmentSummary(clinicianDepartmentBreakdownMap, deptId, deptName, encounterGross, encounterInsCov, encounterPatPay, encounterPaid, encounterLoan, encounterGiveaway);
+                        if (deptBilling == null && encounterGross > 0) {
+                            accumulateInsuranceSummary(clinicianInsuranceBreakdownMap, resolvedDeptInsuranceName, encounterGross, encounterInsCov, encounterPatPay, encounterPaid, encounterLoan, encounterGiveaway);
+                        }
                     }
 
                     // Triage encounter for nurses
@@ -858,9 +862,12 @@ public class ReportsService {
                                     : (prod.product() != null && prod.product().clinicPrice() != null ? prod.product().clinicPrice().doubleValue() : 0);
                             double lineTotal = qty * unitPrice;
                             boolean isBilledByWorker = prod.billedBy() != null && isUserMatch(prod.billedBy().id(), workerId);
-                            boolean isClinicianApproved = (prod.addedBy() != null && isUserMatch(prod.addedBy().id(), workerId)) ||
+                            boolean isClinicianApproved = hasClinician && !isBilledByWorker && (
+                                    (prod.addedBy() != null && isUserMatch(prod.addedBy().id(), workerId)) ||
+                                    (prod.confirmedBy() != null && isUserMatch(prod.confirmedBy().id(), workerId)) ||
                                     (prod.processor() != null && isUserMatch(prod.processor().id(), workerId)) ||
-                                    (isClinicianOnDept && dept.completedBy() != null && isUserMatch(dept.completedBy().id(), workerId));
+                                    (isClinicianOnDept && isProcessorMatch(dept.processors(), workerId))
+                            );
 
                             if (isClinicianApproved && isWithinDateRange(prodTime, fromDate, toDate)) {
                                 patientTouchedByWorker = true;
@@ -1273,6 +1280,7 @@ public class ReportsService {
         }
 
         Map<String, Object> financeMoneyReport = new HashMap<>();
+        financeMoneyReport.put("totalMoneyMade", insuranceCoveredAmount + patientCashCollected);
         financeMoneyReport.put("totalGrossBilled", totalGrossBilled);
         financeMoneyReport.put("insuranceCoveredAmount", insuranceCoveredAmount);
         financeMoneyReport.put("patientShareAmount", patientShareAmount);
@@ -1294,6 +1302,7 @@ public class ReportsService {
 
         Map<String, Object> clinicianMoneyReport = new HashMap<>();
         double clinicianGross = clinicianTotalGrossBilled > 0 ? clinicianTotalGrossBilled : clinicianProductTurnoverTotal;
+        clinicianMoneyReport.put("totalMoneyMade", clinicianInsuranceCoveredAmount + clinicianPatientCashCollected);
         clinicianMoneyReport.put("totalGrossBilled", clinicianGross);
         clinicianMoneyReport.put("insuranceCoveredAmount", clinicianInsuranceCoveredAmount);
         clinicianMoneyReport.put("patientShareAmount", clinicianPatientShareAmount);
@@ -1437,6 +1446,8 @@ public class ReportsService {
     private void accumulateInsuranceSummary(Map<String, Map<String, Object>> map, String insName, double tot, double insCov, double patPay, double paid, double loanVal, double giveVal) {
         if (!map.containsKey(insName)) {
             Map<String, Object> entry = new HashMap<>();
+            entry.put("id", insName);
+            entry.put("name", insName);
             entry.put("insuranceName", insName);
             entry.put("totalAmount", 0.0);
             entry.put("insuranceCovered", 0.0);
@@ -1444,6 +1455,7 @@ public class ReportsService {
             entry.put("paidAmount", 0.0);
             entry.put("loanAmount", 0.0);
             entry.put("giveawayAmount", 0.0);
+            entry.put("waiverAmount", 0.0);
             entry.put("count", 0);
             map.put(insName, entry);
         }
@@ -1455,6 +1467,27 @@ public class ReportsService {
         entry.put("loanAmount", toDouble(entry.get("loanAmount")) + loanVal);
         entry.put("giveawayAmount", toDouble(entry.get("giveawayAmount")) + giveVal);
         entry.put("count", (int) entry.get("count") + 1);
+    }
+
+    private void accumulateInsuranceWaiver(Map<String, Map<String, Object>> map, String insName, double waiverVal) {
+        if (waiverVal <= 0) return;
+        if (!map.containsKey(insName)) {
+            Map<String, Object> entry = new HashMap<>();
+            entry.put("id", insName);
+            entry.put("name", insName);
+            entry.put("insuranceName", insName);
+            entry.put("totalAmount", 0.0);
+            entry.put("insuranceCovered", 0.0);
+            entry.put("patientShare", 0.0);
+            entry.put("paidAmount", 0.0);
+            entry.put("loanAmount", 0.0);
+            entry.put("giveawayAmount", 0.0);
+            entry.put("waiverAmount", 0.0);
+            entry.put("count", 0);
+            map.put(insName, entry);
+        }
+        Map<String, Object> entry = map.get(insName);
+        entry.put("waiverAmount", toDouble(entry.get("waiverAmount")) + waiverVal);
     }
 
     private void accumulateDepartmentSummary(Map<String, Map<String, Object>> map, String deptId, String deptName, double tot, double insCov, double patPay, double paid, double loanVal, double giveVal) {
@@ -1733,6 +1766,8 @@ public class ReportsService {
         double totalGrossBilled = 0;
         double insuranceCoveredAmount = 0;
         double patientShareAmount = 0;
+        double privatePatientAmount = 0;
+        double insuredPatientShareAmount = 0;
         double patientCashCollected = 0;
         double patientLoanAmount = 0;
         double giveawayAmount = 0;
@@ -1838,14 +1873,10 @@ public class ReportsService {
 
             // Clinician filter for visit
             if (!filterClinicianIdsSet.isEmpty()) {
-                boolean hasMatchingClinician = visit.departments() != null && visit.departments().stream().anyMatch(d ->
-                        isProcessorInSet(d.processors(), filterClinicianIdsSet) ||
-                        (d.completedBy() != null && isUserInSet(d.completedBy().id(), filterClinicianIdsSet)) ||
-                        (d.products() != null && d.products().stream().anyMatch(p ->
-                                (p.processor() != null && isUserInSet(p.processor().id(), filterClinicianIdsSet)) ||
-                                (p.addedBy() != null && isUserInSet(p.addedBy().id(), filterClinicianIdsSet))
-                        ))
-                );
+                boolean hasMatchingClinician = visit.departments() != null && visit.departments().stream().anyMatch(d -> {
+                    WorkerDto clin = resolveClinicianForDepartment(d);
+                    return clin != null && clin.id() != null && filterClinicianIdsSet.contains(clin.id().toString());
+                });
                 if (!hasMatchingClinician) continue;
             }
 
@@ -1901,22 +1932,9 @@ public class ReportsService {
                         }
                     }
 
+                    WorkerDto resolvedClinician = resolveClinicianForDepartment(dept);
                     if (!filterClinicianIdsSet.isEmpty()) {
-                        boolean matchDeptClin = isProcessorInSet(dept.processors(), filterClinicianIdsSet) ||
-                                (dept.completedBy() != null && isUserInSet(dept.completedBy().id(), filterClinicianIdsSet)) ||
-                                (dept.products() != null && dept.products().stream().anyMatch(p ->
-                                        (p.processor() != null && isUserInSet(p.processor().id(), filterClinicianIdsSet)) ||
-                                        (p.addedBy() != null && isUserInSet(p.addedBy().id(), filterClinicianIdsSet))
-                                )) ||
-                                (dept.diagnostics() != null && dept.diagnostics().stream().anyMatch(d ->
-                                        d.addedBy() != null && isUserInSet(d.addedBy().id(), filterClinicianIdsSet)
-                                )) ||
-                                (dept.symptoms() != null && dept.symptoms().stream().anyMatch(s ->
-                                        s.addedBy() != null && isUserInSet(s.addedBy().id(), filterClinicianIdsSet)
-                                )) ||
-                                (dept.medications() != null && dept.medications().stream().anyMatch(m ->
-                                        m.addedBy() != null && isUserInSet(m.addedBy().id(), filterClinicianIdsSet)
-                                ));
+                        boolean matchDeptClin = resolvedClinician != null && resolvedClinician.id() != null && filterClinicianIdsSet.contains(resolvedClinician.id().toString());
                         if (!matchDeptClin) continue;
                     }
 
@@ -1924,22 +1942,15 @@ public class ReportsService {
                     String deptName = dept.department() != null && dept.department().name() != null ? dept.department().name() : "Consultation";
                     String deptTime = dept.startedAt() != null ? dept.startedAt().toString() : (dept.createdAt() != null ? dept.createdAt().toString() : vTime);
 
-                    // Resolve primary clinician for department
-                    String clinName = "N/A";
+                    // Resolve verified clinician for department (never billing user)
+                    String clinName = "—";
                     String clinIdStr = "";
-                    if (dept.completedBy() != null && dept.completedBy().id() != null) {
-                        clinIdStr = dept.completedBy().id().toString();
-                        String fn = dept.completedBy().firstName() != null ? dept.completedBy().firstName() : "";
-                        String ln = dept.completedBy().lastName() != null ? dept.completedBy().lastName() : "";
+                    if (resolvedClinician != null && resolvedClinician.id() != null) {
+                        clinIdStr = resolvedClinician.id().toString();
+                        String fn = resolvedClinician.firstName() != null ? resolvedClinician.firstName().trim() : "";
+                        String ln = resolvedClinician.lastName() != null ? resolvedClinician.lastName().trim() : "";
                         clinName = (fn + " " + ln).trim();
-                    } else if (dept.processors() != null && !dept.processors().isEmpty()) {
-                        var p0 = dept.processors().iterator().next();
-                        if (p0 != null && p0.id() != null) {
-                            clinIdStr = p0.id().toString();
-                            String fn = p0.firstName() != null ? p0.firstName() : "";
-                            String ln = p0.lastName() != null ? p0.lastName() : "";
-                            clinName = (fn + " " + ln).trim();
-                        }
+                        if (clinName.isEmpty()) clinName = "Clinician";
                     }
 
                     Map<String, Object> deptBilling = (dept.id() != null) ? billingQueryService.departmentBilling(dept.id()) : null;
@@ -1953,12 +1964,14 @@ public class ReportsService {
                     double deptWaiver = 0;
                     double deptPending = 0;
 
+                    String deptInsuranceName = resolveVisitInsuranceAcronym(dept, visit, deptBilling, hasInsurance);
+
                     if (deptBilling != null) {
                         Object insListObj = deptBilling.get("insuranceBillings");
                         if (insListObj instanceof List<?> list && !list.isEmpty()) {
                             for (Object itemObj : list) {
                                 if (itemObj instanceof Map<?, ?> ib) {
-                                    String insName = resolveVisitInsuranceAcronym(dept, visit, deptBilling, hasInsurance);
+                                    String insName = deptInsuranceName;
                                     Object pIns = ib.get("patientInsurance");
                                     if (pIns instanceof Map<?, ?> pMap) {
                                         Object prov = pMap.get("insuranceProvider");
@@ -1993,6 +2006,13 @@ public class ReportsService {
                                     insuranceCoveredAmount += insCov;
                                     patientShareAmount += patPay;
                                     patientCashCollected += paid;
+
+                                    boolean isPrivatePayer = !hasInsurance || (insName != null && (insName.equalsIgnoreCase("Private / Cash") || insName.toLowerCase().contains("private")));
+                                    if (isPrivatePayer) {
+                                        privatePatientAmount += patPay;
+                                    } else {
+                                        insuredPatientShareAmount += patPay;
+                                    }
 
                                     if (loanVal > 0) {
                                         patientLoanAmount += loanVal;
@@ -2049,6 +2069,12 @@ public class ReportsService {
                             patientShareAmount += patPay;
                             patientCashCollected += paid;
 
+                            if (!hasInsurance) {
+                                privatePatientAmount += patPay;
+                            } else {
+                                insuredPatientShareAmount += patPay;
+                            }
+
                             if (outstanding > 0) {
                                 deptLoan += outstanding;
                                 patientLoanAmount += outstanding;
@@ -2068,6 +2094,8 @@ public class ReportsService {
                                 loanEntry.put("date", deptTime);
                                 loansList.add(loanEntry);
                             }
+
+                            accumulateInsuranceSummary(insuranceBreakdownMap, deptInsuranceName, tot, insCov, patPay, paid, outstanding, 0.0);
                         }
 
                         // Collect payment modes
@@ -2141,6 +2169,7 @@ public class ReportsService {
                                 waiverAmount += lineTotal;
                                 waiverCount++;
                                 deptWaiver += lineTotal;
+                                accumulateInsuranceWaiver(insuranceBreakdownMap, deptInsuranceName, lineTotal);
                                 Map<String, Object> wEntry = new HashMap<>();
                                 wEntry.put("id", "waive-" + prod.id());
                                 wEntry.put("patientName", patientName);
@@ -2160,6 +2189,7 @@ public class ReportsService {
                                 waiverAmount += patShare;
                                 waiverCount++;
                                 deptWaiver += patShare;
+                                accumulateInsuranceWaiver(insuranceBreakdownMap, deptInsuranceName, patShare);
                                 Map<String, Object> wEntry = new HashMap<>();
                                 wEntry.put("id", "waive-" + prod.id());
                                 wEntry.put("patientName", patientName);
@@ -2369,9 +2399,12 @@ public class ReportsService {
         overview.put("averageAge", (int) Math.round(avgAge));
         overview.put("ageBrackets", Map.of("under18", under18, "adults18to50", adults18to50, "seniors50plus", seniors50plus));
         overview.put("peakActivityHour", peakActivityHour);
+        overview.put("totalMoneyMade", insuranceCoveredAmount + patientCashCollected);
         overview.put("totalGrossBilled", totalGrossBilled);
         overview.put("insuranceCoveredAmount", insuranceCoveredAmount);
         overview.put("patientShareAmount", patientShareAmount);
+        overview.put("privatePatientAmount", privatePatientAmount);
+        overview.put("insuredPatientShareAmount", insuredPatientShareAmount);
         overview.put("patientCashCollected", patientCashCollected);
         overview.put("patientLoanAmount", patientLoanAmount);
         overview.put("giveawayAmount", giveawayAmount);
@@ -2634,31 +2667,15 @@ public class ReportsService {
                     String deptName = dept.department() != null && dept.department().name() != null ? dept.department().name() : "Consultation";
                     String deptTime = dept.startedAt() != null ? dept.startedAt().toString() : (dept.createdAt() != null ? dept.createdAt().toString() : vTime);
 
+                    WorkerDto deptClinician = resolveClinicianForDepartment(dept);
                     String clinName = "N/A";
                     String clinIdStr = "";
-                    if (dept.processors() != null && !dept.processors().isEmpty()) {
-                        // Find first clinical processor
-                        WorkerDto chosenProcessor = null;
-                        for (WorkerDto p : dept.processors()) {
-                            if (p != null && isClinicalWorker(p)) {
-                                chosenProcessor = p;
-                                break;
-                            }
-                        }
-                        if (chosenProcessor == null) {
-                            chosenProcessor = dept.processors().iterator().next();
-                        }
-                        if (chosenProcessor != null && chosenProcessor.id() != null) {
-                            clinIdStr = chosenProcessor.id().toString();
-                            String fn = chosenProcessor.firstName() != null ? chosenProcessor.firstName() : "";
-                            String ln = chosenProcessor.lastName() != null ? chosenProcessor.lastName() : "";
-                            clinName = (fn + " " + ln).trim();
-                        }
-                    } else if (dept.completedBy() != null && dept.completedBy().id() != null) {
-                        clinIdStr = dept.completedBy().id().toString();
-                        String fn = dept.completedBy().firstName() != null ? dept.completedBy().firstName() : "";
-                        String ln = dept.completedBy().lastName() != null ? dept.completedBy().lastName() : "";
+                    if (deptClinician != null && deptClinician.id() != null) {
+                        clinIdStr = deptClinician.id().toString();
+                        String fn = deptClinician.firstName() != null ? deptClinician.firstName() : "";
+                        String ln = deptClinician.lastName() != null ? deptClinician.lastName() : "";
                         clinName = (fn + " " + ln).trim();
+                        if (clinName.isEmpty()) clinName = "Clinician";
                     }
 
                     if (dept.diagnostics() != null && !dept.diagnostics().isEmpty()) {
@@ -2781,7 +2798,7 @@ public class ReportsService {
 
         // 3. Fall back to completedBy only if completedBy has a clinical role
         if (dept != null && dept.completedBy() != null && dept.completedBy().id() != null) {
-            if (isClinicalWorker(dept.completedBy())) {
+            if (isClinicianWorker(dept.completedBy())) {
                 String fn = dept.completedBy().firstName() != null ? dept.completedBy().firstName().trim() : "";
                 String ln = dept.completedBy().lastName() != null ? dept.completedBy().lastName().trim() : "";
                 String fullName = (fn + " " + ln).trim();
@@ -2792,6 +2809,72 @@ public class ReportsService {
         // 4. Default fallback
         return Map.entry(deptDefaultClinId != null ? deptDefaultClinId : "",
                 (deptDefaultClinName != null && !deptDefaultClinName.isBlank()) ? deptDefaultClinName : "Clinician");
+    }
+
+    private boolean isClinicianWorker(WorkerDto worker) {
+        if (worker == null || worker.roles() == null || worker.roles().isEmpty()) return false;
+        return worker.roles().stream().anyMatch(r -> r == RoleName.CLINICIAN);
+    }
+
+    /**
+     * Resolves the verified clinician for a department or its products.
+     * Ensures users who billed are never credited as clinicians.
+     * Checks who approved/confirmed products (must have CLINICIAN role) or is a clinician processor.
+     */
+    private WorkerDto resolveClinicianForDepartment(VisitDepartmentDto dept) {
+        if (dept == null) return null;
+
+        // 1. Department processors: find processor with CLINICIAN role
+        if (dept.processors() != null && !dept.processors().isEmpty()) {
+            for (WorkerDto p : dept.processors()) {
+                if (p != null && p.id() != null && isClinicianWorker(p)) {
+                    return p;
+                }
+            }
+        }
+
+        // 2. Products in department: check who approved (confirmedBy), processed, or prescribed products
+        // MUST have CLINICIAN role and MUST NOT be the user who billed the product
+        if (dept.products() != null && !dept.products().isEmpty()) {
+            // First check confirmedBy (who approved/confirmed the product)
+            for (VisitDepartmentProductDto prod : dept.products()) {
+                if (prod != null && prod.confirmedBy() != null && prod.confirmedBy().id() != null && isClinicianWorker(prod.confirmedBy())) {
+                    boolean isBiller = prod.billedBy() != null && prod.confirmedBy().id().equals(prod.billedBy().id());
+                    if (!isBiller) {
+                        return prod.confirmedBy();
+                    }
+                }
+            }
+            // Next check product processor
+            for (VisitDepartmentProductDto prod : dept.products()) {
+                if (prod != null && prod.processor() != null && prod.processor().id() != null && isClinicianWorker(prod.processor())) {
+                    boolean isBiller = prod.billedBy() != null && prod.processor().id().equals(prod.billedBy().id());
+                    if (!isBiller) {
+                        return prod.processor();
+                    }
+                }
+            }
+            // Next check addedBy (clinician prescriber)
+            for (VisitDepartmentProductDto prod : dept.products()) {
+                if (prod != null && prod.addedBy() != null && prod.addedBy().id() != null && isClinicianWorker(prod.addedBy())) {
+                    boolean isBiller = prod.billedBy() != null && prod.addedBy().id().equals(prod.billedBy().id());
+                    if (!isBiller) {
+                        return prod.addedBy();
+                    }
+                }
+            }
+        }
+
+        // 3. Fall back to completedBy ONLY if they have CLINICIAN role AND are not the billing officer
+        if (dept.completedBy() != null && dept.completedBy().id() != null && isClinicianWorker(dept.completedBy())) {
+            boolean isOnlyBilledBy = dept.products() != null && !dept.products().isEmpty() &&
+                    dept.products().stream().allMatch(p -> p.billedBy() != null && p.billedBy().id().equals(dept.completedBy().id()));
+            if (!isOnlyBilledBy) {
+                return dept.completedBy();
+            }
+        }
+
+        return null;
     }
 
     private boolean isClinicalWorker(WorkerDto worker) {
