@@ -462,8 +462,10 @@ public class ReportsService {
         double clinicianPatientCashCollected = 0;
         double clinicianPatientLoanAmount = 0;
         double clinicianGiveawayAmount = 0;
+        double clinicianWaiverAmount = 0;
         int clinicianLoanCount = 0;
         int clinicianGiveawayCount = 0;
+        int clinicianWaiverCount = 0;
         double clinicianPendingBillingAmount = 0;
         int clinicianPendingBillingCount = 0;
 
@@ -792,6 +794,31 @@ public class ReportsService {
                             }
                         }
 
+                        double encounterWaiver = 0;
+                        if (dept.products() != null) {
+                            for (VisitDepartmentProductDto p : dept.products()) {
+                                String pStatus = p.status() != null ? p.status().name() : "";
+                                if ("EXEMPTED".equals(pStatus) || "PATIENT_SHARE_EXEMPTED".equals(pStatus)) {
+                                    Map<String, Object> pBillingItem = (p.id() != null) ? billingQueryService.productBillingItem(p.id()) : null;
+                                    double catalogPrice = p.product() != null && p.product().clinicPrice() != null ? p.product().clinicPrice().doubleValue() : 0.0;
+                                    double uPrice = (pBillingItem != null && pBillingItem.get("unitPriceSnapshot") != null)
+                                            ? toDouble(pBillingItem.get("unitPriceSnapshot"))
+                                            : catalogPrice;
+                                    if (uPrice <= 0 && catalogPrice > 0) uPrice = catalogPrice;
+                                    double q = p.quantity() != null ? p.quantity().doubleValue() : 1.0;
+                                    double lTotal = (pBillingItem != null && pBillingItem.get("lineTotal") != null && toDouble(pBillingItem.get("lineTotal")) > 0)
+                                            ? toDouble(pBillingItem.get("lineTotal"))
+                                            : (q * uPrice);
+                                    if (lTotal <= 0 && catalogPrice > 0) lTotal = q * catalogPrice;
+                                    double insC = (pBillingItem != null && pBillingItem.get("insuranceCoveredAmount") != null)
+                                            ? toDouble(pBillingItem.get("insuranceCoveredAmount"))
+                                            : 0.0;
+                                    double waived = "EXEMPTED".equals(pStatus) ? lTotal : Math.max(0.0, lTotal - insC);
+                                    encounterWaiver += waived;
+                                }
+                            }
+                        }
+
                         Map<String, Object> encDetail = new HashMap<>();
                         encDetail.put("id", "clinician-enc-" + dept.id());
                         encDetail.put("visitId", visit.id() != null ? visit.id().toString() : "");
@@ -814,6 +841,8 @@ public class ReportsService {
                         encDetail.put("totalGross", encounterGross);
                         encDetail.put("totalInsurance", encounterInsCov);
                         encDetail.put("totalPatient", encounterPatPay);
+                        encDetail.put("giveawayAmount", encounterGiveaway);
+                        encDetail.put("waiverAmount", encounterWaiver);
                         clinicianEncountersList.add(encDetail);
 
                         clinicianTotalGrossBilled += encounterGross;
@@ -822,6 +851,11 @@ public class ReportsService {
                         clinicianPatientCashCollected += encounterPaid;
                         clinicianPatientLoanAmount += encounterLoan;
                         clinicianGiveawayAmount += encounterGiveaway;
+                        clinicianWaiverAmount += encounterWaiver;
+                        if (encounterWaiver > 0) {
+                            clinicianWaiverCount++;
+                            accumulateInsuranceWaiver(clinicianInsuranceBreakdownMap, resolvedDeptInsuranceName, encounterWaiver);
+                        }
 
                         bumpMoneyTimeline(clinicianMoneyTimelineMap, effectiveDeptTime, encounterGross, encounterInsCov, encounterPaid, encounterLoan, encounterGiveaway, isDailyView);
 
@@ -1309,9 +1343,11 @@ public class ReportsService {
         clinicianMoneyReport.put("patientCashCollected", clinicianPatientCashCollected);
         clinicianMoneyReport.put("patientLoanAmount", clinicianPatientLoanAmount);
         clinicianMoneyReport.put("giveawayAmount", clinicianGiveawayAmount);
-        clinicianMoneyReport.put("outstandingBalance", Math.max(0, clinicianGross - clinicianInsuranceCoveredAmount - clinicianPatientCashCollected - clinicianGiveawayAmount));
+        clinicianMoneyReport.put("waiverAmount", clinicianWaiverAmount);
+        clinicianMoneyReport.put("outstandingBalance", Math.max(0, clinicianGross - clinicianInsuranceCoveredAmount - clinicianPatientCashCollected - clinicianGiveawayAmount - clinicianWaiverAmount));
         clinicianMoneyReport.put("loanCount", clinicianLoanCount);
         clinicianMoneyReport.put("giveawayCount", clinicianGiveawayCount);
+        clinicianMoneyReport.put("waiverCount", clinicianWaiverCount);
         clinicianMoneyReport.put("pendingBillingAmount", clinicianPendingBillingAmount);
         clinicianMoneyReport.put("pendingBillingCount", clinicianPendingBillingCount);
         clinicianMoneyReport.put("totalProductTurnover", clinicianProductTurnoverTotal);
@@ -2164,32 +2200,61 @@ public class ReportsService {
                             cEntry.put("count", toDouble(cEntry.get("count")) + qty);
                             cEntry.put("totalAmount", toDouble(cEntry.get("totalAmount")) + lineTotal);
 
+                            String insNameForWaiver = deptInsuranceName;
+                            if (pBillingItem != null) {
+                                if (pBillingItem.get("insuranceAcronym") != null) {
+                                    insNameForWaiver = (String) pBillingItem.get("insuranceAcronym");
+                                } else if (pBillingItem.get("insuranceName") != null) {
+                                    String acr = getInsuranceAcronym((String) pBillingItem.get("insuranceName"), null);
+                                    if (acr != null) insNameForWaiver = acr;
+                                }
+                            }
+
                             // Waivers check
                             if ("EXEMPTED".equals(pStatus)) {
-                                waiverAmount += lineTotal;
+                                double fullWaived = (pBillingItem != null && pBillingItem.get("lineTotal") != null && toDouble(pBillingItem.get("lineTotal")) > 0)
+                                        ? toDouble(pBillingItem.get("lineTotal"))
+                                        : lineTotal;
+                                if (fullWaived <= 0 && catalogPrice > 0) {
+                                    fullWaived = qty * catalogPrice;
+                                }
+                                waiverAmount += fullWaived;
                                 waiverCount++;
-                                deptWaiver += lineTotal;
-                                accumulateInsuranceWaiver(insuranceBreakdownMap, deptInsuranceName, lineTotal);
+                                deptWaiver += fullWaived;
+                                accumulateInsuranceWaiver(insuranceBreakdownMap, insNameForWaiver, fullWaived);
                                 Map<String, Object> wEntry = new HashMap<>();
                                 wEntry.put("id", "waive-" + prod.id());
                                 wEntry.put("patientName", patientName);
                                 wEntry.put("patientIdentifier", patientIdentifier);
                                 wEntry.put("departmentName", deptName);
                                 wEntry.put("clinicianName", clinName);
-                                wEntry.put("amount", lineTotal);
+                                wEntry.put("amount", fullWaived);
                                 wEntry.put("waiverType", "FULL");
                                 wEntry.put("productName", prodName);
                                 wEntry.put("reason", "Full clinical waiver exemption");
                                 wEntry.put("date", deptTime);
                                 waiversList.add(wEntry);
                             } else if ("PATIENT_SHARE_EXEMPTED".equals(pStatus)) {
-                                double patShare = (pBillingItem != null && pBillingItem.get("patientPayableAmount") != null)
-                                        ? toDouble(pBillingItem.get("patientPayableAmount"))
+                                double bLineTotal = (pBillingItem != null && pBillingItem.get("lineTotal") != null && toDouble(pBillingItem.get("lineTotal")) > 0)
+                                        ? toDouble(pBillingItem.get("lineTotal"))
                                         : lineTotal;
+                                if (bLineTotal <= 0 && catalogPrice > 0) {
+                                    bLineTotal = qty * catalogPrice;
+                                }
+                                double bInsCov = (pBillingItem != null && pBillingItem.get("insuranceCoveredAmount") != null)
+                                        ? toDouble(pBillingItem.get("insuranceCoveredAmount"))
+                                        : 0.0;
+                                double patShare = Math.max(0.0, bLineTotal - bInsCov);
+                                if (patShare <= 0.01 && pBillingItem != null && pBillingItem.get("patientPayableAmount") != null && toDouble(pBillingItem.get("patientPayableAmount")) > 0) {
+                                    patShare = toDouble(pBillingItem.get("patientPayableAmount"));
+                                }
+                                if (patShare <= 0.01) {
+                                    patShare = bLineTotal;
+                                }
                                 waiverAmount += patShare;
                                 waiverCount++;
                                 deptWaiver += patShare;
-                                accumulateInsuranceWaiver(insuranceBreakdownMap, deptInsuranceName, patShare);
+                                accumulateInsuranceWaiver(insuranceBreakdownMap, insNameForWaiver, patShare);
                                 Map<String, Object> wEntry = new HashMap<>();
                                 wEntry.put("id", "waive-" + prod.id());
                                 wEntry.put("patientName", patientName);

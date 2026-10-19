@@ -270,6 +270,15 @@ public class BillingDataMapper {
         data.put("patientPayableAmount", item.getPatientPayableAmount());
         data.put("appliedPatientSharePct", item.getAppliedPatientSharePct());
         data.put("patientShareSource", item.getPatientShareSource());
+        if (item.getAppliedPatientInsurance() != null && item.getAppliedPatientInsurance().getInsuranceProvider() != null) {
+            data.put("insuranceName", item.getAppliedPatientInsurance().getInsuranceProvider().getInsuranceName());
+            data.put("insuranceAcronym", item.getAppliedPatientInsurance().getInsuranceProvider().getAcronym());
+        } else if (item.getDepartmentInsuranceBilling() != null
+                && item.getDepartmentInsuranceBilling().getPatientInsurance() != null
+                && item.getDepartmentInsuranceBilling().getPatientInsurance().getInsuranceProvider() != null) {
+            data.put("insuranceName", item.getDepartmentInsuranceBilling().getPatientInsurance().getInsuranceProvider().getInsuranceName());
+            data.put("insuranceAcronym", item.getDepartmentInsuranceBilling().getPatientInsurance().getInsuranceProvider().getAcronym());
+        }
         data.put("createdAt", item.getCreatedAt());
         data.put("updatedAt", item.getUpdatedAt());
         return data;
