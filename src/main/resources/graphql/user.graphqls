@@ -1733,6 +1733,8 @@ input SearchVisitsInput {
   dob: String
   minAge: Int
   maxAge: Int
+  insuranceId: String
+  isPrivateOnly: Boolean
   page: Int
   size: Int
 }

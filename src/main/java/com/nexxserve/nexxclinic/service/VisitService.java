@@ -3,6 +3,7 @@ package com.nexxserve.nexxclinic.service;
 import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
 import com.nexxserve.nexxclinic.entity.Patient;
 import com.nexxserve.nexxclinic.entity.PatientInsurance;
+import com.nexxserve.nexxclinic.entity.InsuranceProvider;
 import com.nexxserve.nexxclinic.entity.Visit;
 import com.nexxserve.nexxclinic.entity.VisitBilling;
 import com.nexxserve.nexxclinic.entity.VisitDepartment;
@@ -72,6 +73,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
@@ -468,7 +470,9 @@ public class VisitService {
                 input.gender() != null ||
                 input.dob() != null ||
                 input.minAge() != null ||
-                input.maxAge() != null
+                input.maxAge() != null ||
+                input.insuranceId() != null ||
+                Boolean.TRUE.equals(input.isPrivateOnly())
         );
         boolean restrictedClinicianSearch = authUser != null
                 && authUser.roles() != null
@@ -598,6 +602,53 @@ public class VisitService {
                 spec = spec.and((root, queryDef, builder) ->
                         builder.greaterThanOrEqualTo(root.join("patient").get("dateOfBirth"), minDobForMaxAge)
                 );
+            }
+        }
+
+        if (input != null && Boolean.TRUE.equals(input.isPrivateOnly())) {
+            spec = spec.and((root, queryDef, builder) -> {
+                Subquery<UUID> viSubquery = queryDef.subquery(UUID.class);
+                Root<VisitInsurance> viRoot = viSubquery.from(VisitInsurance.class);
+                viSubquery.select(viRoot.get("visit").get("id"));
+                return builder.not(root.get("id").in(viSubquery));
+            });
+        } else if (input != null && input.insuranceId() != null && !input.insuranceId().isBlank()) {
+            String insIdStr = input.insuranceId().trim();
+            if ("private".equalsIgnoreCase(insIdStr) || "self-pay".equalsIgnoreCase(insIdStr)) {
+                spec = spec.and((root, queryDef, builder) -> {
+                    Subquery<UUID> viSubquery = queryDef.subquery(UUID.class);
+                    Root<VisitInsurance> viRoot = viSubquery.from(VisitInsurance.class);
+                    viSubquery.select(viRoot.get("visit").get("id"));
+                    return builder.not(root.get("id").in(viSubquery));
+                });
+            } else {
+                spec = spec.and((root, queryDef, builder) -> {
+                    Subquery<UUID> viSubquery = queryDef.subquery(UUID.class);
+                    Root<VisitInsurance> viRoot = viSubquery.from(VisitInsurance.class);
+                    Join<VisitInsurance, PatientInsurance> piJoin = viRoot.join("patientInsurance");
+                    Join<PatientInsurance, InsuranceProvider> ipJoin = piJoin.join("insuranceProvider");
+
+                    UUID targetProviderUuid = null;
+                    try {
+                        targetProviderUuid = UUID.fromString(insIdStr);
+                    } catch (IllegalArgumentException ignored) {}
+
+                    final String lowerTarget = insIdStr.toLowerCase();
+                    viSubquery.select(viRoot.get("visit").get("id"));
+                    if (targetProviderUuid != null) {
+                        viSubquery.where(builder.or(
+                                builder.equal(ipJoin.get("id"), targetProviderUuid),
+                                builder.equal(builder.lower(ipJoin.get("insuranceName")), lowerTarget),
+                                builder.equal(builder.lower(ipJoin.get("acronym")), lowerTarget)
+                        ));
+                    } else {
+                        viSubquery.where(builder.or(
+                                builder.equal(builder.lower(ipJoin.get("insuranceName")), lowerTarget),
+                                builder.equal(builder.lower(ipJoin.get("acronym")), lowerTarget)
+                        ));
+                    }
+                    return root.get("id").in(viSubquery);
+                });
             }
         }
 
