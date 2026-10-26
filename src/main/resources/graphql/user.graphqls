@@ -1734,6 +1734,7 @@ input SearchVisitsInput {
   minAge: Int
   maxAge: Int
   insuranceId: String
+  insuranceIds: [String]
   isPrivateOnly: Boolean
   page: Int
   size: Int

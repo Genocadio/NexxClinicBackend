@@ -472,6 +472,7 @@ public class VisitService {
                 input.minAge() != null ||
                 input.maxAge() != null ||
                 input.insuranceId() != null ||
+                (input.insuranceIds() != null && !input.insuranceIds().isEmpty()) ||
                 Boolean.TRUE.equals(input.isPrivateOnly())
         );
         boolean restrictedClinicianSearch = authUser != null
@@ -606,49 +607,50 @@ public class VisitService {
         }
 
         if (input != null && Boolean.TRUE.equals(input.isPrivateOnly())) {
-            spec = spec.and((root, queryDef, builder) -> {
-                Subquery<UUID> viSubquery = queryDef.subquery(UUID.class);
+            spec = spec.and((root, queryDef1, builder) -> {
+                Subquery<UUID> viSubquery = queryDef1.subquery(UUID.class);
                 Root<VisitInsurance> viRoot = viSubquery.from(VisitInsurance.class);
                 viSubquery.select(viRoot.get("visit").get("id"));
                 return builder.not(root.get("id").in(viSubquery));
             });
-        } else if (input != null && input.insuranceId() != null && !input.insuranceId().isBlank()) {
-            String insIdStr = input.insuranceId().trim();
-            if ("private".equalsIgnoreCase(insIdStr) || "self-pay".equalsIgnoreCase(insIdStr)) {
-                spec = spec.and((root, queryDef, builder) -> {
-                    Subquery<UUID> viSubquery = queryDef.subquery(UUID.class);
-                    Root<VisitInsurance> viRoot = viSubquery.from(VisitInsurance.class);
-                    viSubquery.select(viRoot.get("visit").get("id"));
-                    return builder.not(root.get("id").in(viSubquery));
-                });
-            } else {
-                spec = spec.and((root, queryDef, builder) -> {
-                    Subquery<UUID> viSubquery = queryDef.subquery(UUID.class);
-                    Root<VisitInsurance> viRoot = viSubquery.from(VisitInsurance.class);
-                    Join<VisitInsurance, PatientInsurance> piJoin = viRoot.join("patientInsurance");
-                    Join<PatientInsurance, InsuranceProvider> ipJoin = piJoin.join("insuranceProvider");
+        } else {
+            List<String> targetIds = new ArrayList<>();
+            if (input != null && input.insuranceIds() != null && !input.insuranceIds().isEmpty()) {
+                targetIds.addAll(input.insuranceIds());
+            } else if (input != null && input.insuranceId() != null && !input.insuranceId().isBlank()) {
+                targetIds.add(input.insuranceId().trim());
+            }
 
-                    UUID targetProviderUuid = null;
-                    try {
-                        targetProviderUuid = UUID.fromString(insIdStr);
-                    } catch (IllegalArgumentException ignored) {}
+            if (!targetIds.isEmpty()) {
+                if (targetIds.stream().anyMatch(s -> "private".equalsIgnoreCase(s) || "self-pay".equalsIgnoreCase(s))) {
+                    spec = spec.and((root, queryDef1, builder) -> {
+                        Subquery<UUID> viSubquery = queryDef1.subquery(UUID.class);
+                        Root<VisitInsurance> viRoot = viSubquery.from(VisitInsurance.class);
+                        viSubquery.select(viRoot.get("visit").get("id"));
+                        return builder.not(root.get("id").in(viSubquery));
+                    });
+                } else {
+                    spec = spec.and((root, queryDef1, builder) -> {
+                        Subquery<UUID> viSubquery = queryDef1.subquery(UUID.class);
+                        Root<VisitInsurance> viRoot = viSubquery.from(VisitInsurance.class);
+                        Join<VisitInsurance, PatientInsurance> piJoin = viRoot.join("patientInsurance");
+                        Join<PatientInsurance, InsuranceProvider> ipJoin = piJoin.join("insuranceProvider");
 
-                    final String lowerTarget = insIdStr.toLowerCase();
-                    viSubquery.select(viRoot.get("visit").get("id"));
-                    if (targetProviderUuid != null) {
-                        viSubquery.where(builder.or(
-                                builder.equal(ipJoin.get("id"), targetProviderUuid),
-                                builder.equal(builder.lower(ipJoin.get("insuranceName")), lowerTarget),
-                                builder.equal(builder.lower(ipJoin.get("acronym")), lowerTarget)
-                        ));
-                    } else {
-                        viSubquery.where(builder.or(
-                                builder.equal(builder.lower(ipJoin.get("insuranceName")), lowerTarget),
-                                builder.equal(builder.lower(ipJoin.get("acronym")), lowerTarget)
-                        ));
-                    }
-                    return root.get("id").in(viSubquery);
-                });
+                        List<Predicate> idPredicates = new ArrayList<>();
+                        for (String target : targetIds) {
+                            try {
+                                UUID uuid = UUID.fromString(target);
+                                idPredicates.add(builder.equal(ipJoin.get("id"), uuid));
+                            } catch (IllegalArgumentException ignored) {}
+                            String lower = target.toLowerCase();
+                            idPredicates.add(builder.equal(builder.lower(ipJoin.get("insuranceName")), lower));
+                            idPredicates.add(builder.equal(builder.lower(ipJoin.get("acronym")), lower));
+                        }
+                        viSubquery.select(viRoot.get("visit").get("id"))
+                                .where(builder.or(idPredicates.toArray(new Predicate[0])));
+                        return root.get("id").in(viSubquery);
+                    });
+                }
             }
         }
 

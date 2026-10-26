@@ -4,6 +4,7 @@ import com.nexxserve.nexxclinic.model.Gender;
 import com.nexxserve.nexxclinic.model.VisitStatus;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
+import java.util.List;
 
 public record SearchVisitsInput(
         String visitDate,
@@ -33,6 +34,8 @@ public record SearchVisitsInput(
 
         String insuranceId,
 
+        List<String> insuranceIds,
+
         Boolean isPrivateOnly,
 
         @Min(value = 0, message = "page must be 0 or greater")
@@ -52,7 +55,7 @@ public record SearchVisitsInput(
             Integer page,
             Integer size
     ) {
-        this(visitDate, fromDate, toDate, recentDays, activeOnly, status, patientName, null, null, null, null, null, null, null, page, size);
+        this(visitDate, fromDate, toDate, recentDays, activeOnly, status, patientName, null, null, null, null, null, null, null, null, page, size);
     }
 
     public SearchVisitsInput(
@@ -71,6 +74,27 @@ public record SearchVisitsInput(
             Integer page,
             Integer size
     ) {
-        this(visitDate, fromDate, toDate, recentDays, activeOnly, status, patientName, answersFilter, gender, dob, minAge, maxAge, null, null, page, size);
+        this(visitDate, fromDate, toDate, recentDays, activeOnly, status, patientName, answersFilter, gender, dob, minAge, maxAge, null, null, null, page, size);
+    }
+
+    public SearchVisitsInput(
+            String visitDate,
+            String fromDate,
+            String toDate,
+            Integer recentDays,
+            Boolean activeOnly,
+            VisitStatus status,
+            String patientName,
+            String answersFilter,
+            Gender gender,
+            String dob,
+            Integer minAge,
+            Integer maxAge,
+            String insuranceId,
+            Boolean isPrivateOnly,
+            Integer page,
+            Integer size
+    ) {
+        this(visitDate, fromDate, toDate, recentDays, activeOnly, status, patientName, answersFilter, gender, dob, minAge, maxAge, insuranceId, null, isPrivateOnly, page, size);
     }
 }
