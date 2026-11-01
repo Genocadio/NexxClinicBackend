@@ -88,5 +88,10 @@ public enum PermissionName {
 
     // Audit & Administration
     AUDIT_LOG_VIEW,
-    SEARCH_INDEX_MANAGE
+    SEARCH_INDEX_MANAGE,
+
+    // Reports & Analytics
+    REPORTS_VIEW,
+    FINANCE_REPORTS_VIEW,
+    MEDICAL_REPORTS_VIEW
 }

@@ -28,7 +28,7 @@ public class UserQueryController {
         return workerService.me(authUser);
     }
 
-    @HasRole(RoleName.ADMIN)
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.MANAGER})
     @QueryMapping
     public ApiResponse listUsers(@ContextValue(name = "authUser", required = false) AuthenticatedUser authUser) {
         return workerService.listUsers();

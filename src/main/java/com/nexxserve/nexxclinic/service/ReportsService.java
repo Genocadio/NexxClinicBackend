@@ -14,12 +14,14 @@ import com.nexxserve.nexxclinic.dto.out.VitalMeasurementDto;
 import com.nexxserve.nexxclinic.dto.out.WorkerDto;
 import com.nexxserve.nexxclinic.entity.Visit;
 import com.nexxserve.nexxclinic.entity.Worker;
+import com.nexxserve.nexxclinic.model.PermissionName;
 import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.model.VisitDepartmentStatus;
 import com.nexxserve.nexxclinic.model.VisitStatus;
 import com.nexxserve.nexxclinic.repository.VisitRepository;
 import com.nexxserve.nexxclinic.repository.WorkerRepository;
 import com.nexxserve.nexxclinic.service.billing.BillingQueryService;
+import org.springframework.context.annotation.Lazy;
 import jakarta.persistence.criteria.Predicate;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -56,17 +58,20 @@ public class ReportsService {
     private final WorkerRepository workerRepository;
     private final VisitService visitService;
     private final BillingQueryService billingQueryService;
+    private final RolePermissionService rolePermissionService;
 
     public ReportsService(
             VisitRepository visitRepository,
             WorkerRepository workerRepository,
             VisitService visitService,
-            BillingQueryService billingQueryService
+            BillingQueryService billingQueryService,
+            @Lazy RolePermissionService rolePermissionService
     ) {
         this.visitRepository = visitRepository;
         this.workerRepository = workerRepository;
         this.visitService = visitService;
         this.billingQueryService = billingQueryService;
+        this.rolePermissionService = rolePermissionService;
     }
 
     @Transactional(readOnly = true)
@@ -120,9 +125,11 @@ public class ReportsService {
                 : (diffDays == 0 ? "today" : (diffDays <= 7 ? "week" : (diffDays <= 31 ? "month" : "custom")));
 
         // Determine worker scope
-        boolean isAdminOrManager = authUser.roles() != null && authUser.roles().stream().anyMatch(r ->
+        boolean isAdminOrManager = (authUser.roles() != null && authUser.roles().stream().anyMatch(r ->
                 r == RoleName.ADMIN || r == RoleName.MANAGER || r == RoleName.CLINIC_ADMIN
-        );
+        )) || (rolePermissionService != null && rolePermissionService.userHasAnyPermission(
+                authUser, PermissionName.REPORTS_VIEW
+        ));
 
         UUID effectiveWorkerId = authUser.userId();
         if (targetWorkerId != null && isAdminOrManager) {
@@ -160,14 +167,18 @@ public class ReportsService {
             if (isAdminOrManager) {
                 allowedTabs.add("clinician");
                 allowedTabs.add("finance");
+                allowedTabs.add("nurse");
+                allowedTabs.add("reception");
             } else {
                 return ApiResponse.error("You do not have permission to view reports.");
             }
         }
 
-        boolean canViewFinance = authUser.roles() != null && authUser.roles().stream().anyMatch(r ->
+        boolean canViewFinance = (authUser.roles() != null && authUser.roles().stream().anyMatch(r ->
                 r == RoleName.FINANCE || r == RoleName.CLINICIAN || r == RoleName.ADMIN || r == RoleName.MANAGER
-        );
+        )) || (rolePermissionService != null && rolePermissionService.userHasAnyPermission(
+                authUser, PermissionName.BILLING_VIEW, PermissionName.FINANCE_REPORTS_VIEW, PermissionName.REPORTS_VIEW
+        ));
 
         LocalDateTime startDateTime = startDate.atStartOfDay();
         LocalDateTime endDateTime = endDate.atTime(LocalTime.MAX);
@@ -1676,10 +1687,12 @@ public class ReportsService {
             return ApiResponse.unauthenticated("Authentication is required to view reports.");
         }
 
-        boolean canAccessClinicReports = authUser.roles() != null && authUser.roles().stream().anyMatch(r ->
+        boolean canAccessClinicReports = (authUser.roles() != null && authUser.roles().stream().anyMatch(r ->
                 r == RoleName.ADMIN || r == RoleName.MANAGER || r == RoleName.CLINIC_ADMIN
                         || r == RoleName.FINANCE_REPORTS
-        );
+        )) || (rolePermissionService != null && rolePermissionService.userHasAnyPermission(
+                authUser, PermissionName.REPORTS_VIEW, PermissionName.FINANCE_REPORTS_VIEW
+        ));
 
         if (!canAccessClinicReports) {
             return ApiResponse.unauthorised("You do not have permission to access financial reports.");
@@ -2592,10 +2605,12 @@ public class ReportsService {
             return ApiResponse.unauthenticated("Authentication is required to view diagnostic reports.");
         }
 
-        boolean canAccessMedical = authUser.roles() != null && authUser.roles().stream().anyMatch(r ->
+        boolean canAccessMedical = (authUser.roles() != null && authUser.roles().stream().anyMatch(r ->
                 r == RoleName.ADMIN || r == RoleName.MANAGER || r == RoleName.CLINIC_ADMIN
                         || r == RoleName.MEDICAL_REPORTS || r == RoleName.CLINICIAN
-        );
+        )) || (rolePermissionService != null && rolePermissionService.userHasAnyPermission(
+                authUser, PermissionName.REPORTS_VIEW, PermissionName.MEDICAL_REPORTS_VIEW
+        ));
 
         if (!canAccessMedical) {
             return ApiResponse.unauthorised("You do not have permission to access medical & diagnostic reports.");
