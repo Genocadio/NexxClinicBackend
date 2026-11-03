@@ -32,6 +32,7 @@ public class ClinicSseRegistry {
             UUID workerId,
             String workerName,
             String role,
+            String activity,
             long lastActiveAt
     ) {}
 
@@ -106,13 +107,18 @@ public class ClinicSseRegistry {
     }
 
     public List<Map<String, Object>> updatePresence(UUID visitId, UUID workerId, String workerName, String role, boolean active) {
+        return updatePresence(visitId, workerId, workerName, role, active, null);
+    }
+
+    public List<Map<String, Object>> updatePresence(UUID visitId, UUID workerId, String workerName, String role, boolean active, String activity) {
         if (visitId == null || workerId == null) {
             return List.of();
         }
 
         Map<UUID, ViewerInfo> viewers = visitPresence.computeIfAbsent(visitId, k -> new ConcurrentHashMap<>());
         if (active) {
-            viewers.put(workerId, new ViewerInfo(workerId, workerName, role, System.currentTimeMillis()));
+            String act = (activity != null && !activity.isBlank()) ? activity.trim() : "viewing";
+            viewers.put(workerId, new ViewerInfo(workerId, workerName, role, act, System.currentTimeMillis()));
         } else {
             viewers.remove(workerId);
         }
@@ -138,6 +144,7 @@ public class ClinicSseRegistry {
                     map.put("workerId", v.workerId().toString());
                     map.put("workerName", v.workerName());
                     map.put("role", v.role());
+                    map.put("activity", v.activity());
                     return map;
                 })
                 .toList();

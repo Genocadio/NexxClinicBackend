@@ -70,6 +70,7 @@ public class ClinicSseController {
     public ApiResponse<List<Map<String, Object>>> updatePresence(
             @RequestParam UUID visitId,
             @RequestParam(defaultValue = "true") boolean active,
+            @RequestParam(required = false) String activity,
             @AuthenticationPrincipal AuthenticatedUser user
     ) {
         if (user == null || user.userId() == null || visitId == null) {
@@ -86,7 +87,7 @@ public class ClinicSseController {
             workerName = workerName.trim();
         }
 
-        List<Map<String, Object>> activeViewers = sseRegistry.updatePresence(visitId, user.userId(), workerName, primaryRole, active);
+        List<Map<String, Object>> activeViewers = sseRegistry.updatePresence(visitId, user.userId(), workerName, primaryRole, active, activity);
         clinicEventPublisher.publishPresenceChanged(visitId, activeViewers);
 
         return ApiResponse.success("Presence updated.", activeViewers);
