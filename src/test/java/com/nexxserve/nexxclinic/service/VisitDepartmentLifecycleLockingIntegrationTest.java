@@ -906,6 +906,72 @@ class VisitDepartmentLifecycleLockingIntegrationTest {
     }
 
     @Test
+    void testContinueConsultationBringsUnbilledDepartmentBackToActive() {
+        Visit testVisit = new Visit();
+        testVisit.setPatient(patient);
+        testVisit.setStatus(VisitStatus.IN_PROGRESS);
+        testVisit.setVisitDate(LocalDateTime.now());
+        testVisit = visitRepository.save(testVisit);
+
+        Department testDept = new Department();
+        testDept.setName("Consultation Dept " + UUID.randomUUID());
+        testDept = departmentRepository.save(testDept);
+
+        ApiResponse<VisitDto> addDeptRes = visitDepartmentService.addVisitDepartment(
+                testVisit.getId(),
+                testDept.getId(),
+                null,
+                EncounterType.OUTPATIENT,
+                clinicianWorker.getId(),
+                authUser
+        );
+        assertEquals(ResponseStatus.SUCCESS, addDeptRes.status());
+        UUID visitDeptId = addDeptRes.data().departments().get(0).id();
+
+        // Mark as BILLING (sent for billing)
+        VisitDepartment visitDept = visitDepartmentRepository.findById(visitDeptId).orElseThrow();
+        visitDept.setStatus(VisitDepartmentStatus.BILLING);
+        visitDepartmentRepository.save(visitDept);
+
+        // Case 1: Department is sent for billing, but unbilled.
+        // Calling consultVisit must bring it back to ACTIVE consultation state.
+        ApiResponse<com.nexxserve.nexxclinic.dto.out.VisitDepartmentDto> consultRes =
+                visitDepartmentService.consultVisit(visitDeptId, null, authUser);
+        assertEquals(ResponseStatus.SUCCESS, consultRes.status());
+        assertEquals(VisitDepartmentStatus.ACTIVE, consultRes.data().status());
+
+        VisitDepartment refreshedDept = visitDepartmentRepository.findById(visitDeptId).orElseThrow();
+        assertEquals(VisitDepartmentStatus.ACTIVE, refreshedDept.getStatus(),
+                "Unbilled department sent for billing must revert to ACTIVE on continue consultation");
+
+        // Case 2: Once actually billed, consultVisit must NOT revert status to ACTIVE
+        refreshedDept.setStatus(VisitDepartmentStatus.BILLING);
+        visitDepartmentRepository.save(refreshedDept);
+
+        // Simulate billing record existing
+        VisitBilling vb = new VisitBilling();
+        vb.setVisit(testVisit);
+        vb = visitBillingRepository.save(vb);
+
+        VisitDepartmentBilling billing = new VisitDepartmentBilling();
+        billing.setVisitBilling(vb);
+        billing.setVisitDepartment(refreshedDept);
+        billing.setStatus(VisitBillingStatus.PAID);
+        billing.setTotalAmount(BigDecimal.TEN);
+        billing.setInsuranceCoveredAmount(BigDecimal.ZERO);
+        billing.setPatientPayableAmount(BigDecimal.TEN);
+        billing.setPaidAmount(BigDecimal.TEN);
+        billing.setOutstandingAmount(BigDecimal.ZERO);
+        visitDepartmentBillingRepository.save(billing);
+
+        ApiResponse<com.nexxserve.nexxclinic.dto.out.VisitDepartmentDto> billedConsultRes =
+                visitDepartmentService.consultVisit(refreshedDept.getId(), null, authUser);
+        assertEquals(ResponseStatus.SUCCESS, billedConsultRes.status());
+        assertEquals(VisitDepartmentStatus.BILLING, billedConsultRes.data().status(),
+                "Already-billed department must remain in BILLING status on continue consultation");
+    }
+
+    @Test
     void testUncancelDepartmentOnActiveVisitAndBlockedOnTerminalVisit() {
         // Setup reception worker
         Worker receptionWorker = new Worker();

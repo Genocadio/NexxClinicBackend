@@ -397,12 +397,36 @@ public class VisitDepartmentService {
             visitDepartment = visitDepartmentRepository.findById(visitDepartmentId).orElse(visitDepartment);
         }
 
-        // 2. If status is PENDING (or not yet active), transition to ACTIVE
-        if (visitDepartment.getStatus() == VisitDepartmentStatus.PENDING) {
+        // 2. If status is PENDING (or not yet active), transition to ACTIVE.
+        // If status is BILLING and department is NOT yet billed in billing records/products,
+        // bring it back to ACTIVE consultation state so the clinician can add products,
+        // investigations, and notes.
+        boolean isBilled = visitDepartmentBillingRepository.existsByVisitDepartmentId(visitDepartment.getId())
+                || visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartment.getId()).stream()
+                    .anyMatch(p -> !p.isDeleted() && p.getBillingState() == BillingState.BILLED);
+
+        boolean wasReactivated = false;
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.PENDING
+                || (visitDepartment.getStatus() == VisitDepartmentStatus.BILLING && !isBilled)) {
             visitDepartment.setStatus(VisitDepartmentStatus.ACTIVE);
+            wasReactivated = true;
             if (visit != null && visit.getStatus() == VisitStatus.CREATED) {
                 visit.setStatus(VisitStatus.IN_PROGRESS);
                 visitRepository.save(visit);
+            }
+            if (visitDepartment.getAnswerId() != null) {
+                standaloneFormAnswerRepository.findById(visitDepartment.getAnswerId()).ifPresent(ans -> {
+                    if (ans.getStatus() == AnswerStatus.FINAL || ans.getStatus() == AnswerStatus.SUBMITTED) {
+                        ans.setStatus(AnswerStatus.DRAFT);
+                        standaloneFormAnswerRepository.save(ans);
+                    }
+                });
+                consultationAnswerRepository.findById(visitDepartment.getAnswerId()).ifPresent(ans -> {
+                    if (ans.getStatus() == AnswerStatus.FINAL || ans.getStatus() == AnswerStatus.SUBMITTED) {
+                        ans.setStatus(AnswerStatus.DRAFT);
+                        consultationAnswerRepository.save(ans);
+                    }
+                });
             }
         }
 
@@ -434,6 +458,10 @@ public class VisitDepartmentService {
         VisitDepartment fresh = visitId != null
                 ? visitDepartmentRepository.findByIdWithVisitAndDepartment(saved.getId()).orElse(saved)
                 : saved;
+
+        if (wasReactivated) {
+            clinicEventPublisher.publishDepartmentStateChanged(fresh, actingUser);
+        }
 
         return ApiResponse.success(
                 "Consultation active.",
@@ -663,10 +691,18 @@ public class VisitDepartmentService {
         if (parent.getStatus() == VisitDepartmentStatus.CANCELLED) {
             return ApiResponse.error("Cannot add child departments to a cancelled department.");
         }
-        // S5: a department in BILLING status is frozen for finance; new products must
+        // S5: a department that has been BILLED is frozen for finance; new products must
         // go through editBillVisit so a new billing version captures them.
-        if (parent.getStatus() == VisitDepartmentStatus.BILLING) {
-            return ApiResponse.error("Cannot add child departments to a department in BILLING status. Use editBillVisit to correct the billing.");
+        boolean isParentBilled = visitDepartmentBillingRepository.existsByVisitDepartmentId(parent.getId())
+                || visitDepartmentProductRepository.findByVisitDepartmentId(parent.getId()).stream()
+                    .anyMatch(p -> !p.isDeleted() && p.getBillingState() == BillingState.BILLED);
+        if (parent.getStatus() == VisitDepartmentStatus.BILLING && isParentBilled) {
+            return ApiResponse.error("Cannot add child departments to a billed department. Use editBillVisit to correct the billing.");
+        }
+        if (parent.getStatus() == VisitDepartmentStatus.BILLING && !isParentBilled) {
+            parent.setStatus(VisitDepartmentStatus.ACTIVE);
+            parent = visitDepartmentRepository.save(parent);
+            clinicEventPublisher.publishDepartmentStateChanged(parent, resolveWorker(authUser));
         }
 
         if (parent.getDepartment() != null && parent.getDepartment().getId() != null && parent.getDepartment().getId().equals(input.departmentId())) {
