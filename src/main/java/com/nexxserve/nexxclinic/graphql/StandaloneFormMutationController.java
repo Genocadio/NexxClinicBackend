@@ -88,9 +88,10 @@ public class StandaloneFormMutationController {
             @Argument Object answers,
             @Argument AnswerStatus status,
             @Argument Double score,
+            @Argument Boolean sendToBilling,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return formService.updateAnswer(answerId, answers, status, score, authUser);
+        return formService.updateAnswer(answerId, answers, status, score, sendToBilling, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.NURSE, RoleName.CLINICIAN})
@@ -121,10 +122,11 @@ public class StandaloneFormMutationController {
             @Argument Object answers,
             @Argument AnswerStatus status,
             @Argument Double score,
+            @Argument Boolean sendToBilling,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         UUID workerId = authUser != null ? authUser.userId() : null;
-        return formService.saveVisitStandaloneAnswer(visitId, visitDepartmentId, formVersionId, answers, status, score, workerId, authUser);
+        return formService.saveVisitStandaloneAnswer(visitId, visitDepartmentId, formVersionId, answers, status, score, sendToBilling, workerId, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN})

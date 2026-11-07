@@ -285,11 +285,16 @@ public class StandaloneFormService {
 
     @Transactional
     public ApiResponse<StandaloneFormAnswerDto> updateAnswer(UUID answerId, Object answers, AnswerStatus status, Double score) {
-        return updateAnswer(answerId, answers, status, score, null);
+        return updateAnswer(answerId, answers, status, score, false, null);
     }
 
     @Transactional
     public ApiResponse<StandaloneFormAnswerDto> updateAnswer(UUID answerId, Object answers, AnswerStatus status, Double score, AuthenticatedUser authUser) {
+        return updateAnswer(answerId, answers, status, score, false, authUser);
+    }
+
+    @Transactional
+    public ApiResponse<StandaloneFormAnswerDto> updateAnswer(UUID answerId, Object answers, AnswerStatus status, Double score, Boolean sendToBilling, AuthenticatedUser authUser) {
         Optional<StandaloneFormAnswer> answerOpt = answerRepository.findById(answerId);
         if (answerOpt.isEmpty()) {
             return ApiResponse.error("Answer not found");
@@ -318,36 +323,30 @@ public class StandaloneFormService {
 
         StandaloneFormAnswer saved = answerRepository.save(answer);
 
-        // When finalizing, hand off linked department(s) to BILLING if unbilled products exist,
-        // or transition to FINALISED if no products need billing.
-        if (status == AnswerStatus.FINAL) {
-            List<VisitDepartment> linkedDepts = visitDepartmentRepository.findByAnswerId(answerId);
-            for (VisitDepartment dept : linkedDepts) {
-                if (dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.CANCELLED
-                        && dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.COMPLETED
-                        && dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.DEPARTMENT_EDITING) {
-                    List<com.nexxserve.nexxclinic.entity.VisitDepartmentProduct> products = visitDepartmentProductRepository.findByVisitDepartmentId(dept.getId());
-                    boolean hasUnbilled = products.stream().anyMatch(p -> !p.isDeleted()
-                            && p.getBillingState() != com.nexxserve.nexxclinic.model.BillingState.BILLED);
-                    if (hasUnbilled) {
-                        boolean justMarked = dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.BILLING;
-                        dept.setStatus(com.nexxserve.nexxclinic.model.VisitDepartmentStatus.BILLING);
-                        VisitDepartment savedDept = visitDepartmentRepository.save(dept);
-                        if (justMarked) {
-                            clinicEventPublisher.publishDepartmentStateChanged(savedDept, visitDepartmentService.resolveWorker(authUser));
-                        }
-                    } else if (dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.FINALISED) {
-                        dept.setStatus(com.nexxserve.nexxclinic.model.VisitDepartmentStatus.FINALISED);
-                        dept.setCompletedAt(LocalDateTime.now());
-                        Worker worker = visitDepartmentService.resolveWorker(authUser);
-                        if (worker != null) {
-                            dept.setCompletedBy(worker);
-                        }
-                        VisitDepartment savedDept = visitDepartmentRepository.save(dept);
-                        clinicEventPublisher.publishDepartmentStateChanged(savedDept, worker);
-                    }
-                }
+        List<VisitDepartment> newlyMarkedForBilling = new ArrayList<>();
+        List<VisitDepartment> newlyFinalised = new ArrayList<>();
+
+        List<VisitDepartment> linkedDepts = visitDepartmentRepository.findByAnswerId(answerId);
+        if (!linkedDepts.isEmpty()) {
+            VisitDepartment targetDept = linkedDepts.get(0);
+            if (targetDept.getVisit() != null) {
+                processBillingHandoff(
+                        targetDept.getVisit().getId(),
+                        targetDept,
+                        status,
+                        sendToBilling,
+                        authUser,
+                        newlyMarkedForBilling,
+                        newlyFinalised
+                );
             }
+        }
+
+        for (VisitDepartment markedDept : newlyMarkedForBilling) {
+            clinicEventPublisher.publishDepartmentStateChanged(markedDept, visitDepartmentService.resolveWorker(authUser));
+        }
+        for (VisitDepartment finDept : newlyFinalised) {
+            clinicEventPublisher.publishDepartmentStateChanged(finDept, visitDepartmentService.resolveWorker(authUser));
         }
 
         return ApiResponse.success("Answer updated successfully", mapper.toDto(saved));
@@ -379,6 +378,84 @@ public class StandaloneFormService {
         return ApiResponse.success("Answer deleted successfully", true);
     }
 
+    private void processBillingHandoff(
+            UUID visitId,
+            VisitDepartment targetVisitDept,
+            AnswerStatus status,
+            Boolean sendToBilling,
+            AuthenticatedUser authUser,
+            List<VisitDepartment> newlyMarkedForBilling,
+            List<VisitDepartment> newlyFinalised
+    ) {
+        boolean shouldHandoff = (status == AnswerStatus.FINAL) || Boolean.TRUE.equals(sendToBilling);
+        if (!shouldHandoff) {
+            // Auto-save or draft save without explicit handoff: NEVER alter department or visit status!
+            return;
+        }
+
+        List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(visitId);
+
+        // Find if the visit has unbilled products across ANY department of the visit
+        boolean visitHasUnbilled = false;
+        Map<UUID, List<com.nexxserve.nexxclinic.entity.VisitDepartmentProduct>> productsByDept = new HashMap<>();
+        for (VisitDepartment dept : departments) {
+            List<com.nexxserve.nexxclinic.entity.VisitDepartmentProduct> prods =
+                    visitDepartmentProductRepository.findByVisitDepartmentId(dept.getId());
+            productsByDept.put(dept.getId(), prods);
+            if (prods.stream().anyMatch(p -> !p.isDeleted() && p.getBillingState() != com.nexxserve.nexxclinic.model.BillingState.BILLED)) {
+                visitHasUnbilled = true;
+            }
+        }
+
+        Worker worker = visitDepartmentService.resolveWorker(authUser);
+
+        if (visitHasUnbilled) {
+            // Transition departments with unbilled products to BILLING
+            for (VisitDepartment dept : departments) {
+                // If in DEPARTMENT_EDITING mode: KEEP STATE!
+                if (dept.getStatus() == com.nexxserve.nexxclinic.model.VisitDepartmentStatus.DEPARTMENT_EDITING) {
+                    continue;
+                }
+                if (dept.getStatus() == com.nexxserve.nexxclinic.model.VisitDepartmentStatus.CANCELLED
+                        || dept.getStatus() == com.nexxserve.nexxclinic.model.VisitDepartmentStatus.COMPLETED) {
+                    continue;
+                }
+
+                List<com.nexxserve.nexxclinic.entity.VisitDepartmentProduct> prods = productsByDept.getOrDefault(dept.getId(), List.of());
+                boolean deptHasUnbilled = prods.stream().anyMatch(p -> !p.isDeleted() && p.getBillingState() != com.nexxserve.nexxclinic.model.BillingState.BILLED);
+
+                // Department moves to BILLING if it has unbilled products OR if it's the target consultation department
+                if (deptHasUnbilled || (targetVisitDept != null && dept.getId().equals(targetVisitDept.getId()))) {
+                    boolean justMarked = dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.BILLING;
+                    dept.setStatus(com.nexxserve.nexxclinic.model.VisitDepartmentStatus.BILLING);
+                    if (targetVisitDept != null && dept.getId().equals(targetVisitDept.getId())) {
+                        targetVisitDept.setStatus(com.nexxserve.nexxclinic.model.VisitDepartmentStatus.BILLING);
+                    }
+                    VisitDepartment savedDept = visitDepartmentRepository.save(dept);
+                    if (justMarked) {
+                        newlyMarkedForBilling.add(savedDept);
+                    }
+                }
+            }
+        } else {
+            // No unbilled products exist on the visit (e.g. visit is already billed or has no products)
+            if (status == AnswerStatus.FINAL && targetVisitDept != null) {
+                if (targetVisitDept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.DEPARTMENT_EDITING
+                        && targetVisitDept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.CANCELLED
+                        && targetVisitDept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.COMPLETED
+                        && targetVisitDept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.FINALISED) {
+                    targetVisitDept.setStatus(com.nexxserve.nexxclinic.model.VisitDepartmentStatus.FINALISED);
+                    targetVisitDept.setCompletedAt(LocalDateTime.now());
+                    if (worker != null) {
+                        targetVisitDept.setCompletedBy(worker);
+                    }
+                    VisitDepartment savedDept = visitDepartmentRepository.save(targetVisitDept);
+                    newlyFinalised.add(savedDept);
+                }
+            }
+        }
+    }
+
     @Transactional
     public ApiResponse<VisitStandaloneAnswerDto> saveVisitStandaloneAnswer(
             UUID visitId,
@@ -387,6 +464,21 @@ public class StandaloneFormService {
             Object answers,
             AnswerStatus status,
             Double score,
+            UUID workerId,
+            AuthenticatedUser authUser
+    ) {
+        return saveVisitStandaloneAnswer(visitId, visitDepartmentId, versionId, answers, status, score, false, workerId, authUser);
+    }
+
+    @Transactional
+    public ApiResponse<VisitStandaloneAnswerDto> saveVisitStandaloneAnswer(
+            UUID visitId,
+            UUID visitDepartmentId,
+            UUID versionId,
+            Object answers,
+            AnswerStatus status,
+            Double score,
+            Boolean sendToBilling,
             UUID workerId,
             AuthenticatedUser authUser
     ) {
@@ -457,46 +549,15 @@ public class StandaloneFormService {
         List<VisitDepartment> newlyMarkedForBilling = new ArrayList<>();
         List<VisitDepartment> newlyFinalised = new ArrayList<>();
 
-        // CRITICAL: ONLY hand off to billing / finalise when the clinician explicitly finalises (status == FINAL).
-        // Auto-save (status == DRAFT) must NEVER send consultation to billing or lock products!
-        if (status == AnswerStatus.FINAL) {
-            List<VisitDepartment> departments = visitDepartmentRepository.findByVisitId(visitId);
-            for (VisitDepartment dept : departments) {
-                // DEPARTMENT_EDITING is owned by the billing-edit workflow — marking it
-                // BILLING would silently exit edit mode while its products are still
-                // CORRECTION_PENDING (see VisitService.completeVisit guard). Skip it.
-                if (dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.CANCELLED
-                        && dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.COMPLETED
-                        && dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.DEPARTMENT_EDITING) {
-                    List<com.nexxserve.nexxclinic.entity.VisitDepartmentProduct> products = visitDepartmentProductRepository.findByVisitDepartmentId(dept.getId());
-                    boolean hasUnbilled = products.stream().anyMatch(p -> !p.isDeleted()
-                            && p.getBillingState() != com.nexxserve.nexxclinic.model.BillingState.BILLED);
-                    if (hasUnbilled) {
-                        boolean justMarked = dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.BILLING;
-                        dept.setStatus(com.nexxserve.nexxclinic.model.VisitDepartmentStatus.BILLING);
-                        if (dept.getId().equals(visitDept.getId())) {
-                            visitDept.setStatus(com.nexxserve.nexxclinic.model.VisitDepartmentStatus.BILLING);
-                        }
-                        VisitDepartment savedDept = visitDepartmentRepository.save(dept);
-                        if (justMarked) {
-                            newlyMarkedForBilling.add(savedDept);
-                        }
-                    } else if (dept.getId().equals(visitDept.getId()) && dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.FINALISED) {
-                        dept.setStatus(com.nexxserve.nexxclinic.model.VisitDepartmentStatus.FINALISED);
-                        dept.setCompletedAt(LocalDateTime.now());
-                        Worker worker = visitDepartmentService.resolveWorker(authUser);
-                        if (worker != null) {
-                            dept.setCompletedBy(worker);
-                        }
-                        visitDept.setStatus(com.nexxserve.nexxclinic.model.VisitDepartmentStatus.FINALISED);
-                        visitDept.setCompletedAt(dept.getCompletedAt());
-                        visitDept.setCompletedBy(dept.getCompletedBy());
-                        VisitDepartment savedDept = visitDepartmentRepository.save(dept);
-                        newlyFinalised.add(savedDept);
-                    }
-                }
-            }
-        }
+        processBillingHandoff(
+                visitId,
+                visitDept,
+                status,
+                sendToBilling,
+                authUser,
+                newlyMarkedForBilling,
+                newlyFinalised
+        );
 
         VisitDepartment savedVisitDepartment = visitDepartmentRepository.save(visitDept);
         // Broadcast the state changes so other connected sessions refetch live

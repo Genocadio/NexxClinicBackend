@@ -49,6 +49,8 @@ public class WebSecurityConfig {
                         })
                 )
                 .authorizeHttpRequests(registry -> {
+                    // Allow async dispatches (used by SSE streaming endpoints like /api/v1/events/stream)
+                    registry.dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ASYNC, jakarta.servlet.DispatcherType.FORWARD, jakarta.servlet.DispatcherType.ERROR).permitAll();
                     // ── Public endpoints ──────────────────────────────────────
                     // GraphQL auth is handled by GraphQlAuthInterceptor + @HasRole,
                     // not by Spring Security's filter chain, so it must stay open.
