@@ -2016,6 +2016,11 @@ public class ReportsService {
                     double deptPending = 0;
 
                     String deptInsuranceName = resolveVisitInsuranceAcronym(dept, visit, deptBilling, hasInsurance);
+                    String deptInsuranceCardNumber = "";
+                    String deptPrincipalMember = "";
+                    Boolean deptIsPrincipal = null;
+                    String deptInvoiceUrl = null;
+                    List<Map<String, Object>> deptPayments = new ArrayList<>();
 
                     if (deptBilling != null) {
                         Object insListObj = deptBilling.get("insuranceBillings");
@@ -2030,6 +2035,18 @@ public class ReportsService {
                                             String acr = getInsuranceAcronym((String) provMap.get("name"), (String) provMap.get("acronym"));
                                             if (acr != null) insName = acr;
                                         }
+                                        if (deptInsuranceCardNumber.isEmpty() && pMap.get("insuranceCardNumber") != null) {
+                                            deptInsuranceCardNumber = pMap.get("insuranceCardNumber").toString();
+                                        }
+                                        if (deptPrincipalMember.isEmpty() && pMap.get("principalMemberName") != null) {
+                                            deptPrincipalMember = pMap.get("principalMemberName").toString();
+                                        }
+                                        if (deptIsPrincipal == null && pMap.get("principalMember") != null) {
+                                            deptIsPrincipal = Boolean.TRUE.equals(pMap.get("principalMember"));
+                                        }
+                                    }
+                                    if (deptInvoiceUrl == null && ib.get("invoiceUrl") != null) {
+                                        deptInvoiceUrl = ib.get("invoiceUrl").toString();
                                     }
 
                                     double tot = toDouble(ib.get("totalAmount"));
@@ -2184,7 +2201,31 @@ public class ReportsService {
                                     Map<String, Object> pmEntry = paymentModesBreakdownMap.get(methodKey);
                                     pmEntry.put("amount", toDouble(pmEntry.get("amount")) + payAmt);
                                     pmEntry.put("count", (int) pmEntry.get("count") + 1);
+
+                                    Map<String, Object> paymentRecord = new HashMap<>();
+                                    paymentRecord.put("id", pay.get("id"));
+                                    paymentRecord.put("amount", payAmt);
+                                    paymentRecord.put("paymentMethod", methodKey);
+                                    paymentRecord.put("rawMethod", rawMethod);
+                                    paymentRecord.put("reference", pay.get("reference") != null ? pay.get("reference").toString() : "");
+                                    paymentRecord.put("createdAt", pay.get("createdAt") != null ? pay.get("createdAt").toString() : deptTime);
+                                    deptPayments.add(paymentRecord);
                                 }
+                            }
+                        }
+                    }
+
+                    if (deptInsuranceCardNumber.isEmpty() && visit != null && visit.linkedInsurances() != null) {
+                        for (PatientInsuranceDto lIns : visit.linkedInsurances()) {
+                            if (lIns != null && lIns.insuranceCardNumber() != null && !lIns.insuranceCardNumber().isBlank()) {
+                                deptInsuranceCardNumber = lIns.insuranceCardNumber().trim();
+                                if (deptPrincipalMember.isEmpty() && lIns.principalMemberName() != null) {
+                                    deptPrincipalMember = lIns.principalMemberName().trim();
+                                }
+                                if (deptIsPrincipal == null) {
+                                    deptIsPrincipal = lIns.principalMember();
+                                }
+                                break;
                             }
                         }
                     }
@@ -2362,6 +2403,51 @@ public class ReportsService {
                     double finalInsCov = deptGross > 0 ? deptInsCov : encounterProducts.stream().mapToDouble(p -> toDouble(p.get("insuranceCovered"))).sum();
                     double finalPatPay = deptGross > 0 ? deptPatPay : encounterProducts.stream().mapToDouble(p -> toDouble(p.get("patientShare"))).sum();
 
+                    // Extract clinical diagnostics for encounter mapping
+                    List<Map<String, Object>> deptDiagnostics = new ArrayList<>();
+                    String primaryDiagnosis = null;
+                    String primaryIcdCode = null;
+                    if (dept.diagnostics() != null && !dept.diagnostics().isEmpty()) {
+                        for (VisitDepartmentDiagnosisDto diag : dept.diagnostics()) {
+                            if (diag == null) continue;
+                            String dName = diag.diagnosisName() != null ? diag.diagnosisName().trim() : "";
+                            if (dName.isEmpty()) continue;
+                            String icdCode = diag.icd11Code() != null ? diag.icd11Code().trim() : "";
+                            String diagType = diag.type() != null ? diag.type().name() : "FINAL";
+                            Map<String, Object> dMap = new HashMap<>();
+                            dMap.put("diagnosisName", dName);
+                            dMap.put("icd11Code", icdCode);
+                            dMap.put("type", diagType);
+                            deptDiagnostics.add(dMap);
+                            if (primaryDiagnosis == null) {
+                                primaryDiagnosis = !icdCode.isEmpty() ? (dName + " (" + icdCode + ")") : dName;
+                                primaryIcdCode = !icdCode.isEmpty() ? icdCode : null;
+                            }
+                        }
+                    }
+                    if (deptDiagnostics.isEmpty() && visit != null && visit.departments() != null) {
+                        for (VisitDepartmentDto otherDept : visit.departments()) {
+                            if (otherDept != null && otherDept.diagnostics() != null) {
+                                for (VisitDepartmentDiagnosisDto diag : otherDept.diagnostics()) {
+                                    if (diag == null) continue;
+                                    String dName = diag.diagnosisName() != null ? diag.diagnosisName().trim() : "";
+                                    if (dName.isEmpty()) continue;
+                                    String icdCode = diag.icd11Code() != null ? diag.icd11Code().trim() : "";
+                                    String diagType = diag.type() != null ? diag.type().name() : "FINAL";
+                                    Map<String, Object> dMap = new HashMap<>();
+                                    dMap.put("diagnosisName", dName);
+                                    dMap.put("icd11Code", icdCode);
+                                    dMap.put("type", diagType);
+                                    deptDiagnostics.add(dMap);
+                                    if (primaryDiagnosis == null) {
+                                        primaryDiagnosis = !icdCode.isEmpty() ? (dName + " (" + icdCode + ")") : dName;
+                                        primaryIcdCode = !icdCode.isEmpty() ? icdCode : null;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     Map<String, Object> encDetail = new HashMap<>();
                     encDetail.put("id", "clinic-enc-" + dept.id());
                     encDetail.put("visitId", visit.id() != null ? visit.id().toString() : "");
@@ -2377,6 +2463,14 @@ public class ReportsService {
                     encDetail.put("clinicianId", clinIdStr);
                     encDetail.put("clinicianName", clinName);
                     encDetail.put("insuranceName", deptInsuranceName);
+                    encDetail.put("insuranceCardNumber", deptInsuranceCardNumber);
+                    encDetail.put("principalMemberName", deptPrincipalMember);
+                    encDetail.put("isPrincipalMember", deptIsPrincipal);
+                    encDetail.put("invoiceUrl", deptInvoiceUrl);
+                    encDetail.put("payments", deptPayments);
+                    encDetail.put("diagnostics", deptDiagnostics);
+                    encDetail.put("primaryDiagnosis", primaryDiagnosis);
+                    encDetail.put("primaryIcdCode", primaryIcdCode);
                     encDetail.put("status", dept.status() != null ? dept.status().name() : "PENDING");
                     encDetail.put("products", encounterProducts);
                     encDetail.put("totalGross", finalGross);
