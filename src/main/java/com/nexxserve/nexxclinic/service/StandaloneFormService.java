@@ -296,9 +296,13 @@ public class StandaloneFormService {
         }
 
         StandaloneFormAnswer answer = answerOpt.get();
-        // Prevent reverting a FINAL answer back to DRAFT
+        // Prevent reverting a FINAL answer back to DRAFT unless in DEPARTMENT_EDITING mode
         if (answer.getStatus() == AnswerStatus.FINAL && status == AnswerStatus.DRAFT) {
-            return ApiResponse.error("Cannot modify a finalized answer back to draft");
+            List<VisitDepartment> linkedDepts = visitDepartmentRepository.findByAnswerId(answerId);
+            boolean isDeptEditing = linkedDepts.stream().anyMatch(d -> d.getStatus() == com.nexxserve.nexxclinic.model.VisitDepartmentStatus.DEPARTMENT_EDITING);
+            if (!isDeptEditing) {
+                return ApiResponse.error("Cannot modify a finalized answer back to draft");
+            }
         }
 
         answer.setAnswers(serializeJson(answers));
@@ -425,9 +429,12 @@ public class StandaloneFormService {
             answer.setFormVersion(versionOpt.get());
         }
 
-        // Prevent reverting a finalized answer back to draft
+        // Prevent reverting a finalized answer back to draft unless department is in DEPARTMENT_EDITING mode
         if (answer.getStatus() == AnswerStatus.FINAL && status == AnswerStatus.DRAFT) {
-            return ApiResponse.error("Cannot modify a finalized answer back to draft");
+            boolean isDeptEditing = visitDept.getStatus() == com.nexxserve.nexxclinic.model.VisitDepartmentStatus.DEPARTMENT_EDITING;
+            if (!isDeptEditing) {
+                return ApiResponse.error("Cannot modify a finalized answer back to draft");
+            }
         }
 
         answer.setAnswers(serializeJson(answers));
