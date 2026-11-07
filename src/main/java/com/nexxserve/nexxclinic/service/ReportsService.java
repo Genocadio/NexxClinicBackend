@@ -1847,6 +1847,8 @@ public class ReportsService {
         List<Map<String, Object>> adjustmentsList = new ArrayList<>();
         List<Map<String, Object>> loansList = new ArrayList<>();
         List<Map<String, Object>> diagnosticReportsList = new ArrayList<>();
+        List<Map<String, Object>> clinicEncountersList = new ArrayList<>();
+        List<Map<String, Object>> clinicProductTurnoverList = new ArrayList<>();
 
         if (isDailyView) {
             for (int h = 6; h <= 20; h++) {
@@ -2188,6 +2190,7 @@ public class ReportsService {
                     }
 
                     // Products inspection (Category breakdown, Waivers, Adjustments, Pending billing)
+                    List<Map<String, Object>> encounterProducts = new ArrayList<>();
                     if (dept.products() != null) {
                         for (VisitDepartmentProductDto prod : dept.products()) {
                             String pStatus = prod.status() != null ? prod.status().name() : "";
@@ -2201,6 +2204,51 @@ public class ReportsService {
                                     ? toDouble(pBillingItem.get("unitPriceSnapshot"))
                                     : catalogPrice;
                             double lineTotal = qty * unitPrice;
+
+                            double prodInsCov = (pBillingItem != null && pBillingItem.get("insuranceCoveredAmount") != null)
+                                    ? toDouble(pBillingItem.get("insuranceCoveredAmount"))
+                                    : 0.0;
+                            double prodPatShare = (pBillingItem != null && pBillingItem.get("patientPayableAmount") != null)
+                                    ? toDouble(pBillingItem.get("patientPayableAmount"))
+                                    : Math.max(0.0, lineTotal - prodInsCov);
+
+                            Map<String, Object> pMap = new HashMap<>();
+                            pMap.put("id", prod.id() != null ? prod.id().toString() : "");
+                            pMap.put("name", prodName);
+                            pMap.put("code", prod.product() != null ? prod.product().code() : null);
+                            pMap.put("quantity", qty);
+                            pMap.put("unitPrice", unitPrice);
+                            pMap.put("lineTotal", lineTotal);
+                            pMap.put("insuranceCovered", prodInsCov);
+                            pMap.put("patientShare", prodPatShare);
+                            pMap.put("status", !pStatus.isEmpty() ? pStatus : "PENDING");
+                            pMap.put("type", prodType);
+                            encounterProducts.add(pMap);
+
+                            Map<String, Object> prodTurnover = new HashMap<>();
+                            prodTurnover.put("id", "prod-" + prod.id());
+                            prodTurnover.put("visitId", visit.id() != null ? visit.id().toString() : "");
+                            prodTurnover.put("visitDepartmentId", dept.id() != null ? dept.id().toString() : "");
+                            prodTurnover.put("timestamp", deptTime);
+                            prodTurnover.put("productName", prodName);
+                            prodTurnover.put("productCode", prod.product() != null ? prod.product().code() : null);
+                            prodTurnover.put("patientName", patientName);
+                            prodTurnover.put("patientId", patientId);
+                            prodTurnover.put("patientIdentifier", patientIdentifier);
+                            prodTurnover.put("departmentId", deptId);
+                            prodTurnover.put("departmentName", deptName);
+                            prodTurnover.put("clinicianId", clinIdStr);
+                            prodTurnover.put("clinicianName", clinName);
+                            prodTurnover.put("quantity", qty);
+                            prodTurnover.put("unitPrice", unitPrice);
+                            prodTurnover.put("lineTotal", lineTotal);
+                            prodTurnover.put("insuranceName", deptInsuranceName);
+                            prodTurnover.put("insuranceCoveredAmount", prodInsCov);
+                            prodTurnover.put("patientPayableAmount", prodPatShare);
+                            prodTurnover.put("status", !pStatus.isEmpty() ? pStatus : "PENDING");
+                            prodTurnover.put("isBilled", "BILLED".equals(pStatus));
+                            prodTurnover.put("isExempted", "EXEMPTED".equals(pStatus) || "PATIENT_SHARE_EXEMPTED".equals(pStatus));
+                            clinicProductTurnoverList.add(prodTurnover);
 
                             // Category accumulation
                             if (!categoryBreakdownMap.containsKey(prodType)) {
@@ -2308,6 +2356,38 @@ public class ReportsService {
                             }
                         }
                     }
+
+                    // Encounter Detail mapping
+                    double finalGross = deptGross > 0 ? deptGross : encounterProducts.stream().mapToDouble(p -> toDouble(p.get("lineTotal"))).sum();
+                    double finalInsCov = deptGross > 0 ? deptInsCov : encounterProducts.stream().mapToDouble(p -> toDouble(p.get("insuranceCovered"))).sum();
+                    double finalPatPay = deptGross > 0 ? deptPatPay : encounterProducts.stream().mapToDouble(p -> toDouble(p.get("patientShare"))).sum();
+
+                    Map<String, Object> encDetail = new HashMap<>();
+                    encDetail.put("id", "clinic-enc-" + dept.id());
+                    encDetail.put("visitId", visit.id() != null ? visit.id().toString() : "");
+                    encDetail.put("visitDepartmentId", dept.id() != null ? dept.id().toString() : "");
+                    encDetail.put("timestamp", deptTime);
+                    encDetail.put("patientName", patientName);
+                    encDetail.put("patientId", patientId);
+                    encDetail.put("patientIdentifier", patientIdentifier);
+                    encDetail.put("gender", patientGender);
+                    encDetail.put("age", patientAge);
+                    encDetail.put("departmentId", deptId);
+                    encDetail.put("departmentName", deptName);
+                    encDetail.put("clinicianId", clinIdStr);
+                    encDetail.put("clinicianName", clinName);
+                    encDetail.put("insuranceName", deptInsuranceName);
+                    encDetail.put("status", dept.status() != null ? dept.status().name() : "PENDING");
+                    encDetail.put("products", encounterProducts);
+                    encDetail.put("totalGross", finalGross);
+                    encDetail.put("totalInsurance", finalInsCov);
+                    encDetail.put("totalPatient", finalPatPay);
+                    encDetail.put("patientPaid", deptPaid);
+                    encDetail.put("loanAmount", deptLoan);
+                    encDetail.put("giveawayAmount", deptGiveaway);
+                    encDetail.put("waiverAmount", deptWaiver);
+                    encDetail.put("pendingAmount", deptPending);
+                    clinicEncountersList.add(encDetail);
 
                     // Department summary accumulation
                     if (!departmentBreakdownMap.containsKey(deptId)) {
@@ -2495,6 +2575,17 @@ public class ReportsService {
         overview.put("pendingBillingCount", pendingBillingCount);
         overview.put("settlementRatePct", settlementRatePct);
 
+        Comparator<Map<String, Object>> clinicTimeDesc = (a, b) -> {
+            String ta = (String) a.get("timestamp");
+            String tb = (String) b.get("timestamp");
+            if (ta == null && tb == null) return 0;
+            if (ta == null) return 1;
+            if (tb == null) return -1;
+            return tb.compareTo(ta);
+        };
+        clinicEncountersList.sort(clinicTimeDesc);
+        clinicProductTurnoverList.sort(clinicTimeDesc);
+
         // Assemble financial breakdown
         Map<String, Object> financialBreakdown = new HashMap<>();
         financialBreakdown.put("momoCollected", momoCollected);
@@ -2508,6 +2599,8 @@ public class ReportsService {
         financialBreakdown.put("departmentBreakdown", departmentBreakdown);
         financialBreakdown.put("clinicianBreakdown", clinicianBreakdown);
         financialBreakdown.put("moneyTimeline", moneyTimeline);
+        financialBreakdown.put("encountersList", clinicEncountersList);
+        financialBreakdown.put("productTurnoverList", clinicProductTurnoverList);
 
         // Assemble deep reports
         Map<String, Object> deepReports = new HashMap<>();
@@ -2515,6 +2608,8 @@ public class ReportsService {
         deepReports.put("giveaways", giveawaysList);
         deepReports.put("adjustments", adjustmentsList);
         deepReports.put("loans", loansList);
+        deepReports.put("encounters", clinicEncountersList);
+        deepReports.put("productTurnoverList", clinicProductTurnoverList);
         deepReports.put("diagnosticReports", diagnosticReportsList);
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -2524,6 +2619,8 @@ public class ReportsService {
         result.put("overview", overview);
         result.put("financialBreakdown", financialBreakdown);
         result.put("deepReports", deepReports);
+        result.put("encountersList", clinicEncountersList);
+        result.put("productTurnoverList", clinicProductTurnoverList);
         result.put("diagnosticReports", diagnosticReportsList);
 
         return result;
