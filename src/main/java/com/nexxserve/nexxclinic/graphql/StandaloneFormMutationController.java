@@ -90,7 +90,7 @@ public class StandaloneFormMutationController {
             @Argument Double score,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
-        return formService.updateAnswer(answerId, answers, status, score);
+        return formService.updateAnswer(answerId, answers, status, score, authUser);
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.NURSE, RoleName.CLINICIAN})

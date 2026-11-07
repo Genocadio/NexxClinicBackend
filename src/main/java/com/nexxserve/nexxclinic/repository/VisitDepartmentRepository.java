@@ -24,6 +24,8 @@ public interface VisitDepartmentRepository extends JpaRepository<VisitDepartment
 
     List<VisitDepartment> findByVisitId(UUID visitId);
 
+    List<VisitDepartment> findByAnswerId(UUID answerId);
+
     List<VisitDepartment> findByVisitIdIn(Collection<UUID> visitIds);
 
     List<VisitDepartment> findByVisitIdAndParentVisitDepartmentIsNull(UUID visitId);
