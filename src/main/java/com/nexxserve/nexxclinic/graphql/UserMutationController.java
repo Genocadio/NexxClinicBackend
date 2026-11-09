@@ -16,9 +16,11 @@ import com.nexxserve.nexxclinic.graphql.input.RefreshSessionInput;
 import com.nexxserve.nexxclinic.graphql.input.SelfRegisterInput;
 import com.nexxserve.nexxclinic.graphql.input.SetInitialPasswordInput;
 import com.nexxserve.nexxclinic.graphql.input.UpdateMyProfileInput;
+import com.nexxserve.nexxclinic.graphql.input.UpdateUserSettingsInput;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.security.HasRole;
+import com.nexxserve.nexxclinic.service.UserSettingService;
 import com.nexxserve.nexxclinic.service.WorkerService;
 import jakarta.validation.Valid;
 import org.springframework.graphql.data.method.annotation.Argument;
@@ -31,9 +33,22 @@ import java.util.UUID;
 public class UserMutationController {
 
     private final WorkerService workerService;
+    private final UserSettingService userSettingService;
 
-    public UserMutationController(WorkerService workerService) {
+    public UserMutationController(WorkerService workerService, UserSettingService userSettingService) {
         this.workerService = workerService;
+        this.userSettingService = userSettingService;
+    }
+
+    @MutationMapping
+    public ApiResponse updateMySettings(
+            @Argument @Valid UpdateUserSettingsInput input,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        if (authUser == null) {
+            return ApiResponse.unauthenticated("Authentication is required for this operation.");
+        }
+        return userSettingService.updateMySettings(authUser.userId(), input);
     }
 
     @MutationMapping

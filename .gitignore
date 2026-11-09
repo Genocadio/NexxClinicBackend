@@ -28,6 +28,8 @@ out/
 !**/src/test/**/out/
 
 logs/
+*.log
+backend.log
 *.pdf
 .DS_Store
 .kilo/

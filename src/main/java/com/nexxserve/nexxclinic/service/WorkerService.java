@@ -67,6 +67,7 @@ public class WorkerService {
     private final MeilisearchIndexService meilisearchIndexService;
     private final LoginRateLimiterService loginRateLimiterService;
     private final com.nexxserve.nexxclinic.events.ClinicEventPublisher clinicEventPublisher;
+    private final UserSettingService userSettingService;
 
     public WorkerService(
             WorkerRepository workerRepository,
@@ -81,7 +82,8 @@ public class WorkerService {
             AdminAuditService adminAuditService,
             MeilisearchIndexService meilisearchIndexService,
             LoginRateLimiterService loginRateLimiterService,
-            com.nexxserve.nexxclinic.events.ClinicEventPublisher clinicEventPublisher
+            com.nexxserve.nexxclinic.events.ClinicEventPublisher clinicEventPublisher,
+            UserSettingService userSettingService
     ) {
         this.workerRepository = workerRepository;
         this.departmentRepository = departmentRepository;
@@ -96,6 +98,7 @@ public class WorkerService {
         this.meilisearchIndexService = meilisearchIndexService;
         this.loginRateLimiterService = loginRateLimiterService;
         this.clinicEventPublisher = clinicEventPublisher;
+        this.userSettingService = userSettingService;
     }
 
     @Transactional
@@ -1096,6 +1099,7 @@ public class WorkerService {
         data.put("mustChangeOnNextLogin", worker.isMustChangeOnNextLogin());
         data.put("departments", worker.getDepartments() == null ? List.of() : worker.getDepartments().stream().map(this::departmentToMap).toList());
         data.put("department", departmentToMap(worker.getDepartment()));
+        data.put("settings", userSettingService.getSettingsMap(worker.getId()));
         data.put("maxActiveSessions", sessionTokenService.resolveEffectiveMaxSessions(worker));
         data.put("activeSessions", sessionTokenService.countActiveRefreshSessionsForUser(worker.getId()));
         data.put("createdAt", worker.getCreatedAt());

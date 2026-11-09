@@ -107,6 +107,9 @@ public class Worker {
     @org.hibernate.annotations.BatchSize(size = 50)
     private Set<RoleName> roles = new LinkedHashSet<>();
 
+    @jakarta.persistence.OneToOne(mappedBy = "worker", cascade = jakarta.persistence.CascadeType.ALL, fetch = FetchType.LAZY)
+    private UserSetting userSetting;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -329,5 +332,13 @@ public class Worker {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public UserSetting getUserSetting() {
+        return userSetting;
+    }
+
+    public void setUserSetting(UserSetting userSetting) {
+        this.userSetting = userSetting;
     }
 }

@@ -4,6 +4,7 @@ import com.nexxserve.nexxclinic.auth.AuthenticatedUser;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
 import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.security.HasRole;
+import com.nexxserve.nexxclinic.service.UserSettingService;
 import com.nexxserve.nexxclinic.service.WorkerService;
 import java.util.UUID;
 import org.springframework.graphql.data.method.annotation.Argument;
@@ -15,9 +16,19 @@ import org.springframework.stereotype.Controller;
 public class UserQueryController {
 
     private final WorkerService workerService;
+    private final UserSettingService userSettingService;
 
-    public UserQueryController(WorkerService workerService) {
+    public UserQueryController(WorkerService workerService, UserSettingService userSettingService) {
         this.workerService = workerService;
+        this.userSettingService = userSettingService;
+    }
+
+    @QueryMapping
+    public ApiResponse mySettings(@ContextValue(name = "authUser", required = false) AuthenticatedUser authUser) {
+        if (authUser == null) {
+            return ApiResponse.unauthenticated("Authentication is required for this operation.");
+        }
+        return userSettingService.getMySettings(authUser.userId());
     }
 
     @QueryMapping

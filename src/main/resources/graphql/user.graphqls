@@ -321,6 +321,7 @@ type Worker {
   accountStatus: AccountStatus!
   roles: [RoleName!]!
   departments: [Department!]!
+  settings: UserSetting
   createdAt: String!
   updatedAt: String!
 }
@@ -335,6 +336,28 @@ type WorkerListResponse implements ApiResponse {
   status: ResponseStatus!
   message: String
     data: [Worker!]
+}
+
+type UserSetting {
+  id: ID
+  workerId: ID
+  fontSize: String
+  theme: String
+  settingsJson: JSON
+  createdAt: String
+  updatedAt: String
+}
+
+type UserSettingResponse implements ApiResponse {
+  status: ResponseStatus!
+  message: String
+  data: UserSetting
+}
+
+input UpdateUserSettingsInput {
+  fontSize: String
+  theme: String
+  settingsJson: JSON
 }
 
 type AuditLog {
@@ -1957,9 +1980,11 @@ type Query {
   getUserReports(fromDate: String, toDate: String, period: String, workerId: ID): UserReportsResponse!
   getClinicReports(fromDate: String, toDate: String, period: String, departmentId: ID, departmentIds: [ID], clinicianId: ID, clinicianIds: [ID], insuranceId: ID, insuranceIds: [ID], isPrivateOnly: Boolean): UserReportsResponse!
   getDiagnosticReports(fromDate: String, toDate: String, period: String, departmentId: ID, departmentIds: [ID], clinicianId: ID, clinicianIds: [ID]): UserReportsResponse!
+  mySettings: UserSettingResponse!
 }
 
 type Mutation {
+  updateMySettings(input: UpdateUserSettingsInput!): UserSettingResponse!
   selfRegister(input: SelfRegisterInput!): WorkerResponse!
   adminCreateUser(input: AdminCreateUserInput!): WorkerResponse!
   adminUpdateUser(userId: ID!, input: AdminUpdateUserInput!): WorkerResponse!
