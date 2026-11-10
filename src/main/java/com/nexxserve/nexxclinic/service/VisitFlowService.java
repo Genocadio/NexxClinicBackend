@@ -181,6 +181,24 @@ public class VisitFlowService {
             targetVd = fromVd.getParentVisitDepartment();
         }
 
+        // Fallback: if fromVd is consultation (or single department visit), return to fromVd itself
+        if (targetVd == null && fromVd.getDepartment() != null && fromVd.getDepartment().getKind() == DepartmentKind.CONSULTATION) {
+            targetVd = fromVd;
+        }
+
+        // Fallback: use any consultation department on the visit
+        if (targetVd == null) {
+            targetVd = departments.stream()
+                    .filter(vd -> vd.getDepartment() != null && vd.getDepartment().getKind() == DepartmentKind.CONSULTATION)
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        // Fallback: use the first department of the visit
+        if (targetVd == null && !departments.isEmpty()) {
+            targetVd = departments.get(0);
+        }
+
         if (targetVd == null) {
             return ApiResponse.error("Could not determine previous department to return patient to.");
         }

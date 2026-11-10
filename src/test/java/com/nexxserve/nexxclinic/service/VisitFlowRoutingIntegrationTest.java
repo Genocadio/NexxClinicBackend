@@ -173,6 +173,38 @@ class VisitFlowRoutingIntegrationTest {
     }
 
     @Test
+    void testSendBackWithoutTargetDepartmentIdFallbackToConsultation() {
+        Visit visit = new Visit();
+        visit.setPatient(testPatient);
+        visit.setStatus(VisitStatus.IN_PROGRESS);
+        visit.setVisitDate(LocalDateTime.now());
+        visit = visitRepository.save(visit);
+
+        VisitDepartment consultVd = new VisitDepartment();
+        consultVd.setVisit(visit);
+        consultVd.setDepartment(consultationDept);
+        consultVd.setStatus(VisitDepartmentStatus.BILLING);
+        consultVd = visitDepartmentRepository.save(consultVd);
+
+        ApiResponse<VisitDto> response = visitFlowService.sendBackVisit(
+                visit.getId(),
+                consultVd.getId(),
+                null,
+                "Returned with null targetDepartmentId",
+                authUser
+        );
+
+        assertThat(response.status()).isEqualTo(ResponseStatus.SUCCESS);
+        Visit updatedVisit = visitRepository.findById(visit.getId()).orElseThrow();
+        assertThat(updatedVisit.getStatus()).isEqualTo(VisitStatus.IN_PROGRESS);
+        assertThat(updatedVisit.getHasReturnedFromBilling()).isTrue();
+
+        VisitDepartment updatedVd = visitDepartmentRepository.findById(consultVd.getId()).orElseThrow();
+        assertThat(updatedVd.getStatus()).isEqualTo(VisitDepartmentStatus.ACTIVE);
+        assertThat(updatedVd.getAwaitingRole()).isEqualTo("CLINICIAN");
+    }
+
+    @Test
     void testSendVisitToNextActivatesLaboratory() {
         Visit visit = new Visit();
         visit.setPatient(testPatient);
