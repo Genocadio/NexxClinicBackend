@@ -17,5 +17,31 @@ public record VisitDto(
         BigDecimal estimatedTotal,
         BigDecimal estimatedInsurancePay,
         BigDecimal estimatedPatientPay,
-        Boolean quickBillEligible
-) {}
+        Boolean quickBillEligible,
+        String currentLocations,
+        Integer activeEpisodeCount,
+        Boolean isDischarged,
+        Boolean hasReturnedFromBilling,
+        Boolean hasPendingResults,
+        LocalDateTime lastFlowActivityAt
+) {
+    public VisitDto(
+            UUID id,
+            PatientDto patient,
+            VisitStatus status,
+            LocalDateTime visitDate,
+            List<PatientInsuranceDto> linkedInsurances,
+            List<VisitDepartmentDto> departments,
+            List<VisitVitalSignsGroupDto> vitalSigns,
+            BigDecimal estimatedTotal,
+            BigDecimal estimatedInsurancePay,
+            BigDecimal estimatedPatientPay,
+            Boolean quickBillEligible
+    ) {
+        this(
+                id, patient, status, visitDate, linkedInsurances, departments, vitalSigns,
+                estimatedTotal, estimatedInsurancePay, estimatedPatientPay, quickBillEligible,
+                null, 0, false, false, false, null
+        );
+    }
+}

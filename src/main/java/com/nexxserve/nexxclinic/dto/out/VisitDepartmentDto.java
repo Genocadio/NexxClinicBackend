@@ -28,5 +28,42 @@ public record VisitDepartmentDto(
         Boolean hasFinalizedConsultationAnswers,
         Boolean hasBillableProducts,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
-) {}
+        LocalDateTime updatedAt,
+        String awaitingRole,
+        LocalDateTime awaitingSince,
+        String lastRoutingAction,
+        DepartmentDto previousDepartment
+) {
+    public VisitDepartmentDto(
+            UUID id,
+            DepartmentDto department,
+            VisitDepartmentStatus status,
+            EncounterType encounterType,
+            DepartmentProfileDto profile,
+            LocalDateTime startedAt,
+            LocalDateTime completedAt,
+            WorkerDto addedBy,
+            WorkerDto completedBy,
+            List<WorkerDto> processors,
+            List<VisitDepartmentProductDto> products,
+            List<VisitDepartmentDiagnosisDto> diagnostics,
+            List<VisitDepartmentSymptomDto> symptoms,
+            List<VisitDepartmentMedicationDto> medications,
+            List<VisitPreInstructionDto> preInstructions,
+            List<VisitDepartmentDto> childVisitDepartments,
+            VisitDepartmentNotesSummaryDto notes,
+            UUID answerId,
+            Boolean hasFinalizedConsultationAnswers,
+            Boolean hasBillableProducts,
+            LocalDateTime createdAt,
+            LocalDateTime updatedAt
+    ) {
+        this(
+                id, department, status, encounterType, profile, startedAt, completedAt,
+                addedBy, completedBy, processors, products, diagnostics, symptoms,
+                medications, preInstructions, childVisitDepartments, notes, answerId,
+                hasFinalizedConsultationAnswers, hasBillableProducts, createdAt, updatedAt,
+                null, null, null, null
+        );
+    }
+}

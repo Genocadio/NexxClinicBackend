@@ -1,5 +1,6 @@
 package com.nexxserve.nexxclinic.events;
 
+import com.nexxserve.nexxclinic.entity.Department;
 import com.nexxserve.nexxclinic.entity.Visit;
 import com.nexxserve.nexxclinic.entity.VisitDepartment;
 import com.nexxserve.nexxclinic.entity.VisitDepartmentNote;
@@ -350,6 +351,81 @@ public class ClinicEventPublisher {
             broadcastAfterCommit(event);
         } catch (Exception e) {
             log.warn("Error broadcasting VISIT_DISCHARGED event: {}", e.getMessage());
+        }
+    }
+
+    public void publishVisitRouted(
+            Visit visit,
+            VisitDepartment vd,
+            String actionType,
+            Department targetDept,
+            Department previousDept,
+            Worker actor
+    ) {
+        if (visit == null) return;
+        try {
+            UUID visitId = safeGetVisitId(visit);
+            if (visitId == null) return;
+
+            UUID patientId = safeGetPatientId(visit);
+            String patientName = safeGetPatientName(visit);
+            VisitStatus visitStatus = safeGetVisitStatus(visit);
+
+            Set<RoleName> targetRoles = new HashSet<>(Set.of(
+                    RoleName.RECEPTION, RoleName.CLINICIAN, RoleName.NURSE,
+                    RoleName.FINANCE, RoleName.ADMIN, RoleName.MANAGER, RoleName.CLINIC_ADMIN
+            ));
+
+            Set<UUID> targetWorkerIds = extractAttendingWorkers(visitId);
+            if (actor != null && actor.getId() != null) {
+                targetWorkerIds.add(actor.getId());
+            }
+
+            Set<UUID> targetDeptIds = new HashSet<>();
+            if (vd != null && vd.getDepartment() != null) {
+                targetDeptIds.add(vd.getDepartment().getId());
+            }
+            if (targetDept != null) {
+                targetDeptIds.add(targetDept.getId());
+            }
+            if (previousDept != null) {
+                targetDeptIds.add(previousDept.getId());
+            }
+
+            Map<String, Object> metadata = new HashMap<>();
+            metadata.put("actionType", actionType);
+            if (targetDept != null) {
+                metadata.put("targetDepartmentId", targetDept.getId().toString());
+                metadata.put("targetDepartmentName", targetDept.getName());
+                if (targetDept.getKind() != null) {
+                    metadata.put("targetDepartmentKind", targetDept.getKind().name());
+                }
+            }
+            if (previousDept != null) {
+                metadata.put("previousDepartmentId", previousDept.getId().toString());
+                metadata.put("previousDepartmentName", previousDept.getName());
+            }
+
+            ClinicSseEvent event = ClinicSseEvent.builder()
+                    .type("VISIT_ROUTED")
+                    .visitId(visitId)
+                    .patientId(patientId)
+                    .patientName(patientName)
+                    .visitStatus(visitStatus)
+                    .departmentId(targetDept != null ? targetDept.getId() : (vd != null && vd.getDepartment() != null ? vd.getDepartment().getId() : null))
+                    .departmentName(targetDept != null ? targetDept.getName() : (vd != null && vd.getDepartment() != null ? vd.getDepartment().getName() : null))
+                    .departmentStatus(vd != null ? vd.getStatus() : null)
+                    .actorId(actor != null ? actor.getId() : null)
+                    .actorName(actor != null ? (actor.getFirstName() + " " + actor.getLastName()).trim() : null)
+                    .targetRoles(targetRoles)
+                    .targetDepartmentIds(targetDeptIds)
+                    .targetWorkerIds(targetWorkerIds)
+                    .metadata(metadata)
+                    .build();
+
+            broadcastAfterCommit(event);
+        } catch (Exception e) {
+            log.warn("Error broadcasting VISIT_ROUTED event: {}", e.getMessage());
         }
     }
 

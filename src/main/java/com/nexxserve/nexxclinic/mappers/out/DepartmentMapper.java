@@ -19,6 +19,7 @@ public interface DepartmentMapper {
 
     @Mapping(target = "id", source = "department.id")
     @Mapping(target = "name", source = "department.name")
+    @Mapping(target = "kind", source = "department.kind")
     @Mapping(target = "insurancePolicyMode", source = "department.insurancePolicyMode")
     @Mapping(target = "nursing", source = "department.nursing")
     @Mapping(target = "supportRequests", source = "department.supportRequests")

@@ -1,6 +1,7 @@
 package com.nexxserve.nexxclinic.entity;
 
 import com.nexxserve.nexxclinic.model.DepartmentInsurancePolicyMode;
+import com.nexxserve.nexxclinic.model.DepartmentKind;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -36,6 +37,10 @@ public class Department {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 32)
+    private DepartmentKind kind = DepartmentKind.CONSULTATION;
+
     @Column(nullable = false)
     private boolean nursing = false;
 
@@ -55,6 +60,9 @@ public class Department {
         }
         if (this.requestsProducts == null) {
             this.requestsProducts = true;
+        }
+        if (this.kind == null) {
+            this.kind = DepartmentKind.CONSULTATION;
         }
     }
 
@@ -104,6 +112,14 @@ public class Department {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public DepartmentKind getKind() {
+        return kind != null ? kind : DepartmentKind.CONSULTATION;
+    }
+
+    public void setKind(DepartmentKind kind) {
+        this.kind = kind;
     }
 
     public boolean isNursing() {

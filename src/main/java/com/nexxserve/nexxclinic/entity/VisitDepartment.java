@@ -118,6 +118,19 @@ public class VisitDepartment {
     @Column(name = "answer_id")
     private UUID answerId;
 
+    @Column(name = "awaiting_role", length = 32)
+    private String awaitingRole;
+
+    @Column(name = "awaiting_since")
+    private LocalDateTime awaitingSince;
+
+    @Column(name = "last_routing_action", length = 40)
+    private String lastRoutingAction;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "previous_department_id")
+    private Department previousDepartment;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -312,6 +325,38 @@ public class VisitDepartment {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getAwaitingRole() {
+        return awaitingRole;
+    }
+
+    public void setAwaitingRole(String awaitingRole) {
+        this.awaitingRole = awaitingRole;
+    }
+
+    public LocalDateTime getAwaitingSince() {
+        return awaitingSince;
+    }
+
+    public void setAwaitingSince(LocalDateTime awaitingSince) {
+        this.awaitingSince = awaitingSince;
+    }
+
+    public String getLastRoutingAction() {
+        return lastRoutingAction;
+    }
+
+    public void setLastRoutingAction(String lastRoutingAction) {
+        this.lastRoutingAction = lastRoutingAction;
+    }
+
+    public Department getPreviousDepartment() {
+        return previousDepartment;
+    }
+
+    public void setPreviousDepartment(Department previousDepartment) {
+        this.previousDepartment = previousDepartment;
     }
 }
 

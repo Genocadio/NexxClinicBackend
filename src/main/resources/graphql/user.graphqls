@@ -591,9 +591,21 @@ type DepartmentProfile {
   updatedAt: String!
 }
 
+enum DepartmentKind {
+  CONSULTATION
+  TRIAGE
+  LABORATORY
+  IMAGING
+  WARD
+  PHARMACY
+  PROCEDURE_ROOM
+  OTHER
+}
+
 type Department {
   id: ID!
   name: String!
+  kind: DepartmentKind!
   insurancePolicyMode: DepartmentInsurancePolicyMode!
   insurancePolicies: [InsuranceProvider!]!
   profiles: [DepartmentProfile!]!
@@ -637,6 +649,12 @@ type Visit {
   estimatedInsurancePay: Float
   estimatedPatientPay: Float
   quickBillEligible: Boolean
+  currentLocations: String
+  activeEpisodeCount: Int
+  isDischarged: Boolean
+  hasReturnedFromBilling: Boolean
+  hasPendingResults: Boolean
+  lastFlowActivityAt: String
   createdAt: String
   updatedAt: String
 }
@@ -714,6 +732,10 @@ type VisitDepartment {
   notes: VisitDepartmentNotesSummary!
   billing: VisitDepartmentBilling
   answerId: ID
+  awaitingRole: String
+  awaitingSince: String
+  lastRoutingAction: String
+  previousDepartment: Department
   createdAt: String!
   updatedAt: String!
 }
@@ -1733,6 +1755,26 @@ input UpdateVisitDepartmentEncounterDateInput {
   encounterDate: String!
 }
 
+input DischargeVisitInput {
+  visitId: ID!
+  departmentId: ID
+  note: String
+}
+
+input SendBackVisitInput {
+  visitId: ID!
+  fromDepartmentId: ID!
+  targetDepartmentId: ID
+  note: String
+}
+
+input SendVisitToNextInput {
+  visitId: ID!
+  fromDepartmentId: ID!
+  targetDepartmentId: ID!
+  note: String
+}
+
 enum PaymentMethod {
   CASH
   MOBILE_MONEY
@@ -2125,4 +2167,9 @@ type Mutation {
   updateRole(input: UpdateRoleInput!): RoleResponse!
   deleteRole(id: ID!): BooleanResponse!
   assignPermissionsToRole(input: AssignPermissionsToRoleInput!): RoleResponse!
+
+  # ── Visit Routing & Flow Management ───────────────────────────────────────
+  dischargeVisit(input: DischargeVisitInput!): VisitResponse!
+  sendBackVisit(input: SendBackVisitInput!): VisitResponse!
+  sendVisitToNext(input: SendVisitToNextInput!): VisitResponse!
 }

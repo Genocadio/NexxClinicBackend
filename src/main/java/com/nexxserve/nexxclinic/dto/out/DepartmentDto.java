@@ -5,10 +5,12 @@ import java.util.List;
 import java.util.UUID;
 
 import com.nexxserve.nexxclinic.model.DepartmentInsurancePolicyMode;
+import com.nexxserve.nexxclinic.model.DepartmentKind;
 
 public record DepartmentDto(
         UUID id,
         String name,
+        DepartmentKind kind,
         DepartmentInsurancePolicyMode insurancePolicyMode,
         List<InsuranceProviderDto> insurancePolicies,
         List<DepartmentProfileDto> profiles,

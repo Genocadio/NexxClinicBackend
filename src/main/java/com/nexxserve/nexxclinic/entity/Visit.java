@@ -62,6 +62,24 @@ public class Visit {
     @Column(name = "estimated_patient_pay", precision = 19, scale = 2)
     private BigDecimal estimatedPatientPay;
 
+    @Column(name = "current_locations", columnDefinition = "TEXT")
+    private String currentLocations;
+
+    @Column(name = "active_episode_count")
+    private Integer activeEpisodeCount = 0;
+
+    @Column(name = "is_discharged")
+    private Boolean isDischarged = false;
+
+    @Column(name = "has_returned_from_billing")
+    private Boolean hasReturnedFromBilling = false;
+
+    @Column(name = "has_pending_results")
+    private Boolean hasPendingResults = false;
+
+    @Column(name = "last_flow_activity_at")
+    private LocalDateTime lastFlowActivityAt;
+
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
@@ -75,6 +93,12 @@ public class Visit {
         }
         if (this.visitDate == null) {
             this.visitDate = now;
+        }
+        if (this.isDischarged == null) {
+            this.isDischarged = false;
+        }
+        if (this.lastFlowActivityAt == null) {
+            this.lastFlowActivityAt = now;
         }
     }
 
@@ -158,4 +182,51 @@ public class Visit {
         this.estimatedPatientPay = estimatedPatientPay;
     }
 
+    public String getCurrentLocations() {
+        return currentLocations;
+    }
+
+    public void setCurrentLocations(String currentLocations) {
+        this.currentLocations = currentLocations;
+    }
+
+    public Integer getActiveEpisodeCount() {
+        return activeEpisodeCount != null ? activeEpisodeCount : 0;
+    }
+
+    public void setActiveEpisodeCount(Integer activeEpisodeCount) {
+        this.activeEpisodeCount = activeEpisodeCount;
+    }
+
+    public Boolean getIsDischarged() {
+        return isDischarged != null && isDischarged;
+    }
+
+    public void setIsDischarged(Boolean isDischarged) {
+        this.isDischarged = isDischarged;
+    }
+
+    public Boolean getHasReturnedFromBilling() {
+        return hasReturnedFromBilling != null && hasReturnedFromBilling;
+    }
+
+    public void setHasReturnedFromBilling(Boolean hasReturnedFromBilling) {
+        this.hasReturnedFromBilling = hasReturnedFromBilling;
+    }
+
+    public Boolean getHasPendingResults() {
+        return hasPendingResults != null && hasPendingResults;
+    }
+
+    public void setHasPendingResults(Boolean hasPendingResults) {
+        this.hasPendingResults = hasPendingResults;
+    }
+
+    public LocalDateTime getLastFlowActivityAt() {
+        return lastFlowActivityAt;
+    }
+
+    public void setLastFlowActivityAt(LocalDateTime lastFlowActivityAt) {
+        this.lastFlowActivityAt = lastFlowActivityAt;
+    }
 }

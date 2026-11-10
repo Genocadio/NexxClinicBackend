@@ -17,10 +17,14 @@ import com.nexxserve.nexxclinic.graphql.input.AddVisitPreInstructionsInput;
 import com.nexxserve.nexxclinic.graphql.input.AddVisitDepartmentNoteInput;
 import com.nexxserve.nexxclinic.graphql.input.AddChildVisitDepartmentInput;
 import com.nexxserve.nexxclinic.dto.out.ApiResponse;
+import com.nexxserve.nexxclinic.graphql.input.DischargeVisitInput;
+import com.nexxserve.nexxclinic.graphql.input.SendBackVisitInput;
+import com.nexxserve.nexxclinic.graphql.input.SendVisitToNextInput;
 import com.nexxserve.nexxclinic.model.RoleName;
 import com.nexxserve.nexxclinic.security.HasRole;
 import com.nexxserve.nexxclinic.service.VisitDepartmentNoteService;
 import com.nexxserve.nexxclinic.service.VisitDepartmentService;
+import com.nexxserve.nexxclinic.service.VisitFlowService;
 import com.nexxserve.nexxclinic.service.VisitService;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -36,11 +40,18 @@ public class VisitMutationController {
     private final VisitService visitService;
     private final VisitDepartmentService visitDepartmentService;
     private final VisitDepartmentNoteService noteService;
+    private final VisitFlowService visitFlowService;
 
-    public VisitMutationController(VisitService visitService, VisitDepartmentService visitDepartmentService,  VisitDepartmentNoteService noteService) {
+    public VisitMutationController(
+            VisitService visitService,
+            VisitDepartmentService visitDepartmentService,
+            VisitDepartmentNoteService noteService,
+            VisitFlowService visitFlowService
+    ) {
         this.visitService = visitService;
         this.visitDepartmentService = visitDepartmentService;
         this.noteService = noteService;
+        this.visitFlowService = visitFlowService;
     }
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.NURSE, RoleName.CLINICIAN})
@@ -454,5 +465,32 @@ public class VisitMutationController {
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
     ) {
         return noteService.markVisitDepartmentNotesViewed(visitDepartmentId, authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE, RoleName.CLINICIAN, RoleName.NURSE})
+    @MutationMapping
+    public ApiResponse dischargeVisit(
+            @Argument @Valid DischargeVisitInput input,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitFlowService.dischargeVisit(input.visitId(), input.departmentId(), input.note(), authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE, RoleName.CLINICIAN, RoleName.NURSE})
+    @MutationMapping
+    public ApiResponse sendBackVisit(
+            @Argument @Valid SendBackVisitInput input,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitFlowService.sendBackVisit(input.visitId(), input.fromDepartmentId(), input.targetDepartmentId(), input.note(), authUser);
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE, RoleName.CLINICIAN, RoleName.NURSE})
+    @MutationMapping
+    public ApiResponse sendVisitToNext(
+            @Argument @Valid SendVisitToNextInput input,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return visitFlowService.sendVisitToNext(input.visitId(), input.fromDepartmentId(), input.targetDepartmentId(), input.note(), authUser);
     }
 }
