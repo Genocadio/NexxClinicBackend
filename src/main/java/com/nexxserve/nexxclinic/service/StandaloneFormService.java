@@ -409,7 +409,10 @@ public class StandaloneFormService {
 
         Worker worker = visitDepartmentService.resolveWorker(authUser);
 
-        if (visitHasUnbilled) {
+        boolean isReturnedFromBilling = targetVisitDept != null && targetVisitDept.getVisit() != null &&
+                (Boolean.TRUE.equals(targetVisitDept.getVisit().getHasReturnedFromBilling()) || "SENT_BACK".equals(targetVisitDept.getLastRoutingAction()));
+
+        if (visitHasUnbilled || Boolean.TRUE.equals(sendToBilling) || isReturnedFromBilling) {
             // Transition departments with unbilled products to BILLING
             for (VisitDepartment dept : departments) {
                 // If in DEPARTMENT_EDITING mode: KEEP STATE!
@@ -428,14 +431,22 @@ public class StandaloneFormService {
                 if (deptHasUnbilled || (targetVisitDept != null && dept.getId().equals(targetVisitDept.getId()))) {
                     boolean justMarked = dept.getStatus() != com.nexxserve.nexxclinic.model.VisitDepartmentStatus.BILLING;
                     dept.setStatus(com.nexxserve.nexxclinic.model.VisitDepartmentStatus.BILLING);
+                    dept.setAwaitingRole("FINANCE");
                     if (targetVisitDept != null && dept.getId().equals(targetVisitDept.getId())) {
                         targetVisitDept.setStatus(com.nexxserve.nexxclinic.model.VisitDepartmentStatus.BILLING);
+                        targetVisitDept.setAwaitingRole("FINANCE");
                     }
                     VisitDepartment savedDept = visitDepartmentRepository.save(dept);
                     if (justMarked) {
                         newlyMarkedForBilling.add(savedDept);
                     }
                 }
+            }
+
+            // Reset hasReturnedFromBilling flag on the visit since it has now been sent back to billing
+            if (targetVisitDept != null && targetVisitDept.getVisit() != null && Boolean.TRUE.equals(targetVisitDept.getVisit().getHasReturnedFromBilling())) {
+                targetVisitDept.getVisit().setHasReturnedFromBilling(false);
+                visitRepository.save(targetVisitDept.getVisit());
             }
         } else {
             // No unbilled products exist on the visit (e.g. visit is already billed or has no products)
