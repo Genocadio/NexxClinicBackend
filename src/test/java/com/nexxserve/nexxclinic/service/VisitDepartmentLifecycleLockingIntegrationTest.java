@@ -933,16 +933,16 @@ class VisitDepartmentLifecycleLockingIntegrationTest {
         visitDept.setStatus(VisitDepartmentStatus.BILLING);
         visitDepartmentRepository.save(visitDept);
 
-        // Case 1: Department is sent for billing, but unbilled.
-        // Calling consultVisit must bring it back to ACTIVE consultation state.
+        // Case 1: Department is sent for billing.
+        // Calling consultVisit must NEVER remove it from billing (must stay in BILLING status).
         ApiResponse<com.nexxserve.nexxclinic.dto.out.VisitDepartmentDto> consultRes =
                 visitDepartmentService.consultVisit(visitDeptId, null, authUser);
         assertEquals(ResponseStatus.SUCCESS, consultRes.status());
-        assertEquals(VisitDepartmentStatus.ACTIVE, consultRes.data().status());
+        assertEquals(VisitDepartmentStatus.BILLING, consultRes.data().status());
 
         VisitDepartment refreshedDept = visitDepartmentRepository.findById(visitDeptId).orElseThrow();
-        assertEquals(VisitDepartmentStatus.ACTIVE, refreshedDept.getStatus(),
-                "Unbilled department sent for billing must revert to ACTIVE on continue consultation");
+        assertEquals(VisitDepartmentStatus.BILLING, refreshedDept.getStatus(),
+                "Department sent for billing must remain in BILLING status on continue consultation");
 
         // Case 2: Once actually billed, consultVisit must NOT revert status to ACTIVE
         refreshedDept.setStatus(VisitDepartmentStatus.BILLING);

@@ -398,36 +398,30 @@ public class VisitDepartmentService {
         }
 
         // 2. If status is PENDING (or not yet active), transition to ACTIVE.
-        // If status is BILLING and department is NOT yet billed in billing records/products,
-        // bring it back to ACTIVE consultation state so the clinician can add products,
-        // investigations, and notes.
-        boolean isBilled = visitDepartmentBillingRepository.existsByVisitDepartmentId(visitDepartment.getId())
-                || visitDepartmentProductRepository.findByVisitDepartmentId(visitDepartment.getId()).stream()
-                    .anyMatch(p -> !p.isDeleted() && p.getBillingState() == BillingState.BILLED);
-
+        // If status is already BILLING, keep it in BILLING so it remains in the Ready for Billing queue.
         boolean wasReactivated = false;
-        if (visitDepartment.getStatus() == VisitDepartmentStatus.PENDING
-                || (visitDepartment.getStatus() == VisitDepartmentStatus.BILLING && !isBilled)) {
+        if (visitDepartment.getStatus() == VisitDepartmentStatus.PENDING) {
             visitDepartment.setStatus(VisitDepartmentStatus.ACTIVE);
             wasReactivated = true;
             if (visit != null && visit.getStatus() == VisitStatus.CREATED) {
                 visit.setStatus(VisitStatus.IN_PROGRESS);
                 visitRepository.save(visit);
             }
-            if (visitDepartment.getAnswerId() != null) {
-                standaloneFormAnswerRepository.findById(visitDepartment.getAnswerId()).ifPresent(ans -> {
-                    if (ans.getStatus() == AnswerStatus.FINAL || ans.getStatus() == AnswerStatus.SUBMITTED) {
-                        ans.setStatus(AnswerStatus.DRAFT);
-                        standaloneFormAnswerRepository.save(ans);
-                    }
-                });
-                consultationAnswerRepository.findById(visitDepartment.getAnswerId()).ifPresent(ans -> {
-                    if (ans.getStatus() == AnswerStatus.FINAL || ans.getStatus() == AnswerStatus.SUBMITTED) {
-                        ans.setStatus(AnswerStatus.DRAFT);
-                        consultationAnswerRepository.save(ans);
-                    }
-                });
-            }
+        }
+        // If answer was final/submitted, reset to DRAFT so clinician can continue edits without error
+        if (visitDepartment.getAnswerId() != null) {
+            standaloneFormAnswerRepository.findById(visitDepartment.getAnswerId()).ifPresent(ans -> {
+                if (ans.getStatus() == AnswerStatus.FINAL || ans.getStatus() == AnswerStatus.SUBMITTED) {
+                    ans.setStatus(AnswerStatus.DRAFT);
+                    standaloneFormAnswerRepository.save(ans);
+                }
+            });
+            consultationAnswerRepository.findById(visitDepartment.getAnswerId()).ifPresent(ans -> {
+                if (ans.getStatus() == AnswerStatus.FINAL || ans.getStatus() == AnswerStatus.SUBMITTED) {
+                    ans.setStatus(AnswerStatus.DRAFT);
+                    consultationAnswerRepository.save(ans);
+                }
+            });
         }
 
         // 3. Automatically add the calling clinician to processors if not already in processors
