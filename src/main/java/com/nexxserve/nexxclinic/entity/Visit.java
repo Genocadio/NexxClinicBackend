@@ -74,6 +74,9 @@ public class Visit {
     @Column(name = "has_returned_from_billing")
     private Boolean hasReturnedFromBilling = false;
 
+    @Column(name = "last_return_reason", columnDefinition = "TEXT")
+    private String lastReturnReason;
+
     @Column(name = "has_pending_results")
     private Boolean hasPendingResults = false;
 
@@ -212,6 +215,14 @@ public class Visit {
 
     public void setHasReturnedFromBilling(Boolean hasReturnedFromBilling) {
         this.hasReturnedFromBilling = hasReturnedFromBilling;
+    }
+
+    public String getLastReturnReason() {
+        return lastReturnReason;
+    }
+
+    public void setLastReturnReason(String lastReturnReason) {
+        this.lastReturnReason = lastReturnReason;
     }
 
     public Boolean getHasPendingResults() {

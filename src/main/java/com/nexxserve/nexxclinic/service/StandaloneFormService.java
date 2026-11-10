@@ -446,6 +446,7 @@ public class StandaloneFormService {
             // Reset hasReturnedFromBilling flag on the visit since it has now been sent back to billing
             if (targetVisitDept != null && targetVisitDept.getVisit() != null && Boolean.TRUE.equals(targetVisitDept.getVisit().getHasReturnedFromBilling())) {
                 targetVisitDept.getVisit().setHasReturnedFromBilling(false);
+                targetVisitDept.getVisit().setLastReturnReason(null);
                 visitRepository.save(targetVisitDept.getVisit());
             }
         } else {

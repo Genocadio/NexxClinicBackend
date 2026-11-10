@@ -22,6 +22,7 @@ public record VisitDto(
         Integer activeEpisodeCount,
         Boolean isDischarged,
         Boolean hasReturnedFromBilling,
+        String lastReturnReason,
         Boolean hasPendingResults,
         LocalDateTime lastFlowActivityAt
 ) {
@@ -41,7 +42,7 @@ public record VisitDto(
         this(
                 id, patient, status, visitDate, linkedInsurances, departments, vitalSigns,
                 estimatedTotal, estimatedInsurancePay, estimatedPatientPay, quickBillEligible,
-                null, 0, false, false, false, null
+                null, 0, false, false, null, false, null
         );
     }
 }

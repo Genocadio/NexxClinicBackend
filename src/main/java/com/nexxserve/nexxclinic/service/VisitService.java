@@ -2140,7 +2140,14 @@ public class VisitService {
                     visit.getEstimatedTotal(),
                     visit.getEstimatedInsurancePay(),
                     visit.getEstimatedPatientPay(),
-                    quickBillEligible
+                    quickBillEligible,
+                    visit.getCurrentLocations(),
+                    visit.getActiveEpisodeCount(),
+                    visit.getIsDischarged(),
+                    visit.getHasReturnedFromBilling(),
+                    visit.getLastReturnReason(),
+                    visit.getHasPendingResults(),
+                    visit.getLastFlowActivityAt()
             ));
         }
 

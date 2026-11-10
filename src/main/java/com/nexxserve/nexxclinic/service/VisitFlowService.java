@@ -108,6 +108,8 @@ public class VisitFlowService {
 
         visit.setStatus(VisitStatus.COMPLETED);
         visit.setIsDischarged(true);
+        visit.setHasReturnedFromBilling(false);
+        visit.setLastReturnReason(null);
         visit.setLastFlowActivityAt(now);
         recomputeVisitFlowSummary(visit, departments);
         Visit saved = visitRepository.save(visit);
@@ -218,6 +220,7 @@ public class VisitFlowService {
         visit.setStatus(VisitStatus.IN_PROGRESS);
         visit.setIsDischarged(false);
         visit.setHasReturnedFromBilling(true);
+        visit.setLastReturnReason(note);
         visit.setLastFlowActivityAt(now);
         recomputeVisitFlowSummary(visit, departments);
         Visit saved = visitRepository.save(visit);

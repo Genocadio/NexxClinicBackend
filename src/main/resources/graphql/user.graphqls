@@ -653,6 +653,7 @@ type Visit {
   activeEpisodeCount: Int
   isDischarged: Boolean
   hasReturnedFromBilling: Boolean
+  lastReturnReason: String
   hasPendingResults: Boolean
   lastFlowActivityAt: String
   createdAt: String
