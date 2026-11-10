@@ -974,7 +974,7 @@ public class VisitService {
 
         // D1/D2 fix: enforce unread-notes gate during completion (ADMIN/MANAGER exempt).
         if (!visitDepartmentNoteService.isExemptFromNotesBlock(authUser)) {
-            long unreadNotes = visitDepartmentNoteRepository.countUnreadNotesForVisit(visitId, actingUser.getId());
+            long unreadNotes = visitDepartmentNoteService.countUnreadNotesForVisit(visitId, authUser);
             if (unreadNotes > 0) {
                 return ApiResponse.error("You have unread notes. Please read them before completing the visit.");
             }
@@ -1993,20 +1993,13 @@ public class VisitService {
                 .filter(pi -> pi.getVisitDepartment() != null && pi.getVisitDepartment().getId() != null)
                 .collect(Collectors.groupingBy(pi -> pi.getVisitDepartment().getId()));
 
-        Map<UUID, Long> totalNotesByVdId = allVdIds.isEmpty()
-                ? Map.of()
-                : visitDepartmentNoteRepository.countTotalNotesForDepartments(allVdIds).stream()
-                        .collect(Collectors.toMap(r -> (UUID) r[0], r -> ((Number) r[1]).longValue(), (a, b) -> a));
+        VisitDepartmentNoteService.NotesDepartmentSummaryMaps notesSummaryMaps =
+                visitDepartmentNoteService.getNotesSummariesForDepartments(allVdIds, authUser);
+        Map<UUID, Long> totalNotesByVdId = notesSummaryMaps.totalNotesByVdId();
+        Map<UUID, Long> newNotesByVdId = notesSummaryMaps.newNotesByVdId();
 
-        Map<UUID, Long> newNotesByVdId = (authUser != null && authUser.userId() != null && !allVdIds.isEmpty())
-                ? visitDepartmentNoteRepository.countNewNotesForDepartments(allVdIds, authUser.userId()).stream()
-                        .collect(Collectors.toMap(r -> (UUID) r[0], r -> ((Number) r[1]).longValue(), (a, b) -> a))
-                : Map.of();
-
-        Map<UUID, Long> unreadNotesByVisitId = (authUser != null && authUser.userId() != null && !visitIds.isEmpty())
-                ? visitDepartmentNoteRepository.countUnreadNotesForVisits(visitIds, authUser.userId()).stream()
-                        .collect(Collectors.toMap(r -> (UUID) r[0], r -> ((Number) r[1]).longValue(), (a, b) -> a))
-                : Map.of();
+        Map<UUID, Long> unreadNotesByVisitId =
+                visitDepartmentNoteService.countUnreadNotesForVisits(visitIds, authUser);
 
         Set<UUID> answerIds = allVisitDepartments.stream()
                 .map(VisitDepartment::getAnswerId)

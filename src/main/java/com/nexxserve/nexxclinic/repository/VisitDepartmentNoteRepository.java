@@ -24,6 +24,10 @@ public interface VisitDepartmentNoteRepository extends JpaRepository<VisitDepart
 
     List<VisitDepartmentNote> findByVisitDepartmentId(UUID visitDepartmentId);
 
+    List<VisitDepartmentNote> findByVisitDepartmentIdIn(java.util.Collection<UUID> visitDepartmentIds);
+
+    List<VisitDepartmentNote> findByVisitDepartment_Visit_IdIn(java.util.Collection<UUID> visitIds);
+
     void deleteByVisitDepartmentId(UUID visitDepartmentId);
 
     @Query("""

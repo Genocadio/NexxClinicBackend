@@ -106,26 +106,24 @@ public class VisitDepartmentNoteService {
                     .toList();
         }
 
-        UUID viewerId = authUser == null ? null : authUser.userId();
+        // Visibility filtering:
+        // - Creators can always see their notes
+        // - Admin/managers can fetch and see all notes
+        // - Billing notes: only users in billing (FINANCE, ADMIN, MANAGER, CLINIC_ADMIN) or creator
+        // - Targeted notes: only creator, admin/manager, or target user
+        notes = notes.stream()
+                .filter(n -> canUserViewNote(n, authUser))
+                .toList();
 
-        // Visibility filtering: only include notes that are either public (no targetUsers)
-        // or the current user is creator / a member of the target list.
-        if (viewerId != null) {
-            notes = notes.stream()
-                    .filter(n -> {
-                        List<Worker> targets = n.getTargetUsers();
-                        if (targets == null || targets.isEmpty()) return true;          // public note
-                        boolean creatorMatch = n.getCreatedBy() != null &&
-                                viewerId.equals(n.getCreatedBy().getId());
-                        boolean inTargets = targets.stream()
-                                .anyMatch(w -> viewerId.equals(w.getId()));
-                        return creatorMatch || inTargets;
-                    })
-                    .toList();
+        Set<UUID> viewedNoteIds = Collections.emptySet();
+        if (authUser != null && authUser.userId() != null && !notes.isEmpty()) {
+            List<UUID> noteIds = notes.stream().map(VisitDepartmentNote::getId).toList();
+            viewedNoteIds = visitDepartmentNoteViewerRepository.findViewedNoteIds(authUser.userId(), noteIds);
         }
 
+        final Set<UUID> finalViewedNoteIds = viewedNoteIds;
         List<VisitDepartmentNoteDto> noteDtos = notes.stream()
-                .map(note -> visitDepartmentNoteToDto(note, authUser))
+                .map(note -> visitDepartmentNoteToDto(note, authUser, finalViewedNoteIds))
                 .toList();
 
         return ApiResponse.success("Visit department notes fetched.", noteDtos);
@@ -397,12 +395,240 @@ public class VisitDepartmentNoteService {
     }
 
     public VisitDepartmentNotesSummaryDto buildNotesSummary(UUID visitDepartmentId, AuthenticatedUser authUser) {
-        long totalNotes = visitDepartmentNoteRepository.countByVisitDepartmentId(visitDepartmentId);
-        int newNotes = 0;
-        if (authUser != null && authUser.userId() != null) {
-            newNotes = (int) visitDepartmentNoteRepository.countNewNotesForViewer(visitDepartmentId, authUser.userId());
+        if (visitDepartmentId == null) {
+            return new VisitDepartmentNotesSummaryDto(0, 0);
         }
-        return new VisitDepartmentNotesSummaryDto((int) totalNotes, newNotes);
+        List<VisitDepartmentNote> notes = visitDepartmentNoteRepository.findByVisitDepartmentId(visitDepartmentId);
+        if (notes.isEmpty()) {
+            return new VisitDepartmentNotesSummaryDto(0, 0);
+        }
+        List<VisitDepartmentNote> visibleNotes = notes.stream()
+                .filter(n -> canUserViewNote(n, authUser))
+                .toList();
+        int totalNotes = visibleNotes.size();
+        int newNotes = 0;
+        if (authUser != null && authUser.userId() != null && !visibleNotes.isEmpty()) {
+            List<UUID> noteIds = visibleNotes.stream().map(VisitDepartmentNote::getId).toList();
+            Set<UUID> viewedNoteIds = visitDepartmentNoteViewerRepository.findViewedNoteIds(authUser.userId(), noteIds);
+            newNotes = (int) visibleNotes.stream()
+                    .filter(n -> isNoteUnreadForUser(n, authUser, viewedNoteIds))
+                    .count();
+        }
+        return new VisitDepartmentNotesSummaryDto(totalNotes, newNotes);
+    }
+
+    public record NotesDepartmentSummaryMaps(
+            Map<UUID, Long> totalNotesByVdId,
+            Map<UUID, Long> newNotesByVdId
+    ) {}
+
+    /**
+     * Batch summary for departments, applying role visibility and unread attention rules.
+     */
+    public NotesDepartmentSummaryMaps getNotesSummariesForDepartments(
+            Collection<UUID> visitDepartmentIds,
+            AuthenticatedUser authUser
+    ) {
+        if (visitDepartmentIds == null || visitDepartmentIds.isEmpty()) {
+            return new NotesDepartmentSummaryMaps(Map.of(), Map.of());
+        }
+
+        List<VisitDepartmentNote> allNotes = visitDepartmentNoteRepository.findByVisitDepartmentIdIn(visitDepartmentIds);
+        if (allNotes.isEmpty()) {
+            return new NotesDepartmentSummaryMaps(Map.of(), Map.of());
+        }
+
+        List<VisitDepartmentNote> visibleNotes = allNotes.stream()
+                .filter(n -> canUserViewNote(n, authUser))
+                .toList();
+
+        Map<UUID, Long> totalNotesByVdId = visibleNotes.stream()
+                .filter(n -> n.getVisitDepartment() != null && n.getVisitDepartment().getId() != null)
+                .collect(java.util.stream.Collectors.groupingBy(
+                        n -> n.getVisitDepartment().getId(),
+                        java.util.stream.Collectors.counting()
+                ));
+
+        Map<UUID, Long> newNotesByVdId = new HashMap<>();
+        if (authUser != null && authUser.userId() != null && !visibleNotes.isEmpty()) {
+            List<UUID> noteIds = visibleNotes.stream().map(VisitDepartmentNote::getId).toList();
+            Set<UUID> viewedNoteIds = visitDepartmentNoteViewerRepository.findViewedNoteIds(authUser.userId(), noteIds);
+
+            for (VisitDepartmentNote note : visibleNotes) {
+                if (isNoteUnreadForUser(note, authUser, viewedNoteIds)) {
+                    UUID vdId = note.getVisitDepartment() != null ? note.getVisitDepartment().getId() : null;
+                    if (vdId != null) {
+                        newNotesByVdId.merge(vdId, 1L, Long::sum);
+                    }
+                }
+            }
+        }
+
+        return new NotesDepartmentSummaryMaps(totalNotesByVdId, newNotesByVdId);
+    }
+
+    /**
+     * Batch count unread notes for visits, respecting visibility, admin unread scope,
+     * and completion status.
+     */
+    public Map<UUID, Long> countUnreadNotesForVisits(
+            Collection<UUID> visitIds,
+            AuthenticatedUser authUser
+    ) {
+        if (visitIds == null || visitIds.isEmpty() || authUser == null || authUser.userId() == null) {
+            return Map.of();
+        }
+
+        List<VisitDepartmentNote> notes = visitDepartmentNoteRepository.findByVisitDepartment_Visit_IdIn(visitIds);
+        if (notes.isEmpty()) {
+            return Map.of();
+        }
+
+        List<VisitDepartmentNote> visibleNotes = notes.stream()
+                .filter(n -> canUserViewNote(n, authUser))
+                .toList();
+
+        if (visibleNotes.isEmpty()) {
+            return Map.of();
+        }
+
+        List<UUID> noteIds = visibleNotes.stream().map(VisitDepartmentNote::getId).toList();
+        Set<UUID> viewedNoteIds = visitDepartmentNoteViewerRepository.findViewedNoteIds(authUser.userId(), noteIds);
+
+        Map<UUID, Long> unreadByVisitId = new HashMap<>();
+        for (VisitDepartmentNote note : visibleNotes) {
+            if (isNoteUnreadForUser(note, authUser, viewedNoteIds)) {
+                if (note.getVisitDepartment() != null && note.getVisitDepartment().getVisit() != null) {
+                    UUID vId = note.getVisitDepartment().getVisit().getId();
+                    if (vId != null) {
+                        unreadByVisitId.merge(vId, 1L, Long::sum);
+                    }
+                }
+            }
+        }
+        return unreadByVisitId;
+    }
+
+    public long countUnreadNotesForVisit(UUID visitId, AuthenticatedUser authUser) {
+        if (visitId == null || authUser == null || authUser.userId() == null) {
+            return 0;
+        }
+        Map<UUID, Long> map = countUnreadNotesForVisits(List.of(visitId), authUser);
+        return map.getOrDefault(visitId, 0L);
+    }
+
+    /**
+     * Whether the calling user has billing privileges (FINANCE, ADMIN, MANAGER, CLINIC_ADMIN).
+     */
+    public boolean canViewBillingNotes(AuthenticatedUser authUser) {
+        if (authUser == null || authUser.roles() == null) {
+            return false;
+        }
+        return authUser.roles().contains(RoleName.FINANCE)
+                || authUser.roles().contains(RoleName.ADMIN)
+                || authUser.roles().contains(RoleName.MANAGER)
+                || authUser.roles().contains(RoleName.CLINIC_ADMIN);
+    }
+
+    public boolean isAdminOrManager(AuthenticatedUser authUser) {
+        if (authUser == null || authUser.roles() == null) {
+            return false;
+        }
+        return authUser.roles().contains(RoleName.ADMIN)
+                || authUser.roles().contains(RoleName.MANAGER)
+                || authUser.roles().contains(RoleName.CLINIC_ADMIN);
+    }
+
+    /**
+     * Rule 1 & Rule 2: Note visibility determination.
+     * - Creator can always view their own note.
+     * - Admin/managers can fetch and see all notes.
+     * - BILLING notes: only users with billing privilege can see.
+     * - Targeted notes: user must be creator, admin/manager, or listed in targets.
+     */
+    public boolean canUserViewNote(VisitDepartmentNote note, AuthenticatedUser authUser) {
+        if (note == null) {
+            return false;
+        }
+        UUID viewerId = authUser == null ? null : authUser.userId();
+
+        // Creator can always view
+        if (viewerId != null && note.getCreatedBy() != null && viewerId.equals(note.getCreatedBy().getId())) {
+            return true;
+        }
+
+        // Admin and managers can view all notes
+        if (isAdminOrManager(authUser)) {
+            return true;
+        }
+
+        // Billing notes: only users in billing (FINANCE, ADMIN, MANAGER, CLINIC_ADMIN) or creator
+        if (note.getNoteType() == NoteType.BILLING) {
+            if (!canViewBillingNotes(authUser)) {
+                return false;
+            }
+        }
+
+        // Targeted notes: if targets specified, viewer must be in target list
+        List<Worker> targets = note.getTargetUsers();
+        if (targets != null && !targets.isEmpty()) {
+            if (viewerId == null) {
+                return false;
+            }
+            return targets.stream().anyMatch(w -> viewerId.equals(w.getId()));
+        }
+
+        return true;
+    }
+
+    /**
+     * Attention & Unread rules:
+     * - User must be able to view the note.
+     * - Creator's own note is never unread.
+     * - For Admin/Managers: ONLY ADMIN and PUBLIC notes trigger unread dot/badge/gate.
+     * - For other users: If visit department is COMPLETED or FINALISED, notes created at
+     *   or before completion are no longer enforced (not unread). Notes created after
+     *   completion still require attention.
+     */
+    public boolean isNoteUnreadForUser(VisitDepartmentNote note, AuthenticatedUser authUser, Set<UUID> viewedNoteIds) {
+        if (note == null || authUser == null || authUser.userId() == null) {
+            return false;
+        }
+        if (!canUserViewNote(note, authUser)) {
+            return false;
+        }
+        UUID viewerId = authUser.userId();
+        if (note.getCreatedBy() != null && viewerId.equals(note.getCreatedBy().getId())) {
+            return false;
+        }
+
+        // Admin/manager unread scope: only ADMIN or PUBLIC notes
+        if (isAdminOrManager(authUser)) {
+            if (note.getNoteType() != NoteType.ADMIN && note.getNoteType() != NoteType.PUBLIC) {
+                return false;
+            }
+        } else {
+            // Completed department rule for all other users:
+            VisitDepartment vd = note.getVisitDepartment();
+            if (vd != null && (vd.getStatus() == VisitDepartmentStatus.COMPLETED || vd.getStatus() == VisitDepartmentStatus.FINALISED)) {
+                java.time.LocalDateTime completedAt = vd.getCompletedAt();
+                if (completedAt == null) {
+                    completedAt = vd.getUpdatedAt() != null ? vd.getUpdatedAt() : vd.getCreatedAt();
+                }
+                if (completedAt != null && note.getCreatedAt() != null && !note.getCreatedAt().isAfter(completedAt)) {
+                    return false;
+                }
+            }
+        }
+
+        if (viewedNoteIds != null) {
+            return !viewedNoteIds.contains(note.getId());
+        }
+        return !visitDepartmentNoteViewerRepository.existsByNoteIdAndViewerId(note.getId(), viewerId);
+    }
+
+    public boolean isNoteUnreadForUser(VisitDepartmentNote note, AuthenticatedUser authUser) {
+        return isNoteUnreadForUser(note, authUser, null);
     }
 
     /**
@@ -447,12 +673,22 @@ public class VisitDepartmentNoteService {
         if (isExemptFromNotesBlock(authUser) || canBypassBillingNotesGate(authUser)) {
             return false;
         }
+        if (!canViewBillingNotes(authUser)) {
+            return false;
+        }
         UUID viewerId = authUser.userId();
         List<VisitDepartmentNote> notes = visitDepartmentNoteRepository.findByVisitDepartment_Visit_IdOrderByCreatedAtAsc(visitId);
+        if (notes.isEmpty()) {
+            return false;
+        }
+        Set<UUID> viewedNoteIds = visitDepartmentNoteViewerRepository.findViewedNoteIds(
+                viewerId,
+                notes.stream().map(VisitDepartmentNote::getId).toList()
+        );
         return notes.stream()
                 .filter(n -> n.getVisitDepartment() == null || n.getVisitDepartment().getStatus() != VisitDepartmentStatus.CANCELLED)
                 .filter(n -> n.getNoteType() == NoteType.BILLING)
-                .anyMatch(n -> isUnreadForViewer(n, viewerId));
+                .anyMatch(n -> isNoteUnreadForUser(n, authUser, viewedNoteIds));
     }
 
     /**
@@ -463,25 +699,17 @@ public class VisitDepartmentNoteService {
         if (isExemptFromNotesBlock(authUser) || authUser == null || authUser.userId() == null || visitDepartmentId == null) {
             return false;
         }
-        UUID viewerId = authUser.userId();
         List<VisitDepartmentNote> notes = visitDepartmentNoteRepository.findByVisitDepartmentId(visitDepartmentId);
-        return notes.stream()
-                .filter(n -> n.getVisitDepartment() == null || n.getVisitDepartment().getStatus() != VisitDepartmentStatus.CANCELLED)
-                .anyMatch(n -> isUnreadForViewer(n, viewerId));
-    }
-
-    private boolean isUnreadForViewer(VisitDepartmentNote note, UUID viewerId) {
-        if (note.getCreatedBy() != null && viewerId.equals(note.getCreatedBy().getId())) {
+        if (notes.isEmpty()) {
             return false;
         }
-        List<Worker> targets = note.getTargetUsers();
-        if (targets != null && !targets.isEmpty()) {
-            boolean inTargets = targets.stream().anyMatch(w -> viewerId.equals(w.getId()));
-            if (!inTargets) {
-                return false;
-            }
-        }
-        return !visitDepartmentNoteViewerRepository.existsByNoteIdAndViewerId(note.getId(), viewerId);
+        Set<UUID> viewedNoteIds = visitDepartmentNoteViewerRepository.findViewedNoteIds(
+                authUser.userId(),
+                notes.stream().map(VisitDepartmentNote::getId).toList()
+        );
+        return notes.stream()
+                .filter(n -> n.getVisitDepartment() == null || n.getVisitDepartment().getStatus() != VisitDepartmentStatus.CANCELLED)
+                .anyMatch(n -> isNoteUnreadForUser(n, authUser, viewedNoteIds));
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -490,34 +718,25 @@ public class VisitDepartmentNoteService {
 
     private VisitDepartmentNoteDto visitDepartmentNoteToDto(
             VisitDepartmentNote note,
-            AuthenticatedUser authUser) {
+            AuthenticatedUser authUser,
+            Set<UUID> viewedNoteIds) {
 
-        UUID viewerId = (authUser == null) ? null : authUser.userId();
-
-        // 1️⃣ Was the note explicitly viewed?
-        boolean hasViewed = false;
-        if (viewerId != null && !visitDepartmentNoteViewerRepository
-                .existsByNoteIdAndViewerId(note.getId(), viewerId)) {
-            // not found in the viewers table
-        } else if (viewerId != null) {
-            hasViewed = true;
-        }
-
-        // 2️⃣ OR – is the current user the creator?
-        if (!hasViewed && viewerId != null
-                && note.getCreatedBy() != null
-                && viewerId.equals(note.getCreatedBy().getId())) {
-            hasViewed = true;          // creator automatically sees it as viewed
-        }
+        boolean hasViewed = !isNoteUnreadForUser(note, authUser, viewedNoteIds);
 
         return new VisitDepartmentNoteDto(
                 note.getId(),
-                note.getVisitDepartment().getId(),
+                note.getVisitDepartment() != null ? note.getVisitDepartment().getId() : null,
                 note.getContent(),
                 workerMapper.toDto(note.getCreatedBy()),
                 note.getNoteType(),
                 hasViewed,               // <-- final viewed flag
                 note.getCreatedAt());
+    }
+
+    private VisitDepartmentNoteDto visitDepartmentNoteToDto(
+            VisitDepartmentNote note,
+            AuthenticatedUser authUser) {
+        return visitDepartmentNoteToDto(note, authUser, null);
     }
 
 

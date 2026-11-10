@@ -88,6 +88,19 @@ public class BillingValidation {
                 return false;
             }
         }
+
+        // Completed department rule: notes set before completion are no longer enforced
+        VisitDepartment vd = note.getVisitDepartment();
+        if (vd != null && (vd.getStatus() == VisitDepartmentStatus.COMPLETED || vd.getStatus() == VisitDepartmentStatus.FINALISED)) {
+            java.time.LocalDateTime completedAt = vd.getCompletedAt();
+            if (completedAt == null) {
+                completedAt = vd.getUpdatedAt() != null ? vd.getUpdatedAt() : vd.getCreatedAt();
+            }
+            if (completedAt != null && note.getCreatedAt() != null && !note.getCreatedAt().isAfter(completedAt)) {
+                return false;
+            }
+        }
+
         return !visitDepartmentNoteViewerRepository.existsByNoteIdAndViewerId(note.getId(), viewerId);
     }
 

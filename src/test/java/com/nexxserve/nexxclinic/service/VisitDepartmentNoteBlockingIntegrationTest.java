@@ -36,6 +36,9 @@ class VisitDepartmentNoteBlockingIntegrationTest {
     private VisitDepartmentNoteService visitDepartmentNoteService;
 
     @Autowired
+    private VisitDepartmentNoteRepository visitDepartmentNoteRepository;
+
+    @Autowired
     private DepartmentFormService departmentFormService;
 
     @Autowired
@@ -374,5 +377,137 @@ class VisitDepartmentNoteBlockingIntegrationTest {
 
         ApiResponse adminProdRes = visitDepartmentService.addVisitDepartmentProduct(prodInput, adminAuth);
         assertEquals(ResponseStatus.SUCCESS, adminProdRes.status());
+    }
+
+    @Test
+    void billingNotes_notVisibleToClinicianOrNurse_visibleToFinanceAndAdmin() {
+        Visit visit = createVisitWithDepartment();
+        VisitDepartment vd = visitDepartmentRepository.findByVisitId(visit.getId()).get(0);
+
+        // Nurse adds a billing note
+        AddVisitDepartmentNoteInput billingNoteInput = new AddVisitDepartmentNoteInput(
+                vd.getId(),
+                null,
+                NoteType.BILLING,
+                "Patient to settle copay tomorrow per doctor"
+        );
+        AuthenticatedUser nurseAuth = new AuthenticatedUser(noteCreatorWorker.getId(), noteCreatorWorker.getUsername(), Set.of(RoleName.NURSE), "token", Instant.now());
+        visitDepartmentNoteService.addVisitDepartmentNote(billingNoteInput, nurseAuth);
+
+        // 1. Another clinician (clinicianAuth) fetches notes: must NOT see the billing note
+        var clinicianNotesRes = visitDepartmentNoteService.visitDepartmentNotes(visit.getId(), vd.getId(), clinicianAuth);
+        assertEquals(ResponseStatus.SUCCESS, clinicianNotesRes.status());
+        assertTrue(clinicianNotesRes.data().stream().noneMatch(n -> n.noteType() == NoteType.BILLING),
+                "Clinician must not see billing notes");
+
+        // Summary for clinician: totalNotes and newNotes must be 0
+        var clinicianSummary = visitDepartmentNoteService.buildNotesSummary(vd.getId(), clinicianAuth);
+        assertEquals(0, clinicianSummary.totalNotes(), "Clinician summary totalNotes must exclude billing notes");
+        assertEquals(0, clinicianSummary.newNotes(), "Clinician summary newNotes must exclude billing notes");
+
+        // Clinician hasUnreadBillingNotes must be false
+        assertFalse(visitDepartmentNoteService.hasUnreadBillingNotes(visit.getId(), clinicianAuth));
+
+        // 2. Finance user (financeAuth) fetches notes: CAN see the billing note
+        var financeNotesRes = visitDepartmentNoteService.visitDepartmentNotes(visit.getId(), vd.getId(), financeAuth);
+        assertEquals(ResponseStatus.SUCCESS, financeNotesRes.status());
+        assertTrue(financeNotesRes.data().stream().anyMatch(n -> n.noteType() == NoteType.BILLING),
+                "Finance user must see billing notes");
+
+        // 3. Admin user (adminAuth) fetches notes: CAN see the billing note
+        var adminNotesRes = visitDepartmentNoteService.visitDepartmentNotes(visit.getId(), vd.getId(), adminAuth);
+        assertEquals(ResponseStatus.SUCCESS, adminNotesRes.status());
+        assertTrue(adminNotesRes.data().stream().anyMatch(n -> n.noteType() == NoteType.BILLING),
+                "Admin user must see billing notes");
+
+        // 4. Nurse (creator) can see their own created note
+        var creatorNotesRes = visitDepartmentNoteService.visitDepartmentNotes(visit.getId(), vd.getId(), nurseAuth);
+        assertEquals(ResponseStatus.SUCCESS, creatorNotesRes.status());
+        assertTrue(creatorNotesRes.data().stream().anyMatch(n -> n.noteType() == NoteType.BILLING),
+                "Creator can see their own note");
+    }
+
+    @Test
+    void adminAndManager_unreadScope_onlyAdminAndPublicNotesCountAsUnread() {
+        Visit visit = createVisitWithDepartment();
+        VisitDepartment vd = visitDepartmentRepository.findByVisitId(visit.getId()).get(0);
+
+        // Add a CONSULTATION note created by nurse
+        AuthenticatedUser nurseAuth = new AuthenticatedUser(noteCreatorWorker.getId(), noteCreatorWorker.getUsername(), Set.of(RoleName.NURSE), "token", Instant.now());
+        visitDepartmentNoteService.addVisitDepartmentNote(
+                new AddVisitDepartmentNoteInput(vd.getId(), null, NoteType.CONSULTATION, "Clinician consult note"),
+                nurseAuth
+        );
+
+        // Add a BILLING note created by nurse
+        visitDepartmentNoteService.addVisitDepartmentNote(
+                new AddVisitDepartmentNoteInput(vd.getId(), null, NoteType.BILLING, "Billing instructions"),
+                nurseAuth
+        );
+
+        // Admin and manager summary: newNotes must be 0 because neither is ADMIN or PUBLIC!
+        var adminSummary = visitDepartmentNoteService.buildNotesSummary(vd.getId(), adminAuth);
+        assertEquals(2, adminSummary.totalNotes(), "Admin sees all notes in total count");
+        assertEquals(0, adminSummary.newNotes(), "Admin only counts ADMIN/PUBLIC notes as unread");
+
+        var managerSummary = visitDepartmentNoteService.buildNotesSummary(vd.getId(), managerAuth);
+        assertEquals(2, managerSummary.totalNotes(), "Manager sees all notes in total count");
+        assertEquals(0, managerSummary.newNotes(), "Manager only counts ADMIN/PUBLIC notes as unread");
+
+        // Now add an ADMIN note
+        visitDepartmentNoteService.addVisitDepartmentNote(
+                new AddVisitDepartmentNoteInput(vd.getId(), null, NoteType.ADMIN, "Admin attention needed"),
+                nurseAuth
+        );
+
+        var adminSummaryAfter = visitDepartmentNoteService.buildNotesSummary(vd.getId(), adminAuth);
+        assertEquals(3, adminSummaryAfter.totalNotes());
+        assertEquals(1, adminSummaryAfter.newNotes(), "Admin now has 1 unread note for the ADMIN note");
+    }
+
+    @Test
+    void completedDepartment_preCompletionNotesDoNotEnforceReading_postCompletionNotesRequireAttention() {
+        Visit visit = createVisitWithDepartment();
+        VisitDepartment vd = visitDepartmentRepository.findByVisitId(visit.getId()).get(0);
+
+        // Add note before completion
+        AuthenticatedUser nurseAuth = new AuthenticatedUser(noteCreatorWorker.getId(), noteCreatorWorker.getUsername(), Set.of(RoleName.NURSE), "token", Instant.now());
+        visitDepartmentNoteService.addVisitDepartmentNote(
+                new AddVisitDepartmentNoteInput(vd.getId(), null, NoteType.CONSULTATION, "Pre-completion observation"),
+                nurseAuth
+        );
+
+        // Before completion: clinician has 1 new note and unread notes gate blocks
+        var summaryBefore = visitDepartmentNoteService.buildNotesSummary(vd.getId(), clinicianAuth);
+        assertEquals(1, summaryBefore.newNotes());
+        assertTrue(visitDepartmentNoteService.hasUnreadDepartmentNotes(vd.getId(), clinicianAuth));
+
+        // Mark department as COMPLETED
+        vd.setStatus(VisitDepartmentStatus.COMPLETED);
+        vd.setCompletedAt(LocalDateTime.now().plusSeconds(1));
+        visitDepartmentRepository.save(vd);
+
+        // After completion: pre-completion note is no longer enforced!
+        var summaryAfter = visitDepartmentNoteService.buildNotesSummary(vd.getId(), clinicianAuth);
+        assertEquals(0, summaryAfter.newNotes(), "Pre-completion note must not be counted as unread once department is completed");
+        assertFalse(visitDepartmentNoteService.hasUnreadDepartmentNotes(vd.getId(), clinicianAuth),
+                "Pre-completion note must not block clinician once department is completed");
+
+        // Now add a note AFTER completion
+        visitDepartmentNoteService.addVisitDepartmentNote(
+                new AddVisitDepartmentNoteInput(vd.getId(), null, NoteType.CONSULTATION, "Post-completion emergency note"),
+                nurseAuth
+        );
+        // Ensure post-completion note's createdAt is after completedAt
+        List<VisitDepartmentNote> notes = visitDepartmentNoteRepository.findByVisitDepartmentId(vd.getId());
+        VisitDepartmentNote postNote = notes.get(notes.size() - 1);
+        postNote.setCreatedAt(vd.getCompletedAt().plusMinutes(5));
+        visitDepartmentNoteRepository.save(postNote);
+
+        // Post-completion note STILL requires attention!
+        var summaryPost = visitDepartmentNoteService.buildNotesSummary(vd.getId(), clinicianAuth);
+        assertEquals(1, summaryPost.newNotes(), "Post-completion note still requires attention");
+        assertTrue(visitDepartmentNoteService.hasUnreadDepartmentNotes(vd.getId(), clinicianAuth),
+                "Post-completion note must require attention / unread gate");
     }
 }
