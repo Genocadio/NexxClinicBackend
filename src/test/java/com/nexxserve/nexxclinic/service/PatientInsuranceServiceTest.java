@@ -41,6 +41,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -205,6 +206,60 @@ class PatientInsuranceServiceTest {
                 insuranceInput(patient.getId(), provider, "CARD-B", from, until)
         );
         assertEquals(ResponseStatus.SUCCESS, response.status(), response.message());
+    }
+
+    @Test
+    void testPrincipalMemberDetailsAreOptionalStartingAtAgeEighteen() {
+        Patient patient = persistPatient();
+        patient.setDateOfBirth(LocalDate.now().minusYears(18));
+        patientRepository.save(patient);
+        InsuranceProvider provider = persistProvider();
+
+        ApiResponse<PatientInsuranceDto> response =
+                patientService.createPatientInsurance(new CreatePatientInsuranceInput(
+                        patient.getId(),
+                        provider.getId(),
+                        "CARD-18",
+                        "Acme Ltd",
+                        false,
+                        null,
+                        null,
+                        LocalDate.now().minusDays(1),
+                        LocalDate.now().plusDays(30),
+                        null,
+                        null
+                ));
+
+        assertEquals(ResponseStatus.SUCCESS, response.status(), response.message());
+        assertFalse(response.data().principalMember());
+        assertNull(response.data().principalMemberName());
+        assertNull(response.data().principalMemberPhoneNumber());
+    }
+
+    @Test
+    void testMinorStillRequiresPrincipalMemberDetails() {
+        Patient patient = persistPatient();
+        patient.setDateOfBirth(LocalDate.now().minusYears(17));
+        patientRepository.save(patient);
+        InsuranceProvider provider = persistProvider();
+
+        ApiResponse<PatientInsuranceDto> response =
+                patientService.createPatientInsurance(new CreatePatientInsuranceInput(
+                        patient.getId(),
+                        provider.getId(),
+                        "CARD-17",
+                        "Acme Ltd",
+                        false,
+                        null,
+                        null,
+                        LocalDate.now().minusDays(1),
+                        LocalDate.now().plusDays(30),
+                        null,
+                        null
+                ));
+
+        assertEquals(ResponseStatus.ERROR, response.status());
+        assertTrue(response.message().contains("required for patients under 18"));
     }
 
     @Test

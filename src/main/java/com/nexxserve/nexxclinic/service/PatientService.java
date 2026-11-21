@@ -899,12 +899,6 @@ public class PatientService {
 
         // Validate dependent requirements
         if (!patientInsurance.isPrincipalMember()) {
-            if (patientInsurance.getPrincipalMemberName() == null ||
-                    patientInsurance.getPrincipalMemberPhoneNumber() == null) {
-                return ApiResponse.error(
-                        "principalMemberName and principalMemberPhoneNumber are required for dependent members."
-                );
-            }
             if (patientInsurance.getProvidingCompanyOrEmployer() == null ||
                     patientInsurance.getProvidingCompanyOrEmployer().isBlank()) {
                 return ApiResponse.error(
@@ -925,8 +919,16 @@ public class PatientService {
     private ApiResponse<Void> validateInsuranceBusinessRules(Patient patient, PatientInsurance patientInsurance) {
         if (patient.getDateOfBirth() != null) {
             int age = Period.between(patient.getDateOfBirth(), LocalDate.now()).getYears();
-            if (age < 18 && patientInsurance.isPrincipalMember()) {
-                return ApiResponse.error("A patient under 18 years old cannot be a principal member.");
+            if (age < 18) {
+                if (patientInsurance.isPrincipalMember()) {
+                    return ApiResponse.error("A patient under 18 years old cannot be a principal member.");
+                }
+                if (patientInsurance.getPrincipalMemberName() == null
+                        || patientInsurance.getPrincipalMemberPhoneNumber() == null) {
+                    return ApiResponse.error(
+                            "Principal member name and phone are required for patients under 18 years old."
+                    );
+                }
             }
         }
         return null;
