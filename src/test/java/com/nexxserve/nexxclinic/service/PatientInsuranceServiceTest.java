@@ -156,6 +156,42 @@ class PatientInsuranceServiceTest {
     }
 
     @Test
+    void testCardNumberAvailabilityIgnoresCurrentPolicyAndFindsDuplicates() {
+        Patient patient = persistPatient();
+        InsuranceProvider providerA = persistProvider();
+        InsuranceProvider providerB = persistProvider();
+        LocalDate from = LocalDate.now().minusDays(1);
+        LocalDate until = LocalDate.now().plusDays(30);
+
+        PatientInsuranceDto first = createInsurance(patient, providerA, "CARD-123", from, until);
+        PatientInsuranceDto second = createInsurance(patient, providerB, "CARD-456", from, until);
+
+        ApiResponse<Boolean> unchangedCard = patientService.patientInsuranceCardNumberAvailable(
+                patient.getId(),
+                first.id(),
+                " CARD-123 "
+        );
+        assertEquals(ResponseStatus.SUCCESS, unchangedCard.status());
+        assertTrue(unchangedCard.data(), "the edited insurance's own card number is not a duplicate");
+
+        ApiResponse<Boolean> duplicateCard = patientService.patientInsuranceCardNumberAvailable(
+                patient.getId(),
+                second.id(),
+                " card-123 "
+        );
+        assertEquals(ResponseStatus.SUCCESS, duplicateCard.status());
+        assertFalse(duplicateCard.data(), "duplicate matching should ignore case and surrounding spaces");
+
+        ApiResponse<Boolean> unusedCard = patientService.patientInsuranceCardNumberAvailable(
+                patient.getId(),
+                second.id(),
+                "CARD-789"
+        );
+        assertEquals(ResponseStatus.SUCCESS, unusedCard.status());
+        assertTrue(unusedCard.data());
+    }
+
+    @Test
     void testCreateRejectsSecondActivePolicySameProvider() {
         Patient patient = persistPatient();
         InsuranceProvider provider = persistProvider();

@@ -1994,6 +1994,7 @@ type Query {
   patient(patientId: ID!): PatientResponse!
   patients: PaginatedPatientResponse!
   patientInsurances(patientId: ID!): PaginatedPatientInsuranceResponse!
+  patientInsuranceCardNumberAvailable(patientId: ID!, patientInsuranceId: ID, insuranceCardNumber: String!): BooleanResponse!
   searchPatients(input: SearchPatientsInput): PaginatedPatientResponse!
   product(productId: ID!): ProductResponse!
   products(input: SearchProductsInput): PaginatedProductResponse!

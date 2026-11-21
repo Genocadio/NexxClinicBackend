@@ -75,6 +75,21 @@ public class PatientInsuranceQueryController {
 
     @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE, RoleName.MANAGER, RoleName.CLINICIAN, RoleName.NURSE})
     @QueryMapping
+    public ApiResponse<Boolean> patientInsuranceCardNumberAvailable(
+            @Argument UUID patientId,
+            @Argument UUID patientInsuranceId,
+            @Argument String insuranceCardNumber,
+            @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser
+    ) {
+        return patientService.patientInsuranceCardNumberAvailable(
+                patientId,
+                patientInsuranceId,
+                insuranceCardNumber
+        );
+    }
+
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE, RoleName.MANAGER, RoleName.CLINICIAN, RoleName.NURSE})
+    @QueryMapping
     public ApiResponse searchPatients(
             @Argument @Valid SearchPatientsInput input,
             @ContextValue(name = "authUser", required = false) AuthenticatedUser authUser

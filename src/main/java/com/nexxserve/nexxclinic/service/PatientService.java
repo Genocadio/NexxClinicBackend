@@ -833,6 +833,34 @@ public class PatientService {
         return ApiResponse.success("Patient insurances fetched.", insurances);
     }
 
+    @Transactional(readOnly = true)
+    public ApiResponse<Boolean> patientInsuranceCardNumberAvailable(
+            UUID patientId,
+            UUID patientInsuranceId,
+            String insuranceCardNumber) {
+        if (patientId == null) {
+            return ApiResponse.error("patientId is required.");
+        }
+        if (insuranceCardNumber == null || insuranceCardNumber.isBlank()) {
+            return ApiResponse.error("insuranceCardNumber is required.");
+        }
+        if (!patientRepository.existsById(patientId)) {
+            return ApiResponse.error("Patient not found.");
+        }
+
+        boolean available = !hasDuplicateInsuranceCardNumber(
+                patientInsuranceRepository.findByPatientId(patientId),
+                insuranceCardNumber,
+                patientInsuranceId
+        );
+        return ApiResponse.success(
+                available
+                        ? "Insurance card number is available."
+                        : "An insurance with this card number already exists for this patient.",
+                available
+        );
+    }
+
     // =========================
     // PRIVATE HELPER METHODS
     // =========================
@@ -952,16 +980,10 @@ public class PatientService {
 
         UUID candidateId = candidate.getId();
         String candidateCard = candidate.getInsuranceCardNumber();
-        for (PatientInsurance pi : patientInsurances) {
-            if (candidateId != null && candidateId.equals(pi.getId())) {
-                continue;
-            }
-            if (candidateCard != null && pi.getInsuranceCardNumber() != null
-                    && candidateCard.equalsIgnoreCase(pi.getInsuranceCardNumber().trim())) {
-                return ApiResponse.error(
-                    "An insurance with this card number already exists for this patient."
-                );
-            }
+        if (hasDuplicateInsuranceCardNumber(patientInsurances, candidateCard, candidateId)) {
+            return ApiResponse.error(
+                "An insurance with this card number already exists for this patient."
+            );
         }
 
         for (PatientInsurance pi : patientInsurances) {
@@ -988,6 +1010,25 @@ public class PatientService {
         }
 
         return null;
+    }
+
+    private boolean hasDuplicateInsuranceCardNumber(
+            List<PatientInsurance> patientInsurances,
+            String insuranceCardNumber,
+            UUID excludedPatientInsuranceId) {
+        if (patientInsurances == null || insuranceCardNumber == null || insuranceCardNumber.isBlank()) {
+            return false;
+        }
+
+        String normalizedCardNumber = insuranceCardNumber.trim();
+        return patientInsurances.stream().anyMatch(insurance ->
+                (excludedPatientInsuranceId == null
+                        || !excludedPatientInsuranceId.equals(insurance.getId()))
+                        && insurance.getInsuranceCardNumber() != null
+                        && normalizedCardNumber.equalsIgnoreCase(
+                                insurance.getInsuranceCardNumber().trim()
+                        )
+        );
     }
 
     private boolean validityOverlaps(
