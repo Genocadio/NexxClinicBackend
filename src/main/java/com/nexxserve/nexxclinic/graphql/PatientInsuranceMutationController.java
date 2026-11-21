@@ -98,7 +98,7 @@ public class PatientInsuranceMutationController {
         return patientService.createPatientInsurance(input);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE})
     @MutationMapping
     public ApiResponse updatePatientInsurance(
             @Argument UUID patientInsuranceId,
@@ -108,7 +108,7 @@ public class PatientInsuranceMutationController {
         return patientService.updatePatientInsurance(patientInsuranceId, input);
     }
 
-    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION})
+    @HasRole({RoleName.ADMIN, RoleName.CLINIC_ADMIN, RoleName.RECEPTION, RoleName.FINANCE})
     @MutationMapping
     public ApiResponse deletePatientInsurance(
             @Argument UUID patientInsuranceId,

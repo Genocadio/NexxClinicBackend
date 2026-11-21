@@ -242,6 +242,8 @@ class PatientInsuranceServiceTest {
 
         PatientInsurance insurance = patientInsuranceRepository.findById(created.id()).get();
         assertTrue(insurance.isDeactivated());
+        assertTrue(patientInsuranceRepository.findById(created.id()).isPresent(),
+                "in-use insurance should remain available for the audit trail");
     }
 
     @Test
@@ -355,6 +357,23 @@ class PatientInsuranceServiceTest {
         bucket.setOutstandingAmount(BigDecimal.ZERO);
         bucket.setInvoiceUrl("https://storage.example/invoice.pdf");
         departmentInsuranceBillingRepository.save(bucket);
+
+        ApiResponse<PatientInsuranceDto> updateResponse = patientService.updatePatientInsurance(
+                created.id(),
+                new UpdatePatientInsuranceInput(
+                        null, null, null, null, null, null, null, null, null, 35, null
+                )
+        );
+        assertEquals(ResponseStatus.SUCCESS, updateResponse.status(), updateResponse.message());
+        assertEquals(35, patientInsuranceRepository.findById(created.id()).orElseThrow()
+                .getPatientSharePercentage());
+
+        VisitDepartmentBilling persistedBilling =
+                visitDepartmentBillingRepository.findById(vdb.getId()).orElseThrow();
+        assertEquals(new BigDecimal("100.00"), persistedBilling.getTotalAmount());
+        assertEquals(new BigDecimal("85.00"), persistedBilling.getInsuranceCoveredAmount());
+        assertEquals(new BigDecimal("15.00"), persistedBilling.getPatientPayableAmount());
+        assertEquals(new BigDecimal("15.00"), persistedBilling.getPaidAmount());
 
         ApiResponse<Boolean> response = patientService.deletePatientInsurance(created.id());
         assertEquals(ResponseStatus.SUCCESS, response.status());
